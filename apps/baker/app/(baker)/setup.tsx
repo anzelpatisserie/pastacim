@@ -22,8 +22,8 @@ export default function BakerSetupScreen() {
     setIsLoading(true);
     setError(null);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: rpcError } = await (supabase as any).rpc('create_shop', {
+    type RpcFn = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+    const { error: rpcError } = await (supabase as unknown as { rpc: RpcFn }).rpc('create_shop', {
       p_name: name.trim(),
       p_description: description.trim() || null,
       p_address: address.trim(),

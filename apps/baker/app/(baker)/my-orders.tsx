@@ -7,9 +7,6 @@ import { router, useFocusEffect } from 'expo-router';
 import { supabase, rpcWithdrawOffer, rpcSetOrderStatus, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const _db: any = supabase;
-
 type Offer = Database['public']['Tables']['offers']['Row'] & {
   order: (Database['public']['Tables']['orders']['Row'] & {
     customer: { id: string; full_name: string | null } | null;
@@ -39,7 +36,7 @@ export default function BakerMyOrdersScreen() {
     if (refresh) setIsRefreshing(true);
     else setIsLoading(true);
 
-    const { data } = await _db
+    const { data } = await supabase
       .from('offers')
       .select(`
         *,
