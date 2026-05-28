@@ -1,56 +1,96 @@
+import { useEffect, useRef } from 'react';
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import * as Notifications from 'expo-notifications';
+import { StatusBar } from 'expo-status-bar';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { useAuth } from '@/hooks/useAuth';
+import { navigateFromNotification, type NotificationRole } from '@/lib/notifications';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+// Foreground bildirim davranışı — TEK yerde tanımla
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert:  true,
+    shouldPlaySound:  true,
+    shouldSetBadge:   true,
+    shouldShowBanner: true,
+    shouldShowList:   true,
+  }),
+});
+
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
-    if (error) throw error;
-  }, [error]);
+    if (fontError) throw fontError;
+  }, [fontError]);
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
+    if (fontsLoaded) SplashScreen.hideAsync();
+  }, [fontsLoaded]);
 
-  if (!loaded) {
-    return null;
-  }
+  if (!fontsLoaded) return null;
 
   return <RootLayoutNav />;
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const { isLoading, isAuthenticated, role } = useAuth();
+  const notificationListener = useRef<Notifications.Subscription | null>(null);
+
+  // ─── Auth durumuna göre yönlendir ────────────────────────────────────────
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (!isAuthenticated) {
+      router.replace('/(auth)/onboarding');
+      return;
+    }
+
+    if (role === 'baker') {
+      router.replace('/(baker)');
+    } else {
+      router.replace('/(customer)');
+    }
+  }, [isLoading, isAuthenticated, role]);
+
+  // ─── OS Push Bildirim Tap Dinleyici ──────────────────────────────────────
+  useEffect(() => {
+    if (!role) return;
+
+    notificationListener.current = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const { notification } = response;
+        const type = notification.request.content.data?.type as string | undefined;
+        const data = (notification.request.content.data ?? {}) as Record<string, unknown>;
+        if (type) {
+          navigateFromNotification(type, data, role as NotificationRole);
+        }
+      },
+    );
+
+    return () => {
+      notificationListener.current?.remove();
+      notificationListener.current = null;
+    };
+  }, [role]);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+    <>
+      <StatusBar style="auto" />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(customer)" />
+        <Stack.Screen name="(baker)" />
+        <Stack.Screen name="messages/[conversationId]" options={{ headerShown: false }} />
       </Stack>
-    </ThemeProvider>
+    </>
   );
 }
