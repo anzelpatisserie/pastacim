@@ -27,24 +27,33 @@
     "plugins": [
       "expo-router",
       "expo-location",
-      ["expo-splash-screen", {
-        "image": "./assets/images/splash-icon.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
-      }],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
       "expo-secure-store",
-      ["expo-notifications", {
-        "icon": "./assets/images/icon.png",
-        "color": "#D4526E",
-        "sounds": []
-      }]
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#D4526E",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "eas": {
-        "projectId": "CUSTOMER_EAS_PROJECT_ID"
+        "projectId": "d513dbc9-8da6-4051-995f-6a7a40b37586"
+      },
+      "router": {
+        "origin": false
       }
     },
     "owner": "anzelpatisserie"
