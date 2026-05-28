@@ -1,0 +1,148 @@
+import 'react-native-url-polyfill/auto';
+import * as SecureStore from 'expo-secure-store';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '../types/database.types';
+
+// ─── Supabase Bağlantı Bilgileri ─────────────────────────────────────────────
+const SUPABASE_URL = 'https://lvrbzhziayegyinkcuka.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY =
+  'sb_publishable_GRPzr4yIvnC54VpN6G7K3A_awa6OyWp';
+
+// ─── Güvenli Oturum Depolama (iOS Keychain / Android Keystore) ───────────────
+const ExpoSecureStoreAdapter = {
+  getItem: (key: string) => SecureStore.getItemAsync(key),
+  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+};
+
+// ─── Supabase Client ──────────────────────────────────────────────────────────
+export const supabase = createClient<Database>(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      storage: ExpoSecureStoreAdapter,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  }
+);
+
+// ─── Typed RPC Wrappers ───────────────────────────────────────────────────────
+// Supabase SDK v2.106+ ile manuel Database types arasındaki overload
+// resolution sorununu çözen tip-güvenli wrapper'lar.
+// Supabase CLI ile `supabase gen types typescript` çalıştırıldıktan sonra
+// bu wrapper'lar kaldırılabilir ve direkt supabase.rpc() kullanılabilir.
+
+type Functions = Database['public']['Functions'];
+
+// Untyped RPC çağrısı — Supabase SDK v2 overload conflict'ini aşar.
+// Tip güvenliği wrapper imzalarında (Args/Returns) sağlanır.
+type _UntypedRpc = (fn: string, args: Record<string, unknown>) => Promise<{
+  data: unknown;
+  error: { message: string } | null;
+}>;
+const _rpc: _UntypedRpc = (fn, args) =>
+  (supabase as unknown as { rpc: _UntypedRpc }).rpc(fn, args);
+
+export async function rpcNearbyBakers(
+  args: Functions['nearby_bakers']['Args']
+): Promise<{ data: Functions['nearby_bakers']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('nearby_bakers', args as Record<string, unknown>);
+  return result as { data: Functions['nearby_bakers']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcNearbyOrders(
+  args: Functions['nearby_orders']['Args']
+): Promise<{ data: Functions['nearby_orders']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('nearby_orders', args as Record<string, unknown>);
+  return result as { data: Functions['nearby_orders']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcPlaceOrder(
+  args: Functions['place_order']['Args']
+): Promise<{ data: Functions['place_order']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('place_order', args as Record<string, unknown>);
+  return result as { data: Functions['place_order']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcAcceptOffer(
+  args: Functions['accept_offer']['Args']
+): Promise<{ data: Functions['accept_offer']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('accept_offer', args as Record<string, unknown>);
+  return result as { data: Functions['accept_offer']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcSubmitOffer(
+  args: Functions['submit_offer']['Args']
+): Promise<{ data: Functions['submit_offer']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('submit_offer', args as Record<string, unknown>);
+  return result as { data: Functions['submit_offer']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcRejectOffer(
+  args: Functions['reject_offer']['Args']
+): Promise<{ data: Functions['reject_offer']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('reject_offer', args as Record<string, unknown>);
+  return result as { data: Functions['reject_offer']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcCancelOrder(
+  args: Functions['cancel_order']['Args']
+): Promise<{ data: Functions['cancel_order']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('cancel_order', args as Record<string, unknown>);
+  return result as { data: Functions['cancel_order']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcWithdrawOffer(
+  args: Functions['withdraw_offer']['Args']
+): Promise<{ data: Functions['withdraw_offer']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('withdraw_offer', args as Record<string, unknown>);
+  return result as { data: Functions['withdraw_offer']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcGetConversations(): Promise<{
+  data: Functions['get_conversations']['Returns'] | null;
+  error: Error | null;
+}> {
+  const result = await _rpc('get_conversations', {});
+  return result as { data: Functions['get_conversations']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcCreateNotification(
+  args: Functions['create_notification']['Args']
+): Promise<{ data: string | null; error: Error | null }> {
+  const result = await _rpc('create_notification', args as Record<string, unknown>);
+  return result as { data: string | null; error: Error | null };
+}
+
+export async function rpcAddWalletBalance(
+  args: Functions['add_wallet_balance']['Args']
+): Promise<{ data: Functions['add_wallet_balance']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('add_wallet_balance', args as Record<string, unknown>);
+  return result as { data: Functions['add_wallet_balance']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcSetOrderStatus(
+  args: Functions['set_order_status']['Args']
+): Promise<{ data: Functions['set_order_status']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('set_order_status', args as Record<string, unknown>);
+  return result as { data: Functions['set_order_status']['Returns'] | null; error: Error | null };
+}
+
+export async function rpcDeleteConversation(
+  otherUserId: string
+): Promise<{ error: Error | null }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('delete_conversation', { p_other_user_id: otherUserId });
+  return { error: error as Error | null };
+}
+
+export async function rpcDeleteMessageForMe(
+  messageId: string
+): Promise<{ error: Error | null }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).rpc('delete_message_for_me', { p_message_id: messageId });
+  return { error: error as Error | null };
+}
