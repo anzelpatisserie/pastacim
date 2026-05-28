@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Pastacım Pro",
+    "slug": "pastacim-baker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "pastacim-pro",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pastacim.baker",
+      "buildNumber": "1"
+    },
+    "android": {
+      "package": "com.pastacim.baker",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#FFF8F0",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-location",
+      ["expo-splash-screen", {
+        "image": "./assets/images/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff"
+      }],
+      "expo-secure-store",
+      ["expo-notifications", {
+        "icon": "./assets/images/icon.png",
+        "color": "#9F7AEA",
+        "sounds": []
+      }]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "BAKER_EAS_PROJECT_ID"
+      }
+    },
+    "owner": "anzelpatisserie"
+  }
+}

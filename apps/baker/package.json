@@ -1,0 +1,34 @@
+{
+  "name": "pastacim-baker",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pastacim/shared": "*",
+    "expo": "~56.0.0",
+    "expo-router": "~4.0.17",
+    "expo-font": "~13.3.1",
+    "expo-splash-screen": "~0.29.22",
+    "expo-status-bar": "~2.2.3",
+    "expo-location": "~18.1.5",
+    "expo-notifications": "~0.31.2",
+    "expo-secure-store": "~14.2.0",
+    "expo-image-picker": "~16.1.4",
+    "expo-dev-client": "~5.2.3",
+    "react": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-maps": "1.20.1",
+    "react-native-url-polyfill": "^2.0.0",
+    "@supabase/supabase-js": "^2.50.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "typescript": "~5.3.3"
+  }
+}
