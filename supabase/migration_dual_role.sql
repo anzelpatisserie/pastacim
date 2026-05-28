@@ -51,9 +51,11 @@ CREATE POLICY "wallet_tx: user kendi hareketlerini görür"
   USING (user_id = auth.uid());
 
 DROP POLICY IF EXISTS "wallet_tx: system insert" ON public.wallet_transactions;
-CREATE POLICY "wallet_tx: system insert"
+-- Wallet transactions are inserted only by SECURITY DEFINER RPCs, not by clients
+-- So we allow no direct client inserts
+CREATE POLICY "wallet_tx: no direct insert"
   ON public.wallet_transactions FOR INSERT
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (false);
 
 -- 6. handle_new_user trigger'ını güncelle (jeton kaldır, is_customer/is_baker ekle)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -178,3 +180,12 @@ CREATE POLICY "shops: baker kendi dükkanını yönetir"
   ON public.pastry_shops FOR ALL
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+
+-- Pastacılar kendi tekliflerini görebilir
+DROP POLICY IF EXISTS "offers: baker kendi tekliflerini görür" ON public.offers;
+CREATE POLICY "offers: baker kendi tekliflerini görür"
+  ON public.offers FOR SELECT
+  USING (
+    baker_id = auth.uid()
+    AND EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_baker = true)
+  );

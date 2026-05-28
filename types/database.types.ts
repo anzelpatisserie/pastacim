@@ -401,12 +401,11 @@ export type Database = {
       submit_offer: {
         Args: {
           p_order_id: string;
-          p_shop_id: string;
           p_price: number;
           p_message?: string | null;
           p_estimated_days?: number | null;
         };
-        Returns: { offer_id: string | null; error: string | null };
+        Returns: Json;
       };
       reject_offer: {
         Args: { p_offer_id: string };
@@ -414,7 +413,7 @@ export type Database = {
       };
       add_wallet_balance: {
         Args: { p_amount: number };
-        Returns: { new_balance: number; error: string | null };
+        Returns: { success?: boolean; error?: string } | null;
       };
       cancel_order: {
         Args: { p_order_id: string };
@@ -447,6 +446,16 @@ export type Database = {
       set_order_status: {
         Args: { p_order_id: string; p_status: string };
         Returns: { success: boolean; error: string | null };
+      };
+      create_shop: {
+        Args: {
+          p_name: string;
+          p_description: string | null;
+          p_address: string;
+          p_latitude: number | null;
+          p_longitude: number | null;
+        };
+        Returns: Json;
       };
     };
     Enums: {
