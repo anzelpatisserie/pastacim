@@ -42,7 +42,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const { isLoading, isAuthenticated, role } = useAuth();
+  const { isLoading, isAuthenticated, isBaker } = useAuth();
   const notificationListener = useRef<Notifications.Subscription | null>(null);
 
   // ─── Auth durumuna göre yönlendir ────────────────────────────────────────
@@ -54,24 +54,25 @@ function RootLayoutNav() {
       return;
     }
 
-    if (role === 'baker') {
+    if (isBaker) {
       router.replace('/(baker)');
     } else {
       router.replace('/(customer)');
     }
-  }, [isLoading, isAuthenticated, role]);
+  }, [isLoading, isAuthenticated, isBaker]);
 
   // ─── OS Push Bildirim Tap Dinleyici ──────────────────────────────────────
   useEffect(() => {
-    if (!role) return;
+    if (!isAuthenticated) return;
 
+    const notifRole: NotificationRole = isBaker ? 'baker' : 'customer';
     notificationListener.current = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         const { notification } = response;
         const type = notification.request.content.data?.type as string | undefined;
         const data = (notification.request.content.data ?? {}) as Record<string, unknown>;
         if (type) {
-          navigateFromNotification(type, data, role as NotificationRole);
+          navigateFromNotification(type, data, notifRole);
         }
       },
     );
@@ -80,7 +81,7 @@ function RootLayoutNav() {
       notificationListener.current?.remove();
       notificationListener.current = null;
     };
-  }, [role]);
+  }, [isAuthenticated, isBaker]);
 
   return (
     <>
