@@ -155,18 +155,57 @@ cd apps/baker   && eas submit --platform ios --profile production
 
 ## Bölüm 3 — Veritabanı & Backend Değişiklikleri
 
+### Çift Rol Desteği (Aynı Hesap — İki Uygulama)
+
+Mevcut `users.role` tek değerli enum (`customer | baker`) — aynı hesabın her iki uygulamada çalışmasını engelliyor.
+
+**Yeni yaklaşım:**
+
+| Alan | Tip | Varsayılan | Açıklama |
+|---|---|---|---|
+| `users.is_customer` | `BOOLEAN` | `true` | Her kayıtlı kullanıcı otomatik müşteridir |
+| `users.is_baker` | `BOOLEAN` | `false` | Dükkan oluşturulduğunda `true` olur |
+| `users.role` | — | **Kaldırılır** | Artık kullanılmaz |
+| `user_role` enum | — | **Kaldırılır** | Artık kullanılmaz |
+
+**Kayıt akışı:**
+- `(auth)/register.tsx`'teki rol seçimi (customer / baker) **kaldırılır**
+- Her yeni kullanıcı `is_customer = true`, `is_baker = false` ile oluşturulur
+- Pastacım Pro'da giriş yapan kullanıcı dükkanı yoksa → dükkan oluşturma ekranına yönlendirilir; dükkan oluşturulunca `is_baker = true` yapılır
+
+**İki uygulama davranışı:**
+
+| Uygulama | Giriş yapan kullanıcı | Davranış |
+|---|---|---|
+| Pastacım | Herhangi biri | Müşteri ekranına gider |
+| Pastacım Pro | Dükkanı var (`is_baker = true`) | Pastacı ekranına gider |
+| Pastacım Pro | Dükkanı yok (`is_baker = false`) | Dükkan oluşturma ekranına yönlendirilir |
+
+**`_layout.tsx` yönlendirme mantığı (baker app):**
+```
+isAuthenticated = false → /(auth)/onboarding
+isAuthenticated = true, is_baker = false → /(baker)/setup (yeni dükkan kurulum ekranı)
+isAuthenticated = true, is_baker = true  → /(baker) ana ekran
+```
+
 ### Tablo Değişiklikleri
 
 | Mevcut | Yeni | Açıklama |
 |---|---|---|
-| `users.token_balance INTEGER` | `users.wallet_balance NUMERIC(10,2)` | Sadece pastacı kullanır; müşteride 0 |
+| `users.role user_role` | `users.is_customer BOOLEAN`, `users.is_baker BOOLEAN` | Rol mantığı iki flag'e ayrılır |
+| `users.token_balance INTEGER` | `users.wallet_balance NUMERIC(10,2)` | Sadece pastacı kullanır |
 | `token_transactions` | `wallet_transactions` | Yeniden adlandırılır |
 | `token_type` enum | `wallet_transaction_type` enum | `offer_fee`, `top_up`, `refund` |
 
+### RLS Politika Güncellemeleri
+
+`role = 'baker'` kontrolü → `is_baker = true` veya `EXISTS (SELECT 1 FROM pastry_shops WHERE user_id = auth.uid())` ile değiştirilir.
+
 ### Trigger Değişiklikleri
 
-- `handle_new_user`: müşteriye jeton hediye mantığı **kaldırılır**; hiçbir role bakiye başlatılmaz
-- `wallet_balance` `users` tablosunda kalır; Supabase kolon düzeyinde RLS desteklemez. Güvenlik client tarafında sağlanır: müşteri uygulaması (`@pastacim/shared` dahil) `wallet_balance` alanını hiçbir zaman sorgulamaz veya göstermez.
+- `handle_new_user`: `is_customer = true`, `is_baker = false` ile profil oluşturur; jeton/bakiye başlatmaz
+- Dükkan oluşturma RPC: `INSERT INTO pastry_shops` + `UPDATE users SET is_baker = true`
+- `wallet_balance` `users` tablosunda kalır; Supabase kolon düzeyinde RLS desteklemez. Güvenlik client tarafında sağlanır: müşteri uygulaması `wallet_balance` alanını hiçbir zaman sorgulamaz veya göstermez.
 
 ### Yeni / Güncellenen RPC
 
@@ -270,7 +309,7 @@ TestFlight'a yüklemeden önce tüm Maestro akışları geçmeli.
 | **Faz 1** | Monorepo kurulumu (workspaces, shared paket) | Yok |
 | **Faz 2a** | Kod taşıma — customer uygulaması | Faz 1 |
 | **Faz 2b** | Kod taşıma — baker uygulaması | Faz 1 (2a ile paralel) |
-| **Faz 3** | DB & backend refactor (wallet) | Faz 1 |
+| **Faz 3** | DB & backend refactor (çift rol + wallet): `role` → `is_customer/is_baker`; `token_balance` → `wallet_balance`; RLS güncelleme; kayıt ekranından rol seçimi kaldırma | Faz 1 |
 | **Faz 4** | App.json + EAS production yapılandırması | Faz 2a + 2b |
 | **Faz 5a** | Test altyapısı — shared hooks | Faz 1 |
 | **Faz 5b** | Test — customer ekranları | Faz 2a + 5a (paralel) |
