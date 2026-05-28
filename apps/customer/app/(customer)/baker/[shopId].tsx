@@ -1,0 +1,319 @@
+/**
+ * Müşteri → Pastacı Profil Sayfası
+ * Keşfet ekranından bir pastacıya tıklanınca açılır.
+ */
+import { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, SafeAreaView, ScrollView,
+  TouchableOpacity, ActivityIndicator, Image, RefreshControl,
+} from 'react-native';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import type { Database } from '@pastacim/shared';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _db: any = supabase;
+
+type Shop = Database['public']['Tables']['pastry_shops']['Row'];
+
+type Review = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  customer: { full_name: string | null } | null;
+};
+
+export default function CustomerBakerProfileScreen() {
+  const C = useThemeColors();
+  const { shopId } = useLocalSearchParams<{ shopId: string }>();
+  const { user } = useAuth();
+
+  const [shop, setShop] = useState<Shop | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Müşterinin bu pastacıyla aktif siparişi var mı?
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [pendingOrderCount, setPendingOrderCount] = useState(0);
+
+  const loadData = useCallback(async (refresh = false) => {
+    if (!shopId) return;
+    if (refresh) setIsRefreshing(true);
+    else setIsLoading(true);
+
+    // Dükkan bilgisi + yorumlar paralel
+    const [shopRes, revRes] = await Promise.all([
+      _db.from('pastry_shops').select('*').eq('id', shopId).single(),
+      _db
+        .from('reviews')
+        .select('id, rating, comment, created_at, customer:users!customer_id(full_name)')
+        .eq('shop_id', shopId)
+        .order('created_at', { ascending: false })
+        .limit(20),
+    ]);
+
+    if (shopRes.data) setShop(shopRes.data as Shop);
+    setReviews((revRes.data ?? []) as Review[]);
+
+    if (refresh) setIsRefreshing(false);
+    else setIsLoading(false);
+  }, [shopId]);
+
+  // Müşterinin bu pastacıyla aktif sipariş/teklif durumu
+  const loadOrderState = useCallback(async () => {
+    if (!user?.id || !shopId) return;
+
+    // Bu dükkanla accepted/in_progress/ready durumunda sipariş var mı?
+    const { data: activeOffers } = await _db
+      .from('offers')
+      .select('order_id, order:orders!order_id(id, status, customer_id)')
+      .eq('shop_id', shopId)
+      .in('status', ['accepted'])
+      .limit(1);
+
+    const activeOffer = (activeOffers ?? []).find(
+      (o: { order: { customer_id: string; id: string; status: string } | null }) =>
+        o.order?.customer_id === user.id &&
+        ['accepted', 'in_progress', 'ready'].includes(o.order?.status ?? '')
+    );
+    setActiveOrderId(activeOffer?.order?.id ?? null);
+
+    // Bu pastacıdan teklif bekleyen sipariş sayısı
+    const { count } = await _db
+      .from('offers')
+      .select('id', { count: 'exact', head: true })
+      .eq('shop_id', shopId)
+      .eq('status', 'pending');
+    setPendingOrderCount(count ?? 0);
+  }, [user?.id, shopId]);
+
+  // Her odaklanmada hem veri hem sipariş durumunu tazele
+  useFocusEffect(useCallback(() => {
+    loadData();
+    loadOrderState();
+  }, [loadData, loadOrderState]));
+
+  // Realtime: yorum eklenince veya puan değişince anında güncelle
+  useEffect(() => {
+    if (!shopId) return;
+
+    const channel = supabase
+      .channel(`baker-profile:${shopId}`)
+      // Yeni yorum
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'reviews', filter: `shop_id=eq.${shopId}` },
+        () => { loadData(); }
+      )
+      // Puan güncellendi (trigger)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pastry_shops', filter: `id=eq.${shopId}` },
+        (payload) => {
+          const updated = payload.new as Shop;
+          setShop((prev) => prev ? { ...prev, rating: updated.rating, review_count: updated.review_count } : prev);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [shopId, loadData]);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+        <View style={[styles.header, { borderBottomColor: C.border }]}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={[styles.back, { color: C.primary }]}>← Geri</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={C.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!shop) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+        <View style={[styles.header, { borderBottomColor: C.border }]}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={[styles.back, { color: C.primary }]}>← Geri</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 48 }}>🏪</Text>
+          <Text style={[styles.emptyTitle, { color: C.text }]}>Dükkan bulunamadı</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const stars = shop.rating > 0
+    ? `⭐ ${shop.rating.toFixed(1)}`
+    : 'Henüz puan yok';
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: C.border }]}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={[styles.back, { color: C.primary }]}>← Geri</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: C.text }]} numberOfLines={1}>
+          {shop.name}
+        </Text>
+        <View style={{ width: 48 }} />
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => { loadData(true); loadOrderState(); }}
+            tintColor={C.primary}
+          />
+        }
+      >
+        {/* Kapak Fotoğrafı */}
+        {shop.cover_image_url ? (
+          <Image source={{ uri: shop.cover_image_url }} style={styles.cover} resizeMode="cover" />
+        ) : (
+          <View style={[styles.coverPlaceholder, { backgroundColor: C.skeleton }]}>
+            <Text style={styles.coverEmoji}>🎂</Text>
+          </View>
+        )}
+
+        {/* Temel Bilgiler */}
+        <View style={[styles.infoCard, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Text style={[styles.shopName, { color: C.text }]}>{shop.name}</Text>
+          {shop.description && (
+            <Text style={[styles.shopDesc, { color: C.textSecondary }]}>{shop.description}</Text>
+          )}
+          <View style={styles.statsRow}>
+            <View style={[styles.statChip, { backgroundColor: C.background }]}>
+              <Text style={[styles.statText, { color: C.text }]}>{stars}</Text>
+            </View>
+            {shop.review_count > 0 && (
+              <View style={[styles.statChip, { backgroundColor: C.background }]}>
+                <Text style={[styles.statText, { color: C.text }]}>💬 {shop.review_count} yorum</Text>
+              </View>
+            )}
+            {pendingOrderCount > 0 && (
+              <View style={[styles.statChip, { backgroundColor: C.primary + '18' }]}>
+                <Text style={[styles.statText, { color: C.primary }]}>🔥 {pendingOrderCount} aktif teklif</Text>
+              </View>
+            )}
+          </View>
+          {shop.address && (
+            <Text style={[styles.address, { color: C.textSecondary }]}>📍 {shop.address}</Text>
+          )}
+        </View>
+
+        {/* Yorumlar */}
+        {reviews.length > 0 && (
+          <View style={[styles.reviewsCard, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Text style={[styles.sectionTitle, { color: C.text }]}>💬 Müşteri Yorumları</Text>
+            {reviews.map((r, idx) => (
+              <View
+                key={r.id}
+                style={[styles.reviewItem, idx > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}
+              >
+                <View style={styles.reviewTop}>
+                  <Text style={[styles.reviewName, { color: C.text }]}>
+                    {r.customer?.full_name ?? 'Müşteri'}
+                  </Text>
+                  <Text style={styles.reviewStars}>
+                    {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                  </Text>
+                </View>
+                {r.comment && (
+                  <Text style={[styles.reviewComment, { color: C.textSecondary }]}>{r.comment}</Text>
+                )}
+                <Text style={[styles.reviewDate, { color: C.placeholder }]}>
+                  {new Date(r.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {reviews.length === 0 && (
+          <View style={[styles.noReviews, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Text style={styles.noReviewsEmoji}>💬</Text>
+            <Text style={[styles.noReviewsText, { color: C.textSecondary }]}>
+              Henüz yorum yok. İlk siparişi veren sen ol!
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Alt CTA — sadece aktif sipariş varsa göster */}
+      {activeOrderId && (
+        <View style={[styles.ctaBar, { backgroundColor: C.card, borderTopColor: C.border }]}>
+          <TouchableOpacity
+            style={[styles.ctaBtn, { backgroundColor: C.success }]}
+            onPress={() => router.push({ pathname: '/(customer)/offers/[orderId]', params: { orderId: activeOrderId } })}
+          >
+            <Text style={styles.ctaBtnText}>✅ Bu Teklifi İncele →</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, padding: Spacing.xl },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1,
+  },
+  back: { fontSize: FontSize.md, fontWeight: '600' },
+  headerTitle: { fontSize: FontSize.md, fontWeight: '700', flex: 1, textAlign: 'center', marginHorizontal: Spacing.sm },
+  cover: { width: '100%', height: 220 },
+  coverPlaceholder: { width: '100%', height: 180, alignItems: 'center', justifyContent: 'center' },
+  coverEmoji: { fontSize: 64 },
+  emptyTitle: { fontSize: FontSize.lg, fontWeight: '700', textAlign: 'center' },
+  infoCard: {
+    margin: Spacing.md, borderRadius: Radius.lg, borderWidth: 1,
+    padding: Spacing.md, gap: Spacing.sm,
+  },
+  shopName: { fontSize: FontSize.xl, fontWeight: '800' },
+  shopDesc: { fontSize: FontSize.sm, lineHeight: 20 },
+  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
+  statChip: { paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.full },
+  statText: { fontSize: FontSize.sm, fontWeight: '600' },
+  address: { fontSize: FontSize.sm },
+  reviewsCard: {
+    marginHorizontal: Spacing.md, marginBottom: Spacing.md,
+    borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.sm,
+  },
+  sectionTitle: { fontSize: FontSize.md, fontWeight: '700' },
+  reviewItem: { paddingTop: Spacing.sm, gap: 4 },
+  reviewTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reviewName: { fontSize: FontSize.sm, fontWeight: '700', flex: 1 },
+  reviewStars: { fontSize: 13, color: '#F5A623' },
+  reviewComment: { fontSize: FontSize.sm, lineHeight: 18 },
+  reviewDate: { fontSize: FontSize.xs },
+  noReviews: {
+    marginHorizontal: Spacing.md, borderRadius: Radius.lg, borderWidth: 1,
+    padding: Spacing.xl, alignItems: 'center', gap: Spacing.sm,
+  },
+  noReviewsEmoji: { fontSize: 32 },
+  noReviewsText: { fontSize: FontSize.sm, textAlign: 'center' },
+  ctaBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    borderTopWidth: 1, padding: Spacing.md, paddingBottom: 32,
+  },
+  ctaBtn: {
+    paddingVertical: 16, borderRadius: Radius.full,
+    alignItems: 'center',
+    shadowColor: '#D4526E', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  ctaBtnText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '700' },
+});
