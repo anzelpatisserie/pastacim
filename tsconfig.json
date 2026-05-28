@@ -5,7 +5,9 @@
     "paths": {
       "@/*": [
         "./*"
-      ]
+      ],
+      "@pastacim/shared": ["./packages/shared/index.ts"],
+      "@pastacim/shared/*": ["./packages/shared/*"]
     }
   },
   "include": [
