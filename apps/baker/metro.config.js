@@ -2,13 +2,9 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Linux Hermes (used by EAS) rejects import(variable) expressions.
-// Transform @supabase packages through Babel so dynamic import() → require().
-config.transformer.transformIgnorePatterns = [
-  'node_modules/(?!(@supabase|@opentelemetry|react-native|expo|@expo|@unimodules)/)',
-];
-
-// Resolve @opentelemetry/* to empty modules (they use dynamic import(variable)).
+// Resolve @opentelemetry/* to empty modules.
+// The dynamic import(variable) in @supabase's OTEL code is patched via patch-package
+// (patches/@supabase+supabase-js+2.106.1.patch) but static imports still need resolving.
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName.startsWith('@opentelemetry/')) {
