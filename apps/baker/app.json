@@ -15,6 +15,7 @@
     "android": {
       "package": "com.pastacim.baker",
       "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#FFF8F0",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
@@ -32,7 +33,7 @@
         {
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#FFF5F5"
         }
       ],
       "expo-secure-store",
@@ -45,6 +46,16 @@
         }
       ]
     ],
+    "updates": {
+      "url": "https://u.expo.dev/c8d3415d-5bce-4b61-95eb-fa4134a91fe7",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD",
+      "requestHeaders": {
+        "expo-channel-name": "main"
+      }
+    },
+    "runtimeVersion": "1.0.0",
     "experiments": {
       "typedRoutes": true
     },

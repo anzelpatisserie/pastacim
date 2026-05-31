@@ -202,7 +202,7 @@ export default function CustomerMyOrdersScreen() {
             style={[styles.createBtn, { backgroundColor: C.primary }]}
             onPress={() => router.push('/(customer)/order/create')}
           >
-            <Text style={styles.createBtnText}>+ Sipariş Oluştur</Text>
+            <Text style={styles.createBtnText}>+ Teklif Al</Text>
           </TouchableOpacity>
         </View>
       ) : (

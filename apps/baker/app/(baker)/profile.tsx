@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image, Switch,
+  KeyboardAvoidingView, Platform, Image, Switch, Share,
 } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
@@ -42,6 +43,7 @@ export default function BakerProfileScreen() {
 
   const [shop, setShop] = useState<Shop | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -60,6 +62,9 @@ export default function BakerProfileScreen() {
   const loadShop = useCallback(async () => {
     if (!profile?.id) return;
     setIsLoading(true);
+    const walletRes = await _db.from('users').select('wallet_balance').eq('id', profile.id).single();
+    if (walletRes.data) setWalletBalance(Number(walletRes.data.wallet_balance ?? 0));
+
     const { data } = await _db
       .from('pastry_shops')
       .select('*')
@@ -106,6 +111,29 @@ export default function BakerProfileScreen() {
       Alert.alert('✅ Konum Alındı', `${loc.coords.latitude.toFixed(5)}, ${loc.coords.longitude.toFixed(5)}`);
     } catch {
       Alert.alert('Hata', 'Konum alınamadı.');
+    }
+    setIsLocating(false);
+  };
+
+  const geocodeAddress = async () => {
+    if (!address.trim()) {
+      Alert.alert('Adres Girin', 'Lütfen önce dükkan adresini yazın.');
+      return;
+    }
+    setIsLocating(true);
+    try {
+      const results = await Location.geocodeAsync(address.trim());
+      if (!results || results.length === 0) {
+        Alert.alert('Adres Bulunamadı', 'Girilen adres koordinatlara çevrilemedi. Daha detaylı bir adres deneyin.');
+        setIsLocating(false);
+        return;
+      }
+      const { latitude: lat, longitude: lng } = results[0];
+      setLatitude(lat);
+      setLongitude(lng);
+      Alert.alert('✅ Konum Belirlendi', `"${address.trim()}" adresi koordinatlara çevrildi.`);
+    } catch {
+      Alert.alert('Hata', 'Adres çevrilemedi. Mevcut konumu kullanmayı deneyin.');
     }
     setIsLocating(false);
   };
@@ -241,6 +269,21 @@ export default function BakerProfileScreen() {
               <Text style={[styles.userEmail, { color: C.textSecondary }]}>{profile?.email ?? '—'}</Text>
             </View>
           </View>
+
+          {/* Cüzdan Özeti */}
+          <TouchableOpacity
+            style={[styles.walletCard, { backgroundColor: C.primary }]}
+            onPress={() => (router as any).push('/(baker)/wallet')}
+            activeOpacity={0.85}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.walletLabel}>💰 Cüzdan Bakiyesi</Text>
+              <Text style={styles.walletAmount}>
+                ₺{Math.floor(walletBalance).toLocaleString('en-US')}
+              </Text>
+            </View>
+            <Text style={styles.walletArrow}>→</Text>
+          </TouchableOpacity>
 
           {/* Dükkan Profili */}
           {!shop && !editMode ? (
@@ -398,19 +441,31 @@ export default function BakerProfileScreen() {
               {/* Konum */}
               <View style={styles.field}>
                 <Text style={[styles.label, { color: C.text }]}>Konum</Text>
-                <TouchableOpacity
-                  style={[styles.locationBtn, { backgroundColor: C.background, borderColor: C.border }]}
-                  onPress={getLocation}
-                  disabled={isLocating}
-                >
-                  {isLocating ? (
-                    <ActivityIndicator size="small" color={C.primary} />
-                  ) : (
-                    <Text style={[styles.locationBtnText, { color: latitude ? C.success : C.primary }]}>
-                      {latitude ? `✅ ${latitude.toFixed(4)}, ${longitude?.toFixed(4)}` : '📍 Mevcut Konumu Kullan'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                {latitude ? (
+                  <Text style={[styles.locationBtnText, { color: C.success, marginBottom: 4 }]}>
+                    ✅ {latitude.toFixed(4)}, {longitude?.toFixed(4)}
+                  </Text>
+                ) : null}
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.locationBtn, { flex: 1, backgroundColor: C.primary + '15', borderColor: C.primary + '44' }]}
+                    onPress={geocodeAddress}
+                    disabled={isLocating}
+                  >
+                    {isLocating ? (
+                      <ActivityIndicator size="small" color={C.primary} />
+                    ) : (
+                      <Text style={[styles.locationBtnText, { color: C.primary }]}>🔍 Adresi Doğrula</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.locationBtn, { flex: 1, backgroundColor: C.background, borderColor: C.border }]}
+                    onPress={getLocation}
+                    disabled={isLocating}
+                  >
+                    <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>📍 Mevcut Konum</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Çalışma Saatleri */}
@@ -485,6 +540,27 @@ export default function BakerProfileScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+          )}
+
+          {/* Uygulamayı Tavsiye Et */}
+          {!editMode && (
+            <TouchableOpacity
+              style={[styles.shareCard, { backgroundColor: C.card, borderColor: C.border }]}
+              onPress={() => Share.share({
+                message: 'Pastacım Pro ile sipariş al, kolay yönet! 🎂\nhttps://pastacim.app',
+                title: 'Pastacım Pro\'yu Arkadaşlarına Öner',
+              })}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.shareEmoji}>🎁</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.shareTitle, { color: C.text }]}>Uygulamayı Tavsiye Et</Text>
+                <Text style={[styles.shareSub, { color: C.textSecondary }]}>
+                  Pastacım Pro'yu arkadaşlarına öner
+                </Text>
+              </View>
+              <Text style={[styles.shareArrow, { color: C.primary }]}>→</Text>
+            </TouchableOpacity>
           )}
 
           <View style={{ height: 40 }} />
@@ -596,4 +672,21 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontSize: FontSize.sm, fontWeight: '600' },
   saveBtn: { flex: 2, paddingVertical: 12, borderRadius: Radius.full, alignItems: 'center' },
   saveBtnText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
+  walletCard: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: Radius.xl, padding: Spacing.lg,
+    shadowColor: '#D4526E', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
+  },
+  walletLabel: { color: 'rgba(255,255,255,0.8)', fontSize: FontSize.sm, marginBottom: 4 },
+  walletAmount: { color: '#FFF', fontSize: 32, fontWeight: '800' },
+  walletArrow: { color: 'rgba(255,255,255,0.8)', fontSize: 24, fontWeight: '300' },
+  shareCard: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,
+  },
+  shareEmoji: { fontSize: 32 },
+  shareTitle: { fontSize: FontSize.md, fontWeight: '700' },
+  shareSub: { fontSize: FontSize.xs, marginTop: 2 },
+  shareArrow: { fontSize: 20, fontWeight: '300' },
 });

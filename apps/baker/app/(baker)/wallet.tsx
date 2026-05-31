@@ -157,7 +157,7 @@ export default function WalletScreen() {
         {/* Bakiye Kartı */}
         <View style={[styles.balanceCard, { backgroundColor: C.primary }]}>
           <Text style={styles.balanceLabel}>Kullanılabilir Bakiye</Text>
-          <Text style={styles.balanceAmount}>₺{Number(balance).toFixed(2)}</Text>
+          <Text style={styles.balanceAmount}>₺{Math.floor(Number(balance)).toLocaleString('en-US')}</Text>
           <Text style={styles.balanceNote} />
         </View>
 

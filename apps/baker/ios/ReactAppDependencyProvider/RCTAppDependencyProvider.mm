@@ -13,7 +13,7 @@
 }
 
 - (RCTComponentViewFactory *)componentViewFactory {
-  return [RCTComponentViewFactory new];
+  return nil;
 }
 
 @end

@@ -47,7 +47,7 @@ export default function BakerLayout() {
       }} />
       <Tabs.Screen name="my-orders" options={{
         tabBarIcon: ({ focused }) => (
-          <TabIcon emoji="✅" label="Siparişlerim" focused={focused} activeColor={C.primary} inactiveColor={C.icon} />
+          <TabIcon emoji="✅" label="Sipariş" focused={focused} activeColor={C.primary} inactiveColor={C.icon} />
         ),
       }} />
       <Tabs.Screen name="messages" options={{
@@ -55,15 +55,11 @@ export default function BakerLayout() {
           <TabIcon emoji="💬" label="Mesajlar" focused={focused} activeColor={C.primary} inactiveColor={C.icon} badge={unreadMessages} />
         ),
       }} />
-      <Tabs.Screen name="notifications" options={{
-        tabBarIcon: ({ focused }) => (
-          <TabIcon emoji="🔔" label="Bildirimler" focused={focused} activeColor={C.primary} inactiveColor={C.icon} badge={unreadCount} />
-        ),
-      }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="wallet" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{
         tabBarIcon: ({ focused }) => (
-          <TabIcon emoji="👤" label="Profilim" focused={focused} activeColor={C.primary} inactiveColor={C.icon} />
+          <TabIcon emoji="👤" label="Profil" focused={focused} activeColor={C.primary} inactiveColor={C.icon} />
         ),
       }} />
       <Tabs.Screen name="offer/[orderId]" options={{ href: null }} />

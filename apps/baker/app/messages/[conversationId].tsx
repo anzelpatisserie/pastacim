@@ -63,35 +63,33 @@ export default function MessagesScreen() {
       });
   }, [sendOrderId]);
 
-  // Role'e göre mesajlaşma kısıtı
-  const chatBlockReason = (() => {
-    if (isCustomer && !isBaker && orderStatus === 'pending') {
-      return 'Pastacı teklif verdikten sonra mesaj gönderebilirsiniz.';
-    }
-    if (isBaker && (orderStatus === 'pending' || orderStatus === 'offers_received')) {
-      return 'Müşteri teklifinizi kabul ettikten sonra mesaj gönderebilirsiniz.';
-    }
-    return null;
-  })();
-  const isBeforeOffer = chatBlockReason !== null;
+  const chatBlockReason = null;
+  const isBeforeOffer = false;
 
-  // Sohbet kilitli mi?
-  const isChatExpired = (() => {
-    if (orderStatus === 'completed' || orderStatus === 'cancelled') return true;
-    if (!deliveryDate) return false;
-    const expiry = new Date(deliveryDate);
-    expiry.setHours(23, 59, 59, 999);
-    return new Date() > expiry;
-  })();
+  // Aktif süreç: iki kullanıcı arasında pending/accepted teklif + tamamlanmamış sipariş
+  const [hasActiveProcess, setHasActiveProcess] = useState<boolean>(true);
+  useEffect(() => {
+    if (!user?.id || !otherUserId) return;
+    _db
+      .from('offers')
+      .select('baker_id, status, order:orders!order_id(status, customer_id)')
+      .in('status', ['pending', 'accepted'])
+      .or(`baker_id.eq.${user.id},baker_id.eq.${otherUserId}`)
+      .then(({ data }: { data: any[] | null }) => {
+        if (!mountedRef.current) return;
+        const active = (data ?? []).some((offer: any) => {
+          const order = offer.order;
+          if (!order || ['completed', 'cancelled'].includes(order.status)) return false;
+          const userIsBaker     = offer.baker_id === user.id    && order.customer_id === otherUserId;
+          const userIsCustomer  = offer.baker_id === otherUserId && order.customer_id === user.id;
+          return userIsBaker || userIsCustomer;
+        });
+        setHasActiveProcess(active);
+      });
+  }, [user?.id, otherUserId]);
 
-  const expiredReason = (() => {
-    if (orderStatus === 'completed') return 'Sipariş tamamlandı.';
-    if (orderStatus === 'cancelled') return 'Sipariş iptal edildi.';
-    if (deliveryDate) {
-      return `Teslim tarihi (${deliveryDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}) geçti.`;
-    }
-    return '';
-  })();
+  const isChatExpired = !hasActiveProcess;
+  const expiredReason = 'Aktif bir sipariş veya teklif bulunmuyor.';
 
   // Karşı kullanıcının adı
   useEffect(() => {

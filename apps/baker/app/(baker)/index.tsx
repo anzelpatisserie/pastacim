@@ -146,7 +146,10 @@ export default function BakerHomeScreen() {
       {/* Mesafe Filtresi */}
       <View style={[styles.filterBar, { backgroundColor: C.card, borderBottomColor: C.border }]}>
         <Text style={[styles.filterLabel, { color: C.textSecondary }]}>
-          📍 Arama: <Text style={{ color: C.primary, fontWeight: '700' }}>{radiusKm} km</Text>
+          📍 Arama:{' '}
+          <Text style={{ color: C.primary, fontWeight: '700' }}>
+            {radiusKm >= 9999 ? 'Tümü' : `${radiusKm} km`}
+          </Text>
         </Text>
         <View style={styles.radiusButtons}>
           {[5, 10, 20, 50].map((km) => (
@@ -166,6 +169,20 @@ export default function BakerHomeScreen() {
               </Text>
             </TouchableOpacity>
           ))}
+          <TouchableOpacity
+            style={[
+              styles.radiusBtn,
+              {
+                backgroundColor: radiusKm >= 9999 ? C.primary : C.background,
+                borderColor: radiusKm >= 9999 ? C.primary : C.border,
+              },
+            ]}
+            onPress={() => setRadiusKm(9999)}
+          >
+            <Text style={[styles.radiusBtnText, { color: radiusKm >= 9999 ? '#FFF' : C.textSecondary }]}>
+              🌍
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -196,7 +213,10 @@ export default function BakerHomeScreen() {
         </View>
       ) : (
         <FlatList
-          data={orders}
+          data={orders.filter((o) => {
+            const myOffer = myOfferMap.get(o.id);
+            return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
+          })}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <RequestCard
@@ -216,7 +236,10 @@ export default function BakerHomeScreen() {
           }
           ListHeaderComponent={
             <Text style={[styles.listHeader, { color: C.textSecondary }]}>
-              {orders.length} açık talep · {myOfferMap.size} teklifim var
+              {orders.filter((o) => {
+                const myOffer = myOfferMap.get(o.id);
+                return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
+              }).length} açık talep
             </Text>
           }
         />
@@ -244,12 +267,18 @@ function RequestCard({
   const offerConfig = myOffer ? OFFER_STATUS_CONFIG[myOffer.status] : null;
   const alreadyOffered = !!myOffer && myOffer.status !== 'rejected';
 
+  const isUrgent = (() => {
+    if (!order.delivery_date) return false;
+    const diff = (new Date(order.delivery_date).setHours(23, 59, 59) - Date.now()) / (1000 * 60 * 60 * 24);
+    return diff <= 2;
+  })();
+
   return (
     <TouchableOpacity
       style={[
         styles.card,
-        { backgroundColor: C.card, borderColor: alreadyOffered ? C.primary : C.border },
-        alreadyOffered && { borderWidth: 2 },
+        { backgroundColor: C.card, borderColor: isUrgent ? '#E53E3E' : alreadyOffered ? C.primary : C.border },
+        (isUrgent || alreadyOffered) && { borderWidth: 2 },
       ]}
       activeOpacity={0.8}
       onPress={() => router.push({ pathname: '/(baker)/offer/[orderId]', params: { orderId: order.id } })}
@@ -258,10 +287,17 @@ function RequestCard({
         <Text style={[styles.cardTitle, { color: C.text }]} numberOfLines={1}>
           {order.title}
         </Text>
-        <View style={[styles.deliveryBadge, { backgroundColor: C.primary + '18', borderColor: C.primary + '44' }]}>
-          <Text style={[styles.deliveryBadgeText, { color: C.primary }]}>
-            {DELIVERY_TYPE_LABELS[order.delivery_type ?? 'delivery']}
-          </Text>
+        <View style={styles.badgeRow}>
+          {isUrgent && (
+            <View style={styles.urgentBadge}>
+              <Text style={styles.urgentBadgeText}>🔥 ACİL</Text>
+            </View>
+          )}
+          <View style={[styles.deliveryBadge, { backgroundColor: C.primary + '18', borderColor: C.primary + '44' }]}>
+            <Text style={[styles.deliveryBadgeText, { color: C.primary }]}>
+              {DELIVERY_TYPE_LABELS[order.delivery_type ?? 'delivery']}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -280,8 +316,8 @@ function RequestCard({
           </View>
         )}
         {order.delivery_date && (
-          <View style={[styles.metaChip, { backgroundColor: C.background }]}>
-            <Text style={[styles.metaChipText, { color: C.textSecondary }]}>
+          <View style={[styles.metaChip, { backgroundColor: isUrgent ? '#E53E3E18' : C.background }]}>
+            <Text style={[styles.metaChipText, { color: isUrgent ? '#E53E3E' : C.textSecondary, fontWeight: isUrgent ? '700' : '400' }]}>
               📅 Teslim: {formatDate(order.delivery_date)}
             </Text>
           </View>
@@ -375,6 +411,9 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.sm },
   cardTitle: { fontSize: FontSize.md, fontWeight: '700', flex: 1 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  urgentBadge: { backgroundColor: '#E53E3E', borderRadius: Radius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2 },
+  urgentBadgeText: { color: '#FFF', fontSize: FontSize.xs, fontWeight: '800', letterSpacing: 0.5 },
   deliveryBadge: { borderWidth: 1, borderRadius: Radius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2 },
   deliveryBadgeText: { fontSize: FontSize.xs, fontWeight: '600' },
   cardDesc: { fontSize: FontSize.sm, lineHeight: 18 },

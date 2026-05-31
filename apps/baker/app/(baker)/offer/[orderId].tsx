@@ -22,12 +22,14 @@ export default function MakeOfferScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [shop, setShop] = useState<Shop | null>(null);
   const [shopError, setShopError] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [price, setPrice] = useState('');
   const [message, setMessage] = useState('');
   const [estimatedDays, setEstimatedDays] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alreadyOffered, setAlreadyOffered] = useState(false);
+  const [orderClosed, setOrderClosed] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   const loadData = useCallback(async (userId: string) => {
@@ -39,6 +41,10 @@ export default function MakeOfferScreen() {
     const orderRes = await _db.from('orders').select('*').eq('id', orderId).single();
     if (orderRes.data) setOrder(orderRes.data as Order);
 
+    // Cüzdan bakiyesi
+    const walletRes = await _db.from('users').select('wallet_balance').eq('id', userId).single();
+    if (walletRes.data) setWalletBalance(Number(walletRes.data.wallet_balance ?? 0));
+
     // Dükkan
     const shopRes = await _db
       .from('pastry_shops')
@@ -49,6 +55,11 @@ export default function MakeOfferScreen() {
       setShopError(`DB Hatası: ${shopRes.error.message}`);
     } else if (shopRes.data && shopRes.data.length > 0) {
       setShop(shopRes.data[0] as Shop);
+    }
+
+    // Sipariş hâlâ teklif kabul ediyor mu?
+    if (orderRes.data && !['pending', 'offers_received'].includes(orderRes.data.status)) {
+      setOrderClosed(true);
     }
 
     // Daha önce teklif verilmiş mi?
@@ -91,7 +102,10 @@ export default function MakeOfferScreen() {
 
     if (error || (data as { error?: string } | null)?.error) {
       const msg = (data as { error?: string } | null)?.error ?? 'Teklif gönderilemedi. Lütfen tekrar deneyin.';
-      if (msg.includes('already') || msg.includes('mevcut')) {
+      if (msg === 'siparis_kabul_edildi') {
+        setOrderClosed(true);
+        Alert.alert('Sipariş Kapatıldı', 'Müşteri bir teklifi kabul etti. Bu siparişe artık teklif verilemez.');
+      } else if (msg.includes('already') || msg.includes('mevcut')) {
         Alert.alert('Zaten Teklif Verildi', 'Bu sipariş için zaten bir teklifiniz var.');
       } else if (msg.includes('bakiye') || msg.includes('balance')) {
         Alert.alert('Yetersiz Bakiye', msg);
@@ -112,11 +126,7 @@ export default function MakeOfferScreen() {
       }).catch(() => {});
     }
 
-    Alert.alert(
-      '🎉 Teklif Gönderildi!',
-      'Müşteri teklifinizi inceleyecek.',
-      [{ text: 'Tamam', onPress: () => router.back() }]
-    );
+    router.back();
   };
 
   if (isLoading) {
@@ -124,6 +134,35 @@ export default function MakeOfferScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={C.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (orderClosed) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+        <View style={[styles.header, { borderBottomColor: C.border }]}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: C.text }]}>Sipariş Detayı</Text>
+          <View style={{ width: 48 }} />
+        </View>
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 48 }}>🔒</Text>
+          <Text style={[{ fontSize: 17, fontWeight: '700', color: C.text, marginTop: 12, textAlign: 'center' }]}>
+            Sipariş Kapatıldı
+          </Text>
+          <Text style={[{ fontSize: 14, color: C.textSecondary, marginTop: 6, textAlign: 'center', paddingHorizontal: 32 }]}>
+            Müşteri bir teklifi kabul etti. Bu siparişe artık teklif verilemez.
+          </Text>
+          <TouchableOpacity
+            style={[{ backgroundColor: C.primary, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 99, marginTop: 20 }]}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: '#FFF', fontWeight: '700' }}>← Geri Dön</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -199,6 +238,11 @@ export default function MakeOfferScreen() {
                 <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.textSecondary }]}>
                   {order.delivery_type === 'delivery' ? '🚚 Teslimat' : '🏪 Gel-Al'}
                 </Text>
+                {order.delivery_type === 'delivery' && order.delivery_address ? (
+                  <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.textSecondary }]}>
+                    📍 {order.delivery_address}
+                  </Text>
+                ) : null}
               </View>
             </View>
           )}
@@ -342,6 +386,11 @@ export default function MakeOfferScreen() {
                 <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.textSecondary }]}>
                   {order.delivery_type === 'delivery' ? '🚚 Teslimat' : '🏪 Gel-Al'}
                 </Text>
+                {order.delivery_type === 'delivery' && order.delivery_address ? (
+                  <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.textSecondary }]}>
+                    📍 {order.delivery_address}
+                  </Text>
+                ) : null}
               </View>
             </View>
           )}
@@ -351,6 +400,46 @@ export default function MakeOfferScreen() {
               🏪 <Text style={{ fontWeight: '700' }}>{shop.name}</Text> adına teklif veriyorsunuz
             </Text>
           </View>
+
+          {/* Cüzdan & Teklif Bedeli */}
+          {(() => {
+            const offerFee = (order?.serving_size ?? 0) * 5;
+            const hasEnough = walletBalance >= offerFee;
+            return (
+              <View style={[styles.feeCard, {
+                backgroundColor: hasEnough ? '#48BB7812' : '#E53E3E12',
+                borderColor: hasEnough ? '#48BB7844' : '#E53E3E44',
+              }]}>
+                <View style={styles.feeRow}>
+                  <Text style={[styles.feeLabel, { color: C.textSecondary }]}>💰 Cüzdan Bakiyesi</Text>
+                  <Text style={[styles.feeValue, { color: C.text }]}>
+                    ₺{Math.floor(walletBalance).toLocaleString('en-US')}
+                  </Text>
+                </View>
+                <View style={styles.feeDivider} />
+                <View style={styles.feeRow}>
+                  <Text style={[styles.feeLabel, { color: C.textSecondary }]}>
+                    🎯 Teklif Bedeli
+                  </Text>
+                  <Text style={[styles.feeValue, { color: '#E53E3E', fontWeight: '800' }]}>
+                    -₺{offerFee}
+                  </Text>
+                </View>
+                <View style={styles.feeDivider} />
+                <View style={styles.feeRow}>
+                  <Text style={[styles.feeLabel, { color: C.textSecondary }]}>Kalan Bakiye</Text>
+                  <Text style={[styles.feeValue, { color: hasEnough ? '#48BB78' : '#E53E3E', fontWeight: '800' }]}>
+                    ₺{Math.floor(walletBalance - offerFee).toLocaleString('en-US')}
+                  </Text>
+                </View>
+                {!hasEnough && (
+                  <Text style={styles.feeWarning}>
+                    ⚠️ Yetersiz bakiye. Cüzdanınıza ₺{offerFee - Math.floor(walletBalance)} daha yükleyin.
+                  </Text>
+                )}
+              </View>
+            );
+          })()}
 
           <View style={styles.field}>
             <Text style={[styles.label, { color: C.text }]}>Fiyat (₺) *</Text>
@@ -362,19 +451,6 @@ export default function MakeOfferScreen() {
               onChangeText={(t) => setPrice(t.replace(/[^0-9.]/g, ''))}
               keyboardType="decimal-pad"
               maxLength={10}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: C.text }]}>Hazırlık Süresi (gün)</Text>
-            <TextInput
-              style={[styles.inputSmall, { backgroundColor: C.card, borderColor: C.border, color: C.text }]}
-              placeholder="Örn: 3"
-              placeholderTextColor={C.placeholder}
-              value={estimatedDays}
-              onChangeText={(t) => setEstimatedDays(t.replace(/[^0-9]/g, ''))}
-              keyboardType="number-pad"
-              maxLength={2}
             />
           </View>
 
@@ -403,7 +479,9 @@ export default function MakeOfferScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#FFF" />
             ) : (
-              <Text style={styles.submitBtnText}>🎉 Teklif Gönder</Text>
+              <Text style={styles.submitBtnText}>
+                🎉 Teklif Gönder · ₺{(order?.serving_size ?? 0) * 5}
+              </Text>
             )}
           </TouchableOpacity>
 
@@ -450,6 +528,12 @@ const styles = StyleSheet.create({
   metaChip: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.sm, fontSize: FontSize.xs },
   shopInfo: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   shopInfoText: { fontSize: FontSize.sm },
+  feeCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.xs },
+  feeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  feeLabel: { fontSize: FontSize.sm, flex: 1, flexWrap: 'wrap' },
+  feeValue: { fontSize: FontSize.sm, fontWeight: '700', marginLeft: Spacing.sm },
+  feeDivider: { height: 1, backgroundColor: 'rgba(0,0,0,0.08)', marginVertical: 2 },
+  feeWarning: { fontSize: FontSize.xs, color: '#E53E3E', fontWeight: '600', marginTop: Spacing.xs },
   field: { gap: Spacing.xs },
   label: { fontSize: FontSize.sm, fontWeight: '600' },
   input: {

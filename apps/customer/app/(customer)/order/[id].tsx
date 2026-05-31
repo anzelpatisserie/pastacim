@@ -292,6 +292,12 @@ export default function OrderDetailScreen() {
                 {order.delivery_type === 'delivery' ? 'Adrese Teslim' : 'Gel-Al'}
               </Text>
             </View>
+            {order.delivery_type === 'delivery' && order.delivery_address ? (
+              <View style={[styles.metaItem, { backgroundColor: C.background }]}>
+                <Text style={styles.metaEmoji}>📍</Text>
+                <Text style={[styles.metaValue, { color: C.text }]}>{order.delivery_address}</Text>
+              </View>
+            ) : null}
             {order.created_at ? (
               <View style={[styles.metaItem, { backgroundColor: C.background }]}>
                 <Text style={styles.metaEmoji}>🗓</Text>

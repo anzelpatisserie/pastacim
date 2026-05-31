@@ -117,15 +117,15 @@ export default function CustomerHomeScreen() {
         /* Hiç sipariş yok */
         <View style={styles.centered}>
           <Text style={styles.emptyEmoji}>🎂</Text>
-          <Text style={[styles.emptyTitle, { color: C.text }]}>Sipariş oluştur</Text>
+          <Text style={[styles.emptyTitle, { color: C.text }]}>Teklif Al</Text>
           <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-            Bir sipariş ver; yakındaki pastacılar sana teklif göndersin, en iyisini seç!
+            Teklif almak istediğin ürünü tarif et; yakındaki pastacılar sana teklif göndersin, en iyisini seç!
           </Text>
           <TouchableOpacity
             style={[styles.ctaBtn, { backgroundColor: C.primary }]}
             onPress={() => router.push('/(customer)/order/create')}
           >
-            <Text style={styles.ctaBtnText}>+ Sipariş Ver</Text>
+            <Text style={styles.ctaBtnText}>+ Teklif Al</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -158,7 +158,7 @@ export default function CustomerHomeScreen() {
               style={[styles.newOrderBtn, { borderColor: C.primary }]}
               onPress={() => router.push('/(customer)/order/create')}
             >
-              <Text style={[styles.newOrderBtnText, { color: C.primary }]}>+ Yeni Sipariş Ver</Text>
+              <Text style={[styles.newOrderBtnText, { color: C.primary }]}>+ Yeni Teklif Al</Text>
             </TouchableOpacity>
           }
         />

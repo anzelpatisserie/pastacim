@@ -25,6 +25,7 @@ export default function CreateOrderScreen() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [locationLabel, setLocationLabel] = useState<string | null>(null);
 
   // Görseller
   const [photos, setPhotos] = useState<string[]>([]); // local URI'lar
@@ -142,6 +143,29 @@ export default function CreateOrderScreen() {
     return urls;
   };
 
+  // ─── Adresi Koordinata Çevir ──────────────────────────────────────────────────
+  const handleGeocodeAddress = async () => {
+    if (!deliveryAddress.trim()) {
+      Alert.alert('Adres Girin', 'Lütfen önce teslimat adresini yazın.');
+      return;
+    }
+    setIsLocating(true);
+    try {
+      const results = await Location.geocodeAsync(deliveryAddress.trim());
+      if (!results || results.length === 0) {
+        Alert.alert('Adres Bulunamadı', 'Girilen adres koordinatlara çevrilemedi. Daha detaylı bir adres deneyin (şehir, ilçe, mahalle gibi).');
+        return;
+      }
+      const { latitude, longitude } = results[0];
+      setUserLocation({ lat: latitude, lng: longitude });
+      setLocationLabel(`📍 "${deliveryAddress.trim()}" adresi konuma çevrildi`);
+    } catch {
+      Alert.alert('Hata', 'Adres çevrilemedi. Mevcut konumu kullanın veya daha detaylı adres girin.');
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
   // ─── Mevcut Konum ─────────────────────────────────────────────────────────────
   const handleUseCurrentLocation = async () => {
     setIsLocating(true);
@@ -169,8 +193,10 @@ export default function CreateOrderScreen() {
           const addr = parts.join(' ');
           if (addr.trim()) {
             setDeliveryAddress(addr.trim());
+            setLocationLabel('📍 Mevcut konum kullanılıyor');
             Alert.alert('📍 Konum Eklendi', `Adres dolduruldu:\n${addr.trim()}`);
           } else {
+            setLocationLabel('📍 Mevcut konum kullanılıyor');
             Alert.alert('📍 Konum Kaydedildi', 'Koordinatınız alındı. Adres alanını manuel doldurun.');
           }
         }
@@ -205,6 +231,10 @@ export default function CreateOrderScreen() {
   const handleSubmit = async () => {
     if (!title.trim()) {
       Alert.alert('Eksik bilgi', 'Lütfen sipariş başlığı girin.');
+      return;
+    }
+    if (!servingSize || parseInt(servingSize) < 1) {
+      Alert.alert('Eksik bilgi', 'Lütfen kaç kişilik olduğunu girin.');
       return;
     }
 
@@ -284,8 +314,8 @@ export default function CreateOrderScreen() {
       }
 
       Alert.alert(
-        '🎂 Sipariş Oluşturuldu!',
-        'Siparişiniz yayında! Yakındaki pastacılar tekliflerini gönderecek.',
+        '🎂 Teklif Talebiniz Alındı!',
+        'Talebiniz yayında! Yakındaki pastacılar tekliflerini gönderecek.',
         [{ text: 'Tamam', onPress: () => router.replace('/(customer)/my-orders') }]
       );
     } finally {
@@ -304,7 +334,7 @@ export default function CreateOrderScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: C.text }]}>Yeni Sipariş</Text>
+          <Text style={[styles.headerTitle, { color: C.text }]}>Teklif Al</Text>
           <View style={{ width: 48 }} />
         </View>
 
@@ -427,17 +457,29 @@ export default function CreateOrderScreen() {
                 onChangeText={setDeliveryAddress}
                 maxLength={200}
               />
-              <TouchableOpacity
-                style={[styles.locationBtn, { backgroundColor: C.primary + '15', borderColor: C.primary + '44' }]}
-                onPress={handleUseCurrentLocation}
-                disabled={isLocating}
-              >
-                {isLocating ? (
-                  <ActivityIndicator size="small" color={C.primary} />
-                ) : (
-                  <Text style={[styles.locationBtnText, { color: C.primary }]}>📍 Mevcut Konumu Kullan</Text>
-                )}
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                <TouchableOpacity
+                  style={[styles.locationBtn, { flex: 1, backgroundColor: C.primary + '15', borderColor: C.primary + '44' }]}
+                  onPress={handleGeocodeAddress}
+                  disabled={isLocating}
+                >
+                  {isLocating ? (
+                    <ActivityIndicator size="small" color={C.primary} />
+                  ) : (
+                    <Text style={[styles.locationBtnText, { color: C.primary }]}>🔍 Adresi Doğrula</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.locationBtn, { flex: 1, backgroundColor: C.card, borderColor: C.border }]}
+                  onPress={handleUseCurrentLocation}
+                  disabled={isLocating}
+                >
+                  <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>📍 Mevcut Konum</Text>
+                </TouchableOpacity>
+              </View>
+              {locationLabel && (
+                <Text style={{ fontSize: FontSize.xs, color: C.success, marginTop: 2 }}>{locationLabel}</Text>
+              )}
             </View>
           )}
 
@@ -482,30 +524,6 @@ export default function CreateOrderScreen() {
                 <Text style={styles.dateConfirmBtnText}>Tamam</Text>
               </TouchableOpacity>
             )}
-          </View>
-
-          {/* Arama Yarıçapı */}
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: C.text }]}>Pastacı Arama Mesafesi</Text>
-            <View style={styles.radiusRow}>
-              {[5, 10, 20, 50].map((km) => (
-                <TouchableOpacity
-                  key={km}
-                  style={[
-                    styles.radiusBtn,
-                    {
-                      backgroundColor: searchRadius === km ? C.primary : C.card,
-                      borderColor: searchRadius === km ? C.primary : C.border,
-                    },
-                  ]}
-                  onPress={() => setSearchRadius(km)}
-                >
-                  <Text style={[styles.radiusBtnText, { color: searchRadius === km ? '#FFF' : C.textSecondary }]}>
-                    {km}km
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
           </View>
 
           {/* Gönder */}

@@ -4,7 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { supabase, rpcWithdrawOffer, rpcSetOrderStatus, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcWithdrawOffer, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 
 type Offer = Database['public']['Tables']['offers']['Row'] & {
@@ -20,7 +20,21 @@ const ORDER_STATUS_LABELS: Record<string, { label: string; color: string; emoji:
   in_progress: { label: 'Hazırlanıyor',      color: '#9F7AEA', emoji: '👨‍🍳' },
   ready:       { label: 'Teslimata Hazır',   color: '#4299E1', emoji: '📦' },
   completed:   { label: 'Tamamlandı',        color: '#68D391', emoji: '🎂' },
+  cancelled:   { label: 'İptal Edildi',      color: '#FC8181', emoji: '❌' },
 };
+
+const OFFER_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  pending:   { label: '⏳ Yanıt Bekleniyor', color: '#B7791F' },
+  rejected:  { label: '❌ Reddedildi',       color: '#C53030' },
+  withdrawn: { label: '↩️ Geri Çekildi',    color: '#718096' },
+};
+
+function isActive(offer: Offer): boolean {
+  const os = offer.order?.status;
+  if (offer.status === 'pending') return true;
+  if (offer.status === 'accepted' && os && ['accepted', 'in_progress', 'ready'].includes(os)) return true;
+  return false;
+}
 
 export default function BakerMyOrdersScreen() {
   const C = useThemeColors();
@@ -46,7 +60,7 @@ export default function BakerMyOrdersScreen() {
         )
       `)
       .eq('baker_id', user.id)
-      .in('status', ['accepted', 'pending'])
+      .eq('hidden_for_baker', false)
       .order('created_at', { ascending: false });
 
     setOffers((data ?? []) as Offer[]);
@@ -54,7 +68,6 @@ export default function BakerMyOrdersScreen() {
     else setIsLoading(false);
   }, [user?.id]);
 
-  // Auth hazır olduğunda ilk yükleme (useFocusEffect ile birlikte)
   useEffect(() => {
     if (user?.id) fetchOffers();
     else setIsLoading(false);
@@ -62,39 +75,30 @@ export default function BakerMyOrdersScreen() {
 
   useFocusEffect(useCallback(() => { fetchOffers(); }, [fetchOffers]));
 
-  // ─── Realtime: sipariş durumu değişince anında güncelle ──────────────────
   useEffect(() => {
     if (!user?.id) return;
-
     const channel = supabase
       .channel(`baker-orders:${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders' },
-        (payload) => {
-          const updated = payload.new as { id: string; status: string };
-          // Mevcut listede bu sipariş varsa local state'i güncelle
-          setOffers((prev) => {
-            const exists = prev.some((o) => o.order?.id === updated.id);
-            if (!exists) return prev;
-            return prev.map((o) =>
-              o.order?.id === updated.id
-                ? { ...o, order: { ...o.order!, status: updated.status as OrderStatus } }
-                : o
-            );
-          });
-        }
-      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
+        const updated = payload.new as { id: string; status: string };
+        setOffers((prev) => {
+          const exists = prev.some((o) => o.order?.id === updated.id);
+          if (!exists) return prev;
+          return prev.map((o) =>
+            o.order?.id === updated.id
+              ? { ...o, order: { ...o.order!, status: updated.status as OrderStatus } }
+              : o
+          );
+        });
+      })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
 
   const handleWithdraw = (offer: Offer) => {
-    const orderTitle = offer.order?.title ?? 'Bu sipariş';
     Alert.alert(
       '↩️ Teklifi Geri Çek',
-      `"${orderTitle}" siparişindeki teklifinizi geri çekmek istiyor musunuz?`,
+      `"${offer.order?.title ?? 'Bu sipariş'}" siparişindeki teklifinizi geri çekmek istiyor musunuz?`,
       [
         { text: 'Vazgeç', style: 'cancel' },
         {
@@ -108,7 +112,27 @@ export default function BakerMyOrdersScreen() {
               return;
             }
             setOffers((prev) => prev.filter((o) => o.id !== offer.id));
-            Alert.alert('✅ Teklif Geri Çekildi', 'Teklifiniz başarıyla geri çekildi.');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleHide = (offer: Offer) => {
+    Alert.alert(
+      '🗑️ Listeden Kaldır',
+      'Bu teklif Siparişlerim listesinden kaldırılsın mı? Yalnızca sizin görünümünüzden silinir.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Kaldır', style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase
+              .from('offers')
+              .update({ hidden_for_baker: true } as never)
+              .eq('id', offer.id);
+            if (error) { Alert.alert('Hata', 'Kaldırılamadı.'); return; }
+            setOffers((prev) => prev.filter((o) => o.id !== offer.id));
           },
         },
       ]
@@ -118,47 +142,39 @@ export default function BakerMyOrdersScreen() {
   const handleSetStatus = async (offer: Offer, newStatus: OrderStatus) => {
     if (!offer.order) return;
     setProgressingId(offer.id);
-    const { data, error } = await rpcSetOrderStatus({
-      p_order_id: offer.order.id,
-      p_status: newStatus,
-    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
+      .from('orders')
+      .update({ status: newStatus })
+      .eq('id', offer.order.id);
     setProgressingId(null);
 
-    if (error || (data as { error?: string } | null)?.error) {
-      Alert.alert('Hata', 'Durum güncellenemedi. Lütfen tekrar deneyin.');
+    if (error) {
+      Alert.alert('Hata', error.message ?? 'Durum güncellenemedi.');
       return;
     }
 
-    // Lokal state güncelle
     setOffers((prev) => prev.map((o) =>
       o.id === offer.id && o.order
         ? { ...o, order: { ...o.order, status: newStatus } }
         : o
     ));
 
-    // Müşteriye bildirim gönder
     const customerId = offer.order.customer_id;
     if (newStatus === 'in_progress') {
-      notifyUser({
-        userId: customerId,
-        type: 'order_in_progress',
-        title: '🍳 Siparişin Hazırlanıyor!',
-        body: `"${offer.order.title}" siparişin hazırlanmaya başlandı.`,
-        data: { orderId: offer.order.id },
-      }).catch(() => {});
+      notifyUser({ userId: customerId, type: 'order_in_progress', title: '🍳 Siparişin Hazırlanıyor!', body: `"${offer.order.title}" siparişin hazırlanmaya başlandı.`, data: { orderId: offer.order.id } }).catch(() => {});
     } else if (newStatus === 'ready') {
-      notifyUser({
-        userId: customerId,
-        type: 'order_ready',
-        title: '📦 Siparişin Teslimata Hazır!',
-        body: `"${offer.order.title}" siparişin teslim almaya hazır.`,
-        data: { orderId: offer.order.id },
-      }).catch(() => {});
+      notifyUser({ userId: customerId, type: 'order_ready', title: '📦 Siparişin Teslimata Hazır!', body: `"${offer.order.title}" siparişin teslim almaya hazır.`, data: { orderId: offer.order.id } }).catch(() => {});
     }
   };
 
-  const acceptedOffers = offers.filter((o) => o.status === 'accepted');
-  const pendingOffers  = offers.filter((o) => o.status === 'pending');
+  const aktif  = offers.filter(isActive);
+  const gecmis = offers.filter((o) => !isActive(o));
+
+  const sections = [
+    ...(aktif.length > 0  ? [{ type: 'header' as const, title: `Aktif Siparişler (${aktif.length})` }, ...aktif.map((o) => ({ type: 'offer' as const, data: o }))] : []),
+    ...(gecmis.length > 0 ? [{ type: 'header' as const, title: `Geçmiş (${gecmis.length})` },         ...gecmis.map((o) => ({ type: 'offer' as const, data: o }))] : []),
+  ];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
@@ -170,12 +186,12 @@ export default function BakerMyOrdersScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={C.primary} />
         </View>
-      ) : acceptedOffers.length === 0 && pendingOffers.length === 0 ? (
+      ) : offers.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.emptyEmoji}>✅</Text>
           <Text style={[styles.emptyTitle, { color: C.text }]}>Henüz sipariş yok</Text>
           <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-            Kabul edilen siparişlerin burada görünür
+            Teklif verdiğin siparişler burada görünür
           </Text>
           <TouchableOpacity
             style={[styles.goBtn, { backgroundColor: C.primary }]}
@@ -186,29 +202,30 @@ export default function BakerMyOrdersScreen() {
         </View>
       ) : (
         <FlatList
-          data={[...acceptedOffers, ...pendingOffers]}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <OfferOrderCard
-              offer={item}
-              colors={C}
-              isWithdrawing={withdrawingId === item.id}
-              isProgressing={progressingId === item.id}
-              onWithdraw={() => handleWithdraw(item)}
-              onSetStatus={(s) => handleSetStatus(item, s)}
-            />
-          )}
+          data={sections}
+          keyExtractor={(item, idx) => item.type === 'header' ? `h-${idx}` : item.data.id}
+          renderItem={({ item }) => {
+            if (item.type === 'header') {
+              return (
+                <Text style={[styles.sectionHeader, { color: C.textSecondary }]}>{item.title}</Text>
+              );
+            }
+            return (
+              <OfferOrderCard
+                offer={item.data}
+                colors={C}
+                isWithdrawing={withdrawingId === item.data.id}
+                isProgressing={progressingId === item.data.id}
+                onWithdraw={() => handleWithdraw(item.data)}
+                onHide={() => handleHide(item.data)}
+                onSetStatus={(s) => handleSetStatus(item.data, s)}
+              />
+            );
+          }}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={isRefreshing} onRefresh={() => fetchOffers(true)} tintColor={C.primary} />
-          }
-          ListHeaderComponent={
-            acceptedOffers.length > 0 ? (
-              <Text style={[styles.sectionHeader, { color: C.text }]}>
-                ✅ Kabul Edilen ({acceptedOffers.length})
-              </Text>
-            ) : null
           }
         />
       )}
@@ -217,22 +234,24 @@ export default function BakerMyOrdersScreen() {
 }
 
 function OfferOrderCard({
-  offer, colors: C, isWithdrawing, isProgressing, onWithdraw, onSetStatus,
+  offer, colors: C, isWithdrawing, isProgressing, onWithdraw, onHide, onSetStatus,
 }: {
   offer: Offer;
   colors: ThemeColors;
   isWithdrawing: boolean;
   isProgressing: boolean;
   onWithdraw: () => void;
+  onHide: () => void;
   onSetStatus: (s: OrderStatus) => void;
 }) {
-  const isAccepted = offer.status === 'accepted';
-  const isPending  = offer.status === 'pending';
+  const isAccepted  = offer.status === 'accepted';
+  const isPending   = offer.status === 'pending';
   const orderStatus = offer.order?.status;
+  const active      = isActive(offer);
 
-  const statusLabel = orderStatus ? ORDER_STATUS_LABELS[orderStatus] : null;
+  const statusLabel    = orderStatus ? ORDER_STATUS_LABELS[orderStatus] : null;
+  const offerStatusLbl = !isAccepted ? (OFFER_STATUS_LABELS[offer.status] ?? null) : null;
 
-  // Pastacının yapabileceği sonraki aksiyon
   const nextAction: { label: string; status: OrderStatus; color: string } | null = (() => {
     if (!isAccepted) return null;
     if (orderStatus === 'accepted')    return { label: '🍳 Hazırlamaya Başla', status: 'in_progress', color: '#9F7AEA' };
@@ -244,8 +263,11 @@ function OfferOrderCard({
     <TouchableOpacity
       style={[
         styles.card,
-        { backgroundColor: C.card, borderColor: isAccepted ? C.success : C.border },
-        isAccepted && { borderWidth: 2 },
+        {
+          backgroundColor: C.card,
+          borderColor: isAccepted && active ? C.success : isPending ? '#B7791F88' : C.border,
+          borderWidth: (isAccepted && active) || isPending ? 2 : 1,
+        },
       ]}
       activeOpacity={0.85}
       onPress={() =>
@@ -253,7 +275,6 @@ function OfferOrderCard({
         router.push({ pathname: '/(baker)/offer/[orderId]', params: { orderId: offer.order.id } })
       }
     >
-      {/* Başlık + Durum */}
       <View style={styles.cardTop}>
         <Text style={[styles.orderTitle, { color: C.text }]} numberOfLines={1}>
           {offer.order?.title ?? 'Sipariş'}
@@ -265,19 +286,21 @@ function OfferOrderCard({
             </Text>
           </View>
         )}
+        {offerStatusLbl && (
+          <View style={[styles.statusBadge, { backgroundColor: offerStatusLbl.color + '22' }]}>
+            <Text style={[styles.statusText, { color: offerStatusLbl.color }]}>{offerStatusLbl.label}</Text>
+          </View>
+        )}
       </View>
 
-      {/* Fiyat */}
       <Text style={[styles.price, { color: C.primary }]}>₺{offer.price}</Text>
 
-      {/* Müşteri */}
       {offer.order?.customer?.full_name && (
         <Text style={[styles.customer, { color: C.textSecondary }]}>
           👤 {offer.order.customer.full_name}
         </Text>
       )}
 
-      {/* Detaylar */}
       <View style={styles.metaRow}>
         {offer.order?.serving_size && (
           <Text style={[styles.metaText, { color: C.textSecondary }]}>👥 {offer.order.serving_size} kişilik</Text>
@@ -289,10 +312,8 @@ function OfferOrderCard({
         )}
       </View>
 
-      {/* Aksiyon butonları */}
       {offer.order && (
         <View style={styles.btnCol}>
-          {/* Durum geçiş butonu (accepted → in_progress → ready) */}
           {nextAction && (
             <TouchableOpacity
               style={[styles.progressBtn, { backgroundColor: nextAction.color }]}
@@ -307,7 +328,6 @@ function OfferOrderCard({
           )}
 
           <View style={styles.btnRow}>
-            {/* Mesaj */}
             <TouchableOpacity
               style={[styles.msgBtn, { backgroundColor: C.primary, flex: 1 }]}
               onPress={() => router.push({
@@ -315,22 +335,28 @@ function OfferOrderCard({
                 params: { conversationId: offer.order!.customer_id, orderId: offer.order!.id },
               })}
             >
-              <Text style={styles.msgBtnText}>
-                {isAccepted ? '💬 Müşteriye Mesaj' : '💬 Mesajlaşmayı Başlat'}
-              </Text>
+              <Text style={styles.msgBtnText}>💬 Müşteriye Mesaj</Text>
             </TouchableOpacity>
 
-            {/* Geri çek — sadece pending */}
             {isPending && (
               <TouchableOpacity
-                style={[styles.withdrawBtn, { borderColor: C.error + '88' }]}
+                style={[styles.iconBtn, { borderColor: C.error + '88' }]}
                 onPress={onWithdraw}
                 disabled={isWithdrawing}
               >
                 {isWithdrawing
                   ? <ActivityIndicator size="small" color={C.error} />
-                  : <Text style={[styles.withdrawBtnText, { color: C.error }]}>↩️</Text>
+                  : <Text style={[styles.iconBtnText, { color: C.error }]}>↩️</Text>
                 }
+              </TouchableOpacity>
+            )}
+
+            {!active && (
+              <TouchableOpacity
+                style={[styles.iconBtn, { borderColor: C.border }]}
+                onPress={onHide}
+              >
+                <Text style={[styles.iconBtnText, { color: C.textSecondary }]}>🗑️</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -351,7 +377,7 @@ const styles = StyleSheet.create({
   goBtn: { paddingHorizontal: Spacing.xl, paddingVertical: 12, borderRadius: Radius.full, marginTop: Spacing.sm },
   goBtnText: { color: '#FFF', fontWeight: '700' },
   list: { padding: Spacing.md, gap: Spacing.sm, paddingBottom: 80 },
-  sectionHeader: { fontSize: FontSize.sm, fontWeight: '700', marginBottom: Spacing.xs },
+  sectionHeader: { fontSize: FontSize.sm, fontWeight: '700', marginTop: Spacing.sm, marginBottom: Spacing.xs },
   card: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.sm },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
   orderTitle: { fontSize: FontSize.md, fontWeight: '700', flex: 1 },
@@ -363,15 +389,10 @@ const styles = StyleSheet.create({
   metaText: { fontSize: FontSize.xs },
   btnCol: { gap: Spacing.sm },
   btnRow: { flexDirection: 'row', gap: Spacing.sm },
-  progressBtn: {
-    paddingVertical: 11, borderRadius: Radius.full, alignItems: 'center',
-  },
+  progressBtn: { paddingVertical: 11, borderRadius: Radius.full, alignItems: 'center' },
   progressBtnText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
   msgBtn: { paddingVertical: 10, borderRadius: Radius.full, alignItems: 'center' },
   msgBtnText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
-  withdrawBtn: {
-    paddingHorizontal: Spacing.lg, paddingVertical: 10,
-    borderRadius: Radius.full, borderWidth: 1.5, alignItems: 'center',
-  },
-  withdrawBtnText: { fontSize: FontSize.sm, fontWeight: '700' },
+  iconBtn: { paddingHorizontal: Spacing.md, paddingVertical: 10, borderRadius: Radius.full, borderWidth: 1.5, alignItems: 'center' },
+  iconBtnText: { fontSize: FontSize.sm, fontWeight: '700' },
 });

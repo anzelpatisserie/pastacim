@@ -47,7 +47,7 @@ export default function CustomerLayout() {
       }} />
       <Tabs.Screen name="my-orders" options={{
         tabBarIcon: ({ focused }) => (
-          <TabIcon emoji="📦" label="Siparişlerim" focused={focused} activeColor={C.primary} inactiveColor={C.icon} />
+          <TabIcon emoji="📦" label="Sipariş" focused={focused} activeColor={C.primary} inactiveColor={C.icon} />
         ),
       }} />
       <Tabs.Screen name="order/create" options={{
@@ -64,7 +64,7 @@ export default function CustomerLayout() {
       }} />
       <Tabs.Screen name="notifications" options={{
         tabBarIcon: ({ focused }) => (
-          <TabIcon emoji="🔔" label="Bildirimler" focused={focused} activeColor={C.primary} inactiveColor={C.icon} badge={unreadCount} />
+          <TabIcon emoji="🔔" label="Bildirim" focused={focused} activeColor={C.primary} inactiveColor={C.icon} badge={unreadCount} />
         ),
       }} />
       <Tabs.Screen name="offers/[orderId]" options={{ href: null }} />
