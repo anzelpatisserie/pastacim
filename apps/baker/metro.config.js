@@ -2,8 +2,13 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// @opentelemetry/api uses dynamic import(variable) which Hermes rejects.
-// Resolve it to an empty module to prevent the bundle error.
+// Linux Hermes (used by EAS) rejects import(variable) expressions.
+// Transform @supabase packages through Babel so dynamic import() → require().
+config.transformer.transformIgnorePatterns = [
+  'node_modules/(?!(@supabase|@opentelemetry|react-native|expo|@expo|@unimodules)/)',
+];
+
+// Resolve @opentelemetry/* to empty modules (they use dynamic import(variable)).
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName.startsWith('@opentelemetry/')) {
