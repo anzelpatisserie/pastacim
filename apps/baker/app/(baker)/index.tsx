@@ -346,6 +346,18 @@ function RequestCard({
             </Text>
           </View>
         )}
+        {(order as any).delivery_time && (
+          <View style={[styles.metaChip, { backgroundColor: C.background }]}>
+            <Text style={[styles.metaChipText, { color: C.textSecondary }]}>
+              🕐 {((order as any).delivery_time as string).substring(0, 5)}
+            </Text>
+          </View>
+        )}
+        {(order as any).is_urgent && (
+          <View style={{ backgroundColor: '#FED7D7', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+            <Text style={{ fontSize: FontSize.xs, color: '#C53030', fontWeight: '700' }}>⚡ Acil</Text>
+          </View>
+        )}
         {order.created_at && (
           <View style={[styles.metaChip, { backgroundColor: C.background }]}>
             <Text style={[styles.metaChipText, { color: C.placeholder }]}>
