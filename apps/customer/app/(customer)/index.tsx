@@ -10,7 +10,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { supabase, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize, FeedbackModal } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 import { useNotifications } from '@/hooks/useNotifications';
 
@@ -39,6 +39,7 @@ export default function CustomerHomeScreen() {
   const [offerCounts, setOfferCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading]     = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   // ─── Siparişler + Teklif Sayıları ─────────────────────────────────────────
   const fetchAll = useCallback(async (refresh = false) => {
@@ -102,6 +103,14 @@ export default function CustomerHomeScreen() {
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Geri bildirim butonu */}
+          <TouchableOpacity
+            onPress={() => setShowFeedback(true)}
+            style={{ padding: 4 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={{ fontSize: 20 }}>💬</Text>
+          </TouchableOpacity>
           {/* Bildirim zili */}
           <TouchableOpacity
             onPress={() => router.push('/(customer)/notifications' as never)}
@@ -130,6 +139,12 @@ export default function CustomerHomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <FeedbackModal
+        visible={showFeedback}
+        onClose={() => setShowFeedback(false)}
+        appName="customer"
+      />
 
       {/* İçerik */}
       {isLoading ? (
