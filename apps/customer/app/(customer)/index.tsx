@@ -12,6 +12,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { supabase, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
+import { useNotifications } from '@/hooks/useNotifications';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -32,6 +33,7 @@ const DELIVERY_LABELS: Record<string, string> = {
 export default function CustomerHomeScreen() {
   const C = useThemeColors();
   const { profile, signOut } = useAuth();
+  const { unreadCount } = useNotifications(profile?.id);
 
   const [orders, setOrders]           = useState<CustomerOrder[]>([]);
   const [offerCounts, setOfferCounts] = useState<Record<string, number>>({});
@@ -99,12 +101,34 @@ export default function CustomerHomeScreen() {
             {profile?.full_name?.split(' ')[0] ?? 'Misafir'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.signOutBtn, { backgroundColor: C.border }]}
-          onPress={signOut}
-        >
-          <Text style={[styles.signOutText, { color: C.textSecondary }]}>Çıkış</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Bildirim zili */}
+          <TouchableOpacity
+            onPress={() => router.push('/(customer)/notifications' as never)}
+            style={{ position: 'relative', padding: 4 }}
+          >
+            <Text style={{ fontSize: 22 }}>🔔</Text>
+            {unreadCount > 0 && (
+              <View style={{
+                position: 'absolute', top: 0, right: 0,
+                backgroundColor: C.primary, borderRadius: 8,
+                minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center',
+                paddingHorizontal: 3,
+              }}>
+                <Text style={{ color: '#FFF', fontSize: 9, fontWeight: '800' }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {/* Çıkış butonu */}
+          <TouchableOpacity
+            style={[styles.signOutBtn, { backgroundColor: C.border }]}
+            onPress={signOut}
+          >
+            <Text style={[styles.signOutText, { color: C.textSecondary }]}>Çıkış</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* İçerik */}
