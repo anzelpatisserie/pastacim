@@ -21,6 +21,9 @@ export default function CreateOrderScreen() {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryDate, setDeliveryDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [deliveryTime, setDeliveryTime] = useState<Date | null>(null);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [isUrgent, setIsUrgent] = useState(false);
   const [searchRadius, setSearchRadius] = useState(20);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -222,6 +225,17 @@ export default function CreateOrderScreen() {
   const formatDisplayDate = (d: Date): string =>
     d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
+  // Date → "HH:MM" (görüntüleme için)
+  const formatDisplayTime = (d: Date): string =>
+    d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+  // Date → "HH:MM:00" (Supabase time tipi için)
+  const toTimeString = (d: Date): string => {
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}:00`;
+  };
+
   const handleDateChange = (_: DateTimePickerEvent, selected?: Date) => {
     setShowDatePicker(Platform.OS === 'ios'); // iOS'ta açık kal, Android'de kapat
     if (selected) setDeliveryDate(selected);
@@ -237,6 +251,10 @@ export default function CreateOrderScreen() {
       Alert.alert('Eksik bilgi', 'Lütfen kaç kişilik olduğunu girin.');
       return;
     }
+    if (isUrgent && !deliveryTime) {
+      Alert.alert('Eksik bilgi', 'Acil siparişlerde teslimat saati seçilmelidir.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -250,6 +268,8 @@ export default function CreateOrderScreen() {
         p_delivery_latitude: null,
         p_delivery_longitude: null,
         p_delivery_date: deliveryDate ? toISODate(deliveryDate) : null,
+        p_delivery_time: deliveryTime ? toTimeString(deliveryTime) : null,
+        p_is_urgent: isUrgent,
         p_latitude: userLocation?.lat ?? DEFAULT_LOCATION.latitude,
         p_longitude: userLocation?.lng ?? DEFAULT_LOCATION.longitude,
         p_search_radius_km: searchRadius,
@@ -320,6 +340,8 @@ export default function CreateOrderScreen() {
       setDeliveryType('delivery');
       setDeliveryAddress('');
       setDeliveryDate(null);
+      setDeliveryTime(null);
+      setIsUrgent(false);
       setPhotos([]);
       setLocationLabel(null);
 
@@ -455,6 +477,27 @@ export default function CreateOrderScreen() {
             </View>
           </View>
 
+          {/* ─── Acil Sipariş ─────────────────────────────── */}
+          <View style={styles.field}>
+            <TouchableOpacity
+              style={[styles.toggleRow, {
+                backgroundColor: isUrgent ? C.primary + '15' : C.card,
+                borderColor: isUrgent ? C.primary : C.border,
+              }]}
+              onPress={() => setIsUrgent((v) => !v)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.toggleBtnText, { color: isUrgent ? C.primary : C.textSecondary, flex: 1, textAlign: 'center' }]}>
+                {isUrgent ? '⚡ Acil Sipariş' : '⚡ Acil Sipariş Değil'}
+              </Text>
+            </TouchableOpacity>
+            {isUrgent && (
+              <Text style={{ fontSize: FontSize.xs, color: C.textSecondary }}>
+                Acil siparişlerde teslimat saati zorunludur.
+              </Text>
+            )}
+          </View>
+
           {/* Teslimat Adresi */}
           {deliveryType === 'delivery' && (
             <View style={styles.field}>
@@ -530,6 +573,56 @@ export default function CreateOrderScreen() {
               <TouchableOpacity
                 style={[styles.dateConfirmBtn, { backgroundColor: C.primary }]}
                 onPress={() => setShowDatePicker(false)}
+              >
+                <Text style={styles.dateConfirmBtnText}>Tamam</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* ─── Teslim Saati ─────────────────────────────── */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: C.text }]}>
+              Teslim Saati{isUrgent && <Text style={{ color: C.error }}> *</Text>}
+            </Text>
+            <TouchableOpacity
+              style={[styles.datePicker, {
+                backgroundColor: C.card,
+                borderColor: deliveryTime ? C.primary : (isUrgent ? C.error + '80' : C.border),
+              }]}
+              onPress={() => setShowTimePicker(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.datePickerText, { color: deliveryTime ? C.text : C.placeholder }]}>
+                🕐 {deliveryTime ? formatDisplayTime(deliveryTime) : 'Saat seçin'}
+              </Text>
+              {deliveryTime && (
+                <TouchableOpacity
+                  onPress={(e) => { e.stopPropagation(); setDeliveryTime(null); }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.dateClearBtn, { color: C.placeholder }]}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+
+            {showTimePicker && (
+              <DateTimePicker
+                value={deliveryTime ?? new Date()}
+                mode="time"
+                is24Hour
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                locale="tr-TR"
+                onChange={(_: DateTimePickerEvent, selected?: Date) => {
+                  setShowTimePicker(Platform.OS === 'ios');
+                  if (selected) setDeliveryTime(selected);
+                }}
+              />
+            )}
+
+            {showTimePicker && Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={[styles.dateConfirmBtn, { backgroundColor: C.primary }]}
+                onPress={() => setShowTimePicker(false)}
               >
                 <Text style={styles.dateConfirmBtnText}>Tamam</Text>
               </TouchableOpacity>
