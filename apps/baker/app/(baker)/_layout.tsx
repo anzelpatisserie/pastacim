@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors, useAuth } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useUnreadMessages } from '../../hooks/useUnreadMessages';
@@ -25,6 +26,7 @@ function TabIcon({ emoji, label, focused, activeColor, inactiveColor, badge }: {
 
 export default function BakerLayout() {
   const C = useThemeColors();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
   const { unreadMessages } = useUnreadMessages(user?.id);
@@ -35,7 +37,8 @@ export default function BakerLayout() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: C.tabBar, borderTopColor: C.tabBarBorder,
-          borderTopWidth: 1, paddingBottom: 8, paddingTop: 8, height: 64,
+          borderTopWidth: 1, paddingBottom: insets.bottom + 4, paddingTop: 8,
+          height: 64 + insets.bottom,
         },
         tabBarShowLabel: false,
       }}

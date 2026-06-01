@@ -313,6 +313,16 @@ export default function CreateOrderScreen() {
         }).catch(() => {});
       }
 
+      // Formu sıfırla
+      setTitle('');
+      setDescription('');
+      setServingSize('');
+      setDeliveryType('delivery');
+      setDeliveryAddress('');
+      setDeliveryDate(null);
+      setPhotos([]);
+      setLocationLabel(null);
+
       Alert.alert(
         '🎂 Teklif Talebiniz Alındı!',
         'Talebiniz yayında! Yakındaki pastacılar tekliflerini gönderecek.',

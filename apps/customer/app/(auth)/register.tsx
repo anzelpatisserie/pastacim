@@ -49,6 +49,7 @@ export default function RegisterScreen() {
       email: email.trim().toLowerCase(),
       password,
       fullName: fullName.trim(),
+      redirectTo: 'pastacim://auth-callback',
     });
     setIsLoading(false);
 

@@ -29,6 +29,7 @@ interface SignUpParams {
   email: string;
   password: string;
   fullName: string;
+  redirectTo?: string;
 }
 
 export function useAuth(): AuthState & AuthActions {
@@ -106,12 +107,14 @@ export function useAuth(): AuthState & AuthActions {
     email,
     password,
     fullName,
+    redirectTo,
   }: SignUpParams): Promise<{ error: string | null }> => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { full_name: fullName },
+        emailRedirectTo: redirectTo,
       },
     });
 

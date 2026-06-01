@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
+import { Linking } from 'react-native';
 import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 
-import { useAuth, navigateFromNotification } from '@pastacim/shared';
+import { useAuth, navigateFromNotification, supabase } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
 
 export { ErrorBoundary } from 'expo-router';
@@ -40,9 +41,31 @@ export default function RootLayout() {
   return <RootLayoutNav />;
 }
 
+function handleAuthUrl(url: string) {
+  const fragment = url.includes('#') ? url.split('#')[1] : '';
+  if (!fragment) return;
+  const params: Record<string, string> = {};
+  fragment.split('&').forEach((pair) => {
+    const [k, v] = pair.split('=');
+    if (k && v) params[k] = decodeURIComponent(v);
+  });
+  if (params.access_token && params.refresh_token) {
+    supabase.auth.setSession({
+      access_token: params.access_token,
+      refresh_token: params.refresh_token,
+    });
+  }
+}
+
 function RootLayoutNav() {
   const { isLoading, isAuthenticated, isBaker } = useAuth();
   const notificationListener = useRef<Notifications.Subscription | null>(null);
+
+  useEffect(() => {
+    const sub = Linking.addEventListener('url', ({ url }) => handleAuthUrl(url));
+    Linking.getInitialURL().then((url) => { if (url) handleAuthUrl(url); });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (isLoading) return;
