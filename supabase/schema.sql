@@ -629,9 +629,12 @@ create policy "token_tx: doğrudan insert yasak"
 -- ============================================================
 --  TAMAMLANDI — Baseline Şema Özeti
 --  ────────────────────────────────────────────────────────
---  Aktif tablolar (8):
+--  Aktif tablolar (9):
 --    users, pastry_shops, orders, offers,
---    messages, notifications, reviews, wallet_transactions
+--    messages, notifications, reviews, wallet_transactions,
+--    feedbacks (+ storage bucket: feedbacks)
+--  Not: feedbacks tablosu ve storage bucket Management API ile
+--       oluşturulmuştur (2026-06-01).
 --  Legacy tablo (1):
 --    token_transactions
 --  Bu dosyadaki RPC gövdeleri:
