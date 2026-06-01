@@ -128,6 +128,7 @@ export type Database = {
           delivery_longitude: number | null;
           delivery_date: string | null;
           delivery_time: string | null;
+          is_urgent: boolean;
           customer_email: string | null;
           customer_phone: string | null;
           status: 'pending' | 'offers_received' | 'accepted' | 'in_progress' | 'ready' | 'completed' | 'cancelled';
@@ -151,6 +152,7 @@ export type Database = {
           delivery_longitude?: number | null;
           delivery_date?: string | null;
           delivery_time?: string | null;
+          is_urgent?: boolean;
           customer_email?: string | null;
           customer_phone?: string | null;
           status?: 'pending' | 'offers_received' | 'accepted' | 'in_progress' | 'ready' | 'completed' | 'cancelled';
@@ -170,6 +172,7 @@ export type Database = {
           delivery_address?: string | null;
           delivery_date?: string | null;
           delivery_time?: string | null;
+          is_urgent?: boolean;
           status?: 'pending' | 'offers_received' | 'accepted' | 'in_progress' | 'ready' | 'completed' | 'cancelled';
           selected_offer_id?: string | null;
           updated_at?: string;
@@ -352,6 +355,8 @@ export type Database = {
           p_latitude?: number | null;
           p_longitude?: number | null;
           p_search_radius_km?: number;
+          p_delivery_time?: string | null;
+          p_is_urgent?: boolean;
         };
         Returns: { order_id: string | null; error: string | null };
       };
