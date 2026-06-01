@@ -13,6 +13,7 @@ import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import { supabase, rpcNearbyOrders, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
+import { useNotifications } from '../../hooks/useNotifications';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -40,6 +41,7 @@ const OFFER_STATUS_CONFIG: Record<string, { label: string; bg: string; text: str
 export default function BakerHomeScreen() {
   const C = useThemeColors();
   const { profile, signOut, user } = useAuth();
+  const { unreadCount } = useNotifications(user?.id);
 
   const [orders, setOrders] = useState<NearbyOrder[]>([]);
   const [myOfferMap, setMyOfferMap] = useState<Map<string, MyOffer>>(new Map());
@@ -135,12 +137,34 @@ export default function BakerHomeScreen() {
             {profile?.full_name?.split(' ')[0] ?? 'Pastacı'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.signOutBtn, { backgroundColor: C.border }]}
-          onPress={signOut}
-        >
-          <Text style={[styles.signOutText, { color: C.textSecondary }]}>Çıkış</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Bildirim zili */}
+          <TouchableOpacity
+            onPress={() => router.push('/(baker)/notifications' as never)}
+            style={{ position: 'relative', padding: 4 }}
+          >
+            <Text style={{ fontSize: 22 }}>🔔</Text>
+            {unreadCount > 0 && (
+              <View style={{
+                position: 'absolute', top: 0, right: 0,
+                backgroundColor: C.primary, borderRadius: 8,
+                minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center',
+                paddingHorizontal: 3,
+              }}>
+                <Text style={{ color: '#FFF', fontSize: 9, fontWeight: '800' }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {/* Çıkış butonu */}
+          <TouchableOpacity
+            style={[styles.signOutBtn, { backgroundColor: C.border }]}
+            onPress={signOut}
+          >
+            <Text style={[styles.signOutText, { color: C.textSecondary }]}>Çıkış</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Mesafe Filtresi */}
