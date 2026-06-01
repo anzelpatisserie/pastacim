@@ -1,5 +1,7 @@
 # Pastacım — İki Uygulamaya Bölme & App Store Hazırlık: Uygulama Planı
 
+> **Durum:** Uygulama tamamlandı (2026-05-31). Görev 1–14 ve Görev 15 Adım 1 (app.json metadata doğrulama) tamamlandı. Açık kalan tek iş **Görev 15 Adım 2-3 ve Görev 16** — App Store Connect asset yüklemesi ve TestFlight/App Store gönderimi (kod dışı, manuel adımlar).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Tek Expo projesini monorepo yapısına taşıyarak "Pastacım" (müşteri) ve "Pastacım Pro" (pastacı) olarak iki bağımsız App Store uygulamasına bölmek; çift rol desteği (is_customer / is_baker), cüzdan sistemi, test altyapısı ve App Store hazırlığını tamamlamak.
@@ -98,7 +100,7 @@ apps/baker/
 - Modify: `eas.json`
 - Modify: `app.json`
 
-- [ ] **Adım 1: EAS CLI ve expo-dev-client kur**
+- [x] **Adım 1: EAS CLI ve expo-dev-client kur**
 
 ```bash
 npm install expo-dev-client
@@ -107,7 +109,7 @@ npx eas build:configure
 
 Beklenen: `eas.json` oluşturulur veya güncellenir.
 
-- [ ] **Adım 2: eas.json'ı üç profille yapılandır**
+- [x] **Adım 2: eas.json'ı üç profille yapılandır**
 
 `eas.json` içeriği:
 ```json
@@ -139,7 +141,7 @@ Beklenen: `eas.json` oluşturulur veya güncellenir.
 }
 ```
 
-- [ ] **Adım 3: app.json'daki EAS projectId'yi doğrula**
+- [x] **Adım 3: app.json'daki EAS projectId'yi doğrula**
 
 `app.json` içinde şu satır olmalı:
 ```json
@@ -152,7 +154,7 @@ Beklenen: `eas.json` oluşturulur veya güncellenir.
 
 `owner: "anzelpatisserie"` satırı da mevcut olmalı.
 
-- [ ] **Adım 4: Commit**
+- [x] **Adım 4: Commit**
 
 ```bash
 git add eas.json app.json package.json package-lock.json
@@ -170,7 +172,7 @@ git commit -m "chore: configure EAS build profiles for dev/preview/production"
 
 Bu migration mevcut `schema.sql`'i DEĞİŞTİRMEZ; Supabase Dashboard SQL Editor'da çalıştırılacak ek komutlar içerir.
 
-- [ ] **Adım 1: migration_dual_role.sql dosyasını oluştur**
+- [x] **Adım 1: migration_dual_role.sql dosyasını oluştur**
 
 `supabase/migration_dual_role.sql`:
 ```sql
@@ -369,7 +371,7 @@ CREATE POLICY "shops: baker kendi dükkanını yönetir"
   );
 ```
 
-- [ ] **Adım 2: Migration'ı Supabase'de çalıştır**
+- [x] **Adım 2: Migration'ı Supabase'de çalıştır**
 
 Supabase Dashboard > SQL Editor > New Query'ye yapıştırıp çalıştır.
 
@@ -379,7 +381,7 @@ SELECT id, full_name, is_customer, is_baker, wallet_balance FROM public.users LI
 SELECT * FROM public.wallet_transactions LIMIT 5;
 ```
 
-- [ ] **Adım 3: TypeScript tiplerini güncelle**
+- [x] **Adım 3: TypeScript tiplerini güncelle**
 
 `types/database.types.ts` içinde `users` tablosu Row tipine manuel ekle (CLI ile de yapılabilir):
 
@@ -421,7 +423,7 @@ wallet_transactions: {
 };
 ```
 
-- [ ] **Adım 4: Commit**
+- [x] **Adım 4: Commit**
 
 ```bash
 git add supabase/migration_dual_role.sql types/database.types.ts
@@ -436,7 +438,7 @@ git commit -m "feat(db): dual role migration — is_customer/is_baker, wallet_tr
 - Modify: `hooks/useAuth.ts`
 - Modify: `app/(auth)/register.tsx`
 
-- [ ] **Adım 1: useAuth.ts'i güncelle — role → is_baker / is_customer**
+- [x] **Adım 1: useAuth.ts'i güncelle — role → is_baker / is_customer**
 
 `hooks/useAuth.ts` tam içeriği:
 ```typescript
@@ -595,7 +597,7 @@ export function useAuth(): AuthState & AuthActions {
 }
 ```
 
-- [ ] **Adım 2: register.tsx'i güncelle — rol seçimi ve ₺100 banner kaldır**
+- [x] **Adım 2: register.tsx'i güncelle — rol seçimi ve ₺100 banner kaldır**
 
 `app/(auth)/register.tsx` dosyasındaki değişiklikler:
 
@@ -619,7 +621,7 @@ const { error: authError } = await signUp({
 ```
 8. `RoleButton` bileşenini (satır 250–285) ve `styles.roleSection/roleToggle/roleBtn/roleDivider/roleBtnEmoji/roleBtnTitle/roleBtnSubtitle/selectedDot` style'larını sil
 
-- [ ] **Adım 3: TypeScript hatası olmadığını kontrol et**
+- [x] **Adım 3: TypeScript hatası olmadığını kontrol et**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -50
@@ -627,7 +629,7 @@ npx tsc --noEmit 2>&1 | head -50
 
 Beklenen: hata yok veya yalnızca `token_balance` / eski `role` ile ilgili uyarılar (bir sonraki adımda düzeltilecek).
 
-- [ ] **Adım 4: Commit**
+- [x] **Adım 4: Commit**
 
 ```bash
 git add hooks/useAuth.ts app/(auth)/register.tsx
@@ -642,7 +644,7 @@ git commit -m "feat(auth): replace role enum with is_baker/is_customer flags, re
 - Modify: `app/_layout.tsx`
 - Modify: `app/messages/[conversationId].tsx`
 
-- [ ] **Adım 1: _layout.tsx'i güncelle**
+- [x] **Adım 1: _layout.tsx'i güncelle**
 
 `app/_layout.tsx` içinde `role` değişkenini `isBaker` olarak değiştir:
 
@@ -673,7 +675,7 @@ const notifRole: NotificationRole = isBaker ? 'baker' : 'customer';
 navigateFromNotification(type, data, notifRole);
 ```
 
-- [ ] **Adım 2: messages/[conversationId].tsx — role → isBaker**
+- [x] **Adım 2: messages/[conversationId].tsx — role → isBaker**
 
 `app/messages/[conversationId].tsx` içinde `useAuth()` destructuring'ini değiştir:
 
@@ -698,13 +700,13 @@ const isChatLocked = isBaker
   : order?.status === 'completed' || order?.status === 'cancelled';
 ```
 
-- [ ] **Adım 3: TypeScript kontrolü**
+- [x] **Adım 3: TypeScript kontrolü**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -50
 ```
 
-- [ ] **Adım 4: Commit**
+- [x] **Adım 4: Commit**
 
 ```bash
 git add app/_layout.tsx app/messages/[conversationId].tsx
@@ -718,7 +720,7 @@ git commit -m "feat: replace role checks with isBaker boolean in layout and mess
 **Files:**
 - Modify: `app/(baker)/wallet.tsx`
 
-- [ ] **Adım 1: wallet.tsx'i oku ve değiştirilecek yerleri belirle**
+- [x] **Adım 1: wallet.tsx'i oku ve değiştirilecek yerleri belirle**
 
 Dosyayı oku, şu değişiklikleri yap:
 
@@ -769,13 +771,13 @@ function txTypeLabel(type: WalletTransaction['type']): { label: string; color: s
 </Text>
 ```
 
-- [ ] **Adım 2: TypeScript kontrolü**
+- [x] **Adım 2: TypeScript kontrolü**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -30
 ```
 
-- [ ] **Adım 3: Commit**
+- [x] **Adım 3: Commit**
 
 ```bash
 git add app/(baker)/wallet.tsx
@@ -793,7 +795,7 @@ git commit -m "feat(baker): refactor wallet screen — token_transactions → wa
 - Create: `apps/customer/package.json`
 - Create: `apps/baker/package.json`
 
-- [ ] **Adım 1: Dizin yapısını oluştur**
+- [x] **Adım 1: Dizin yapısını oluştur**
 
 ```bash
 mkdir -p packages/shared/{lib,hooks,types,components/ui}
@@ -801,7 +803,7 @@ mkdir -p apps/customer
 mkdir -p apps/baker
 ```
 
-- [ ] **Adım 2: Root package.json'ı workspaces için güncelle**
+- [x] **Adım 2: Root package.json'ı workspaces için güncelle**
 
 Mevcut `package.json`'ı oku. `"name"` ve `"version"` alanlarını koru; `"workspaces"` ekle:
 
@@ -824,7 +826,7 @@ Mevcut `package.json`'ı oku. `"name"` ve `"version"` alanlarını koru; `"works
 
 Mevcut `"dependencies"` ve `"devDependencies"` koru; sadece `workspaces` ve `scripts` ekle/güncelle.
 
-- [ ] **Adım 3: packages/shared/package.json oluştur**
+- [x] **Adım 3: packages/shared/package.json oluştur**
 
 ```json
 {
@@ -836,7 +838,7 @@ Mevcut `"dependencies"` ve `"devDependencies"` koru; sadece `workspaces` ve `scr
 }
 ```
 
-- [ ] **Adım 4: packages/shared/tsconfig.json oluştur**
+- [x] **Adım 4: packages/shared/tsconfig.json oluştur**
 
 ```json
 {
@@ -849,7 +851,7 @@ Mevcut `"dependencies"` ve `"devDependencies"` koru; sadece `workspaces` ve `scr
 }
 ```
 
-- [ ] **Adım 5: Root tsconfig.json'ın var olduğunu doğrula**
+- [x] **Adım 5: Root tsconfig.json'ın var olduğunu doğrula**
 
 ```bash
 cat tsconfig.json
@@ -869,7 +871,7 @@ Yoksa oluştur:
 }
 ```
 
-- [ ] **Adım 6: npm install çalıştır**
+- [x] **Adım 6: npm install çalıştır**
 
 ```bash
 npm install
@@ -877,7 +879,7 @@ npm install
 
 Beklenen: `node_modules` kök dizinde güncellenir, workspace'ler semlink olarak bağlanır.
 
-- [ ] **Adım 7: Commit**
+- [x] **Adım 7: Commit**
 
 ```bash
 git add package.json packages/ apps/ tsconfig.json
@@ -900,7 +902,7 @@ git commit -m "chore: initialize npm workspaces monorepo structure"
 - Create: `packages/shared/components/NotificationsScreen.tsx` (kopyala)
 - Create: `packages/shared/index.ts`
 
-- [ ] **Adım 1: Mevcut dosyaları shared pakete kopyala**
+- [x] **Adım 1: Mevcut dosyaları shared pakete kopyala**
 
 ```bash
 cp lib/supabase.ts packages/shared/lib/supabase.ts
@@ -918,7 +920,7 @@ cp hooks/useUnreadMessages.ts packages/shared/hooks/useUnreadMessages.ts 2>/dev/
 cp types/app.types.ts packages/shared/types/app.types.ts 2>/dev/null || true
 ```
 
-- [ ] **Adım 2: shared/lib/supabase.ts içindeki import yollarını güncelle**
+- [x] **Adım 2: shared/lib/supabase.ts içindeki import yollarını güncelle**
 
 `packages/shared/lib/supabase.ts` içinde:
 ```typescript
@@ -929,7 +931,7 @@ import type { Database } from '@/types/database.types';
 import type { Database } from '../types/database.types';
 ```
 
-- [ ] **Adım 3: shared/hooks/useAuth.ts içindeki import yollarını güncelle**
+- [x] **Adım 3: shared/hooks/useAuth.ts içindeki import yollarını güncelle**
 
 `packages/shared/hooks/useAuth.ts` içinde:
 ```typescript
@@ -942,14 +944,14 @@ import { supabase } from '../lib/supabase';
 import type { Database } from '../types/database.types';
 ```
 
-- [ ] **Adım 4: shared/components/NotificationsScreen.tsx import yollarını güncelle**
+- [x] **Adım 4: shared/components/NotificationsScreen.tsx import yollarını güncelle**
 
 ```typescript
 // ÖNCE: import { useThemeColors, ... } from '@/lib/constants';
 // SONRA: import { useThemeColors, ... } from '../lib/constants';
 ```
 
-- [ ] **Adım 5: packages/shared/index.ts oluştur**
+- [x] **Adım 5: packages/shared/index.ts oluştur**
 
 ```typescript
 // Shared package exports
@@ -963,7 +965,7 @@ export { useAuth } from './hooks/useAuth';
 export type { Database } from './types/database.types';
 ```
 
-- [ ] **Adım 6: Commit**
+- [x] **Adım 6: Commit**
 
 ```bash
 git add packages/shared/
@@ -987,7 +989,7 @@ git commit -m "feat(shared): copy shared lib, hooks, types, components to @pasta
 - Taşı: `app/(customer)/` → `apps/customer/app/(customer)/`
 - Create: `apps/customer/app/messages/[conversationId].tsx`
 
-- [ ] **Adım 1: apps/customer/package.json oluştur**
+- [x] **Adım 1: apps/customer/package.json oluştur**
 
 ```json
 {
@@ -1026,7 +1028,7 @@ git commit -m "feat(shared): copy shared lib, hooks, types, components to @pasta
 }
 ```
 
-- [ ] **Adım 2: apps/customer/app.json oluştur**
+- [x] **Adım 2: apps/customer/app.json oluştur**
 
 ```json
 {
@@ -1083,7 +1085,7 @@ git commit -m "feat(shared): copy shared lib, hooks, types, components to @pasta
 
 > **Not:** `CUSTOMER_EAS_PROJECT_ID` kısmı `eas init` ile ayrı proje oluşturulduğunda doldurulur (Görev 10).
 
-- [ ] **Adım 3: apps/customer/tsconfig.json oluştur**
+- [x] **Adım 3: apps/customer/tsconfig.json oluştur**
 
 ```json
 {
@@ -1100,7 +1102,7 @@ git commit -m "feat(shared): copy shared lib, hooks, types, components to @pasta
 }
 ```
 
-- [ ] **Adım 4: apps/customer/babel.config.js oluştur**
+- [x] **Adım 4: apps/customer/babel.config.js oluştur**
 
 ```javascript
 module.exports = function (api) {
@@ -1119,7 +1121,7 @@ module.exports = function (api) {
 };
 ```
 
-- [ ] **Adım 5: apps/customer/eas.json oluştur**
+- [x] **Adım 5: apps/customer/eas.json oluştur**
 
 ```json
 {
@@ -1144,7 +1146,7 @@ module.exports = function (api) {
 }
 ```
 
-- [ ] **Adım 6: Customer app _layout.tsx oluştur**
+- [x] **Adım 6: Customer app _layout.tsx oluştur**
 
 `apps/customer/app/_layout.tsx`:
 ```typescript
@@ -1237,7 +1239,7 @@ function RootLayoutNav() {
 }
 ```
 
-- [ ] **Adım 7: Customer auth ekranları oluştur (shared'dan import eden wrapper'lar)**
+- [x] **Adım 7: Customer auth ekranları oluştur (shared'dan import eden wrapper'lar)**
 
 `apps/customer/app/(auth)/onboarding.tsx`:
 ```typescript
@@ -1256,7 +1258,7 @@ Gerçek yaklaşım — `apps/customer/app/(auth)/onboarding.tsx`:
 
 Aynı şekilde `apps/customer/app/(auth)/login.tsx` ve `apps/customer/app/(auth)/register.tsx` için.
 
-- [ ] **Adım 8: Customer ekranlarını taşı**
+- [x] **Adım 8: Customer ekranlarını taşı**
 
 ```bash
 cp -r app/(customer)/* apps/customer/app/(customer)/
@@ -1270,13 +1272,13 @@ Tüm taşınan dosyalarda import yollarını güncelle:
 - `'@/hooks/useAuth'` → `'@pastacim/shared'`
 - `'@/types/database.types'` → `'@pastacim/shared'`
 
-- [ ] **Adım 9: TypeScript kontrolü**
+- [x] **Adım 9: TypeScript kontrolü**
 
 ```bash
 cd apps/customer && npx tsc --noEmit 2>&1 | head -50
 ```
 
-- [ ] **Adım 10: Commit**
+- [x] **Adım 10: Commit**
 
 ```bash
 git add apps/customer/
@@ -1289,7 +1291,7 @@ git commit -m "feat(customer): scaffold customer app with shared package imports
 
 **Files:** (apps/customer'a paralel yapı)
 
-- [ ] **Adım 1: apps/baker dizin ve config dosyalarını oluştur**
+- [x] **Adım 1: apps/baker dizin ve config dosyalarını oluştur**
 
 `apps/customer`'daki tüm config dosyalarını (`package.json`, `tsconfig.json`, `babel.config.js`, `eas.json`) kopyala ve `customer` → `baker`, `com.pastacim.customer` → `com.pastacim.baker`, `"Pastacım"` → `"Pastacım Pro"` olarak güncelle.
 
@@ -1384,7 +1386,7 @@ git commit -m "feat(customer): scaffold customer app with shared package imports
 }
 ```
 
-- [ ] **Adım 2: Baker _layout.tsx oluştur (is_baker kontrolü ile)**
+- [x] **Adım 2: Baker _layout.tsx oluştur (is_baker kontrolü ile)**
 
 `apps/baker/app/_layout.tsx`:
 ```typescript
@@ -1483,7 +1485,7 @@ function RootLayoutNav() {
 }
 ```
 
-- [ ] **Adım 3: Baker kurulum ekranı oluştur**
+- [x] **Adım 3: Baker kurulum ekranı oluştur**
 
 `apps/baker/app/(baker)/setup.tsx` — Yeni pastacı dükkan kurulum ekranı:
 ```typescript
@@ -1610,7 +1612,7 @@ const styles = StyleSheet.create({
 });
 ```
 
-- [ ] **Adım 4: Baker ekranlarını taşı**
+- [x] **Adım 4: Baker ekranlarını taşı**
 
 ```bash
 cp -r app/(baker)/* apps/baker/app/(baker)/
@@ -1622,13 +1624,13 @@ cp app/(auth)/register.tsx apps/baker/app/(auth)/register.tsx
 
 Tüm dosyalarda import yollarını güncelle (`@/` → `@pastacim/shared` veya relative).
 
-- [ ] **Adım 5: TypeScript kontrolü**
+- [x] **Adım 5: TypeScript kontrolü**
 
 ```bash
 cd apps/baker && npx tsc --noEmit 2>&1 | head -50
 ```
 
-- [ ] **Adım 6: Commit**
+- [x] **Adım 6: Commit**
 
 ```bash
 git add apps/baker/
@@ -1643,7 +1645,7 @@ git commit -m "feat(baker): scaffold baker app with setup screen and shared pack
 - Modify: `apps/customer/app.json`
 - Modify: `apps/baker/app.json`
 
-- [ ] **Adım 1: Customer EAS projesi oluştur**
+- [x] **Adım 1: Customer EAS projesi oluştur**
 
 ```bash
 cd apps/customer && eas init --id pastacim-customer
@@ -1651,7 +1653,7 @@ cd apps/customer && eas init --id pastacim-customer
 
 Çıktıdan gelen projectId'yi `apps/customer/app.json` içindeki `CUSTOMER_EAS_PROJECT_ID` yerine yaz.
 
-- [ ] **Adım 2: Baker EAS projesi oluştur**
+- [x] **Adım 2: Baker EAS projesi oluştur**
 
 ```bash
 cd apps/baker && eas init --id pastacim-baker
@@ -1659,7 +1661,7 @@ cd apps/baker && eas init --id pastacim-baker
 
 Çıktıdan gelen projectId'yi `apps/baker/app.json` içindeki `BAKER_EAS_PROJECT_ID` yerine yaz.
 
-- [ ] **Adım 3: Commit**
+- [x] **Adım 3: Commit**
 
 ```bash
 git add apps/customer/app.json apps/baker/app.json
@@ -1675,7 +1677,7 @@ git commit -m "chore: set EAS project IDs for customer and baker apps"
 - Create: `packages/shared/__tests__/useAuth.test.ts`
 - Create: `packages/shared/__tests__/useUnreadMessages.test.ts`
 
-- [ ] **Adım 1: Jest ve testing library kur**
+- [x] **Adım 1: Jest ve testing library kur**
 
 ```bash
 npm install --save-dev jest @testing-library/react-native jest-expo @types/jest
@@ -1691,7 +1693,7 @@ Root `package.json`'a ekle:
 }
 ```
 
-- [ ] **Adım 2: useAuth unit testlerini yaz**
+- [x] **Adım 2: useAuth unit testlerini yaz**
 
 `packages/shared/__tests__/useAuth.test.ts`:
 ```typescript
@@ -1773,7 +1775,7 @@ describe('useAuth', () => {
 });
 ```
 
-- [ ] **Adım 3: Testleri çalıştır (fail beklenir başta)**
+- [x] **Adım 3: Testleri çalıştır (fail beklenir başta)**
 
 ```bash
 npx jest packages/shared/__tests__/useAuth.test.ts --no-coverage
@@ -1781,7 +1783,7 @@ npx jest packages/shared/__tests__/useAuth.test.ts --no-coverage
 
 Beklenen: Setup hatası veya mock eksikliğinden fail. Hataları düzelt, testler geçene kadar devam et.
 
-- [ ] **Adım 4: Testler geçince commit**
+- [x] **Adım 4: Testler geçince commit**
 
 ```bash
 npx jest packages/shared/__tests__/ --no-coverage
@@ -1802,7 +1804,7 @@ git commit -m "test(shared): add useAuth unit tests with mock Supabase"
 - Create: `apps/customer/__tests__/orderCreate.test.ts`
 - Create: `apps/customer/__tests__/offerList.test.ts`
 
-- [ ] **Adım 1: orderCreate testlerini yaz**
+- [x] **Adım 1: orderCreate testlerini yaz**
 
 `apps/customer/__tests__/orderCreate.test.ts`:
 ```typescript
@@ -1855,13 +1857,13 @@ describe('sipariş oluşturma — form validasyon', () => {
 
 > **Not:** Bu testler bileşen yüklenebilirliğine bağlı. expo-router ve native module mock'ları eksiksiz kurulduktan sonra gerçek render testlerine geçilir. Şu aşamada iskelet yeterlidir.
 
-- [ ] **Adım 2: Testleri çalıştır**
+- [x] **Adım 2: Testleri çalıştır**
 
 ```bash
 npx jest apps/customer/__tests__/ --no-coverage
 ```
 
-- [ ] **Adım 3: Commit**
+- [x] **Adım 3: Commit**
 
 ```bash
 git add apps/customer/__tests__/
@@ -1876,7 +1878,7 @@ git commit -m "test(customer): add order creation and offer list test scaffolds"
 - Create: `apps/baker/__tests__/offerSubmit.test.ts`
 - Create: `apps/baker/__tests__/wallet.test.ts`
 
-- [ ] **Adım 1: offerSubmit testlerini yaz**
+- [x] **Adım 1: offerSubmit testlerini yaz**
 
 `apps/baker/__tests__/offerSubmit.test.ts`:
 ```typescript
@@ -1927,7 +1929,7 @@ describe('teklif verme — bakiye kontrolü', () => {
 });
 ```
 
-- [ ] **Adım 2: wallet testini yaz**
+- [x] **Adım 2: wallet testini yaz**
 
 `apps/baker/__tests__/wallet.test.ts`:
 ```typescript
@@ -1946,7 +1948,7 @@ describe('cüzdan bakiyesi gösterimi', () => {
 });
 ```
 
-- [ ] **Adım 3: Testleri çalıştır**
+- [x] **Adım 3: Testleri çalıştır**
 
 ```bash
 npx jest apps/baker/__tests__/ --no-coverage
@@ -1954,7 +1956,7 @@ npx jest apps/baker/__tests__/ --no-coverage
 
 Beklenen: Tüm testler PASS.
 
-- [ ] **Adım 4: Commit**
+- [x] **Adım 4: Commit**
 
 ```bash
 git add apps/baker/__tests__/
@@ -1972,7 +1974,7 @@ git commit -m "test(baker): add offer submit and wallet balance tests"
 - `lib/supabase.ts` (içindeki `any` castler)
 - `packages/shared/**` (tüm kopyalanmış dosyalar)
 
-- [ ] **Adım 1: TypeScript hatalarını tara**
+- [x] **Adım 1: TypeScript hatalarını tara**
 
 ```bash
 npx tsc --noEmit 2>&1
@@ -1980,7 +1982,7 @@ npx tsc --noEmit 2>&1
 
 Tüm `any` ve type hataları listelenir.
 
-- [ ] **Adım 2: app/(baker)/my-orders.tsx içindeki _db:any'yi kaldır**
+- [x] **Adım 2: app/(baker)/my-orders.tsx içindeki _db:any'yi kaldır**
 
 `app/(baker)/my-orders.tsx` satır 9-10:
 ```typescript
@@ -1991,11 +1993,11 @@ const _db: any = supabase;
 
 Bu satırları sil. `_db.from(...)` çağrılarını `supabase.from(...)` ile değiştir.
 
-- [ ] **Adım 3: lib/supabase.ts içindeki any castleri minimize et**
+- [x] **Adım 3: lib/supabase.ts içindeki any castleri minimize et**
 
 `_rpc` fonksiyonundaki `any` cast zaten gerekli (Supabase SDK overload sorunu). Yorum satırı ekle ve bırak. Başka `any` varsa tip tanımla.
 
-- [ ] **Adım 4: Tüm dosyalarda son TypeScript kontrolü**
+- [x] **Adım 4: Tüm dosyalarda son TypeScript kontrolü**
 
 ```bash
 npx tsc --noEmit 2>&1 | grep -E "error TS" | wc -l
@@ -2003,7 +2005,7 @@ npx tsc --noEmit 2>&1 | grep -E "error TS" | wc -l
 
 Beklenen: 0 hata (veya yalnızca Supabase SDK'nın kendi içindeki bilinen hatalar).
 
-- [ ] **Adım 5: Commit**
+- [x] **Adım 5: Commit**
 
 ```bash
 git add -A
@@ -2018,15 +2020,15 @@ git commit -m "chore(ts): remove any casts, fix type errors across codebase"
 - `apps/customer/app.json` (App Store metadata)
 - `apps/baker/app.json` (App Store metadata)
 
-- [ ] **Adım 1: App Store metadata doğrula**
+- [x] **Adım 1: App Store metadata doğrula**
 
 Her iki `app.json` için kontrol listesi:
-- [ ] `"version"` → `"1.0.0"`
-- [ ] `"ios.bundleIdentifier"` doğru (`com.pastacim.customer` / `com.pastacim.baker`)
-- [ ] `"ios.buildNumber"` → `"1"` ekle
-- [ ] `"android.versionCode"` → `1` ekle
-- [ ] `"owner"` → `"anzelpatisserie"`
-- [ ] Notification rengi doğru (customer: `#D4526E`, baker: `#9F7AEA`)
+- [x] `"version"` → `"1.0.0"`
+- [x] `"ios.bundleIdentifier"` doğru (`com.pastacim.customer` / `com.pastacim.baker`)
+- [x] `"ios.buildNumber"` → `"1"` ekle
+- [x] `"android.versionCode"` → `1` ekle
+- [x] `"owner"` → `"anzelpatisserie"`
+- [x] Notification rengi doğru (customer: `#D4526E`, baker: `#9F7AEA`)
 
 - [ ] **Adım 2: App Store hazırlık listesi**
 

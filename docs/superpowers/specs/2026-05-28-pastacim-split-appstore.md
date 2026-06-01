@@ -1,7 +1,7 @@
 # Pastacım — İki Uygulamaya Bölme & App Store Hazırlık
 
 **Tarih:** 2026-05-28  
-**Durum:** Onaylandı
+**Durum:** Uygulandı (2026-05-31). Monorepo (`apps/customer` + `apps/baker` + `packages/shared`), dual role + wallet şeması, EAS build profilleri ve test altyapısı kuruldu. Açık kalan tek iş App Store Connect asset yüklemesi ve TestFlight gönderimi.
 
 ---
 
