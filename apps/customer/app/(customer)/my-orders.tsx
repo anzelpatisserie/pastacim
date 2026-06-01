@@ -327,6 +327,16 @@ function OrderCard({
             📅 Teslim: {new Date(order.delivery_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })}
           </Text>
         )}
+        {order.delivery_time && (
+          <Text style={[styles.metaText, { color: C.textSecondary }]}>
+            🕐 {(order.delivery_time as string).substring(0, 5)}
+          </Text>
+        )}
+        {order.is_urgent && (
+          <View style={{ backgroundColor: '#FED7D7', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+            <Text style={{ fontSize: FontSize.xs, color: '#C53030', fontWeight: '700' }}>⚡ Acil</Text>
+          </View>
+        )}
         {date ? (
           <Text style={[styles.metaText, { color: C.placeholder }]}>🗓 Talep: {date}</Text>
         ) : null}
