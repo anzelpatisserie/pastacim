@@ -58,7 +58,11 @@ export default function BakerLayout() {
           <TabIcon emoji="💬" label="Mesajlar" focused={focused} activeColor={C.primary} inactiveColor={C.icon} badge={unreadMessages} />
         ),
       }} />
-      <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="notifications" options={{
+        tabBarIcon: ({ focused }) => (
+          <TabIcon emoji="🔔" label="Bildirim" focused={focused} activeColor={C.primary} inactiveColor={C.icon} badge={unreadCount} />
+        ),
+      }} />
       <Tabs.Screen name="wallet" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{
         tabBarIcon: ({ focused }) => (
