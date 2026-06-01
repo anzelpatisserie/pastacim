@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
-import { supabase, rpcNearbyOrders, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM } from '@pastacim/shared';
+import { supabase, rpcNearbyOrders, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, FeedbackModal } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -50,6 +50,7 @@ export default function BakerHomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
   const [shopLocation, setShopLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   // ─── Konum: önce dükkan koordinatı, yoksa cihaz GPS ───────────────────────
   useEffect(() => {
@@ -138,6 +139,14 @@ export default function BakerHomeScreen() {
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Geri bildirim butonu */}
+          <TouchableOpacity
+            onPress={() => setShowFeedback(true)}
+            style={{ padding: 4 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={{ fontSize: 20 }}>💬</Text>
+          </TouchableOpacity>
           {/* Bildirim zili */}
           <TouchableOpacity
             onPress={() => router.push('/(baker)/notifications' as never)}
@@ -166,6 +175,12 @@ export default function BakerHomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <FeedbackModal
+        visible={showFeedback}
+        onClose={() => setShowFeedback(false)}
+        appName="baker"
+      />
 
       {/* Mesafe Filtresi */}
       <View style={[styles.filterBar, { backgroundColor: C.card, borderBottomColor: C.border }]}>
