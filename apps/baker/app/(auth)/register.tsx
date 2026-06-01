@@ -5,7 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-
+  Linking,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -64,17 +64,23 @@ export default function RegisterScreen() {
   if (success) {
     return (
       <View style={[styles.successContainer, { backgroundColor: C.background }]}>
-        <Text style={styles.successEmoji}>🎉</Text>
-        <Text style={[styles.successTitle, { color: C.text }]}>Hoş geldin!</Text>
+        <Text style={styles.successEmoji}>📧</Text>
+        <Text style={[styles.successTitle, { color: C.text }]}>E-postanı doğrula</Text>
         <Text style={[styles.successSubtitle, { color: C.textSecondary }]}>
-          Hesabın oluşturuldu.{'\n'}
-          {'Hesabını doğrulamak için e-postanı kontrol et.'}
+          {email.trim().toLowerCase()} adresine bir doğrulama linki gönderdik.{'\n\n'}
+          Linke tıkla, uygulama otomatik açılacak.
         </Text>
         <TouchableOpacity
           style={[styles.btnPrimary, { backgroundColor: C.primary }]}
+          onPress={() => Linking.openURL('mailto:')}
+        >
+          <Text style={styles.btnPrimaryText}>📬 Posta Kutusunu Aç</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.btnSecondary, { borderColor: C.border }]}
           onPress={() => router.replace('/(auth)/login')}
         >
-          <Text style={styles.btnPrimaryText}>Giriş Yap</Text>
+          <Text style={[styles.btnSecondaryText, { color: C.textSecondary }]}>Zaten doğruladım → Giriş Yap</Text>
         </TouchableOpacity>
       </View>
     );
@@ -236,8 +242,13 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   successEmoji: { fontSize: 72, marginBottom: Spacing.sm },
-  successTitle: { fontSize: FontSize.xxxl, fontWeight: '800', textAlign: 'center' },
-  successSubtitle: { fontSize: FontSize.md, textAlign: 'center', lineHeight: 24 },
+  successTitle: { fontSize: FontSize.xxl, fontWeight: '800', textAlign: 'center' },
+  successSubtitle: { fontSize: FontSize.md, textAlign: 'center', lineHeight: 24, marginBottom: Spacing.sm },
+  btnSecondary: {
+    paddingVertical: 14, borderRadius: Radius.full,
+    alignItems: 'center', borderWidth: 1.5, width: '100%',
+  },
+  btnSecondaryText: { fontSize: FontSize.sm, fontWeight: '600' },
   backButton: { marginBottom: Spacing.xl },
   backText: { fontSize: FontSize.md, fontWeight: '600' },
   header: { marginBottom: Spacing.lg },
