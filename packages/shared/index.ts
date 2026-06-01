@@ -49,6 +49,7 @@ export { useAuth } from './hooks/useAuth';
 
 // Components
 export { default as NotificationsScreen } from './components/NotificationsScreen';
+export { default as FeedbackModal } from './components/FeedbackModal';
 
 // Types
 export type { Database, Json } from './types/database.types';
