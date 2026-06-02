@@ -212,7 +212,7 @@ export default function CustomerBakerProfileScreen() {
           )}
 
           {/* Google Bilgileri */}
-          {(shop.google_rating != null || shop.google_review_count > 0 || shop.google_maps_url) && (
+          {(shop.google_rating != null || (shop.google_review_count ?? 0) > 0 || shop.google_maps_url) && (
             <View style={[styles.googleRow, { backgroundColor: C.background }]}>
               <Text style={{ fontSize: 14 }}>🌐</Text>
               <Text style={[styles.googleLabel, { color: C.text }]}>Google</Text>
@@ -221,7 +221,7 @@ export default function CustomerBakerProfileScreen() {
                   <Text style={[styles.statText, { color: '#F5A623' }]}>★ {shop.google_rating.toFixed(1)}</Text>
                 </View>
               )}
-              {shop.google_review_count > 0 && (
+              {(shop.google_review_count ?? 0) > 0 && (
                 <Text style={[styles.googleReviewText, { color: C.textSecondary }]}>
                   ({shop.google_review_count} yorum)
                 </Text>

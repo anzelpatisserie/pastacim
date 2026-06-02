@@ -89,7 +89,8 @@ export default function MakeOfferScreen() {
     const { data, error } = await rpcSubmitOffer({
       p_order_id: orderId,
       p_price: parseFloat(price),
-      p_message: message.trim() || null,
+      p_message: message.trim(),
+      p_estimated_days: 0,
     });
     setIsSubmitting(false);
 

@@ -148,7 +148,7 @@ export default function BakerProfileScreen() {
       setYoutubeUrl(extractHandle(shopData.youtube_url ?? '', 'youtube'));
       setGoogleMapsUrl(shopData.google_maps_url ?? '');
       setGoogleRating(shopData.google_rating != null ? String(shopData.google_rating) : '');
-      setGoogleReviewCount(shopData.google_review_count > 0 ? String(shopData.google_review_count) : '');
+      setGoogleReviewCount((shopData.google_review_count ?? 0) > 0 ? String(shopData.google_review_count) : '');
 
       // Yorumları yükle
       const { data: revData } = await _db
@@ -425,14 +425,14 @@ export default function BakerProfileScreen() {
                 )}
 
                 {/* Google Bilgileri */}
-                {(shop.google_rating != null || shop.google_review_count > 0) && (
+                {(shop.google_rating != null || (shop.google_review_count ?? 0) > 0) && (
                   <View style={[styles.googleRow, { backgroundColor: C.background }]}>
                     <Text style={{ fontSize: 16 }}>🌐</Text>
                     <Text style={[styles.googleText, { color: C.text }]}>Google</Text>
                     {shop.google_rating != null && (
                       <Text style={[styles.googleRatingText, { color: '#F5A623' }]}>★ {shop.google_rating.toFixed(1)}</Text>
                     )}
-                    {shop.google_review_count > 0 && (
+                    {(shop.google_review_count ?? 0) > 0 && (
                       <Text style={[styles.googleReviewText, { color: C.textSecondary }]}>({shop.google_review_count} yorum)</Text>
                     )}
                     {shop.google_maps_url ? (
@@ -724,7 +724,7 @@ export default function BakerProfileScreen() {
                       setYoutubeUrl(extractHandle(shop.youtube_url ?? '', 'youtube'));
                       setGoogleMapsUrl(shop.google_maps_url ?? '');
                       setGoogleRating(shop.google_rating != null ? String(shop.google_rating) : '');
-                      setGoogleReviewCount(shop.google_review_count > 0 ? String(shop.google_review_count) : '');
+                      setGoogleReviewCount((shop.google_review_count ?? 0) > 0 ? String(shop.google_review_count) : '');
                     }
                   }}
                 >

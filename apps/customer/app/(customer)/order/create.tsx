@@ -258,22 +258,21 @@ export default function CreateOrderScreen() {
       // 1. Siparişi oluştur
       const { data, error } = await rpcPlaceOrder({
         p_title: title.trim(),
-        p_description: description.trim() || null,
-        p_serving_size: servingSize ? parseInt(servingSize) : null,
+        p_description: description.trim() || undefined,
+        p_serving_size: servingSize ? parseInt(servingSize) : undefined,
         p_delivery_type: deliveryType,
-        p_delivery_address: deliveryType === 'delivery' ? (deliveryAddress.trim() || null) : null,
-        p_delivery_latitude: null,
-        p_delivery_longitude: null,
-        p_delivery_date: deliveryDate ? toISODate(deliveryDate) : null,
-        p_delivery_time: deliveryTime ? toTimeString(deliveryTime) : null,
+        p_delivery_address: deliveryType === 'delivery' ? (deliveryAddress.trim() || undefined) : undefined,
+        p_delivery_date: deliveryDate ? toISODate(deliveryDate) : undefined,
+        p_delivery_time: deliveryTime ? toTimeString(deliveryTime) : undefined,
         p_is_urgent: false,
         p_latitude: userLocation?.lat ?? DEFAULT_LOCATION.latitude,
         p_longitude: userLocation?.lng ?? DEFAULT_LOCATION.longitude,
         p_search_radius_km: SEARCH_RADIUS,
       });
 
-      if (error || data?.error) {
-        Alert.alert('Hata', data?.error ?? 'Sipariş oluşturulamadı. Lütfen tekrar deneyin.');
+      const dataObj = data as { error?: string } | null;
+      if (error || dataObj?.error) {
+        Alert.alert('Hata', dataObj?.error ?? 'Sipariş oluşturulamadı. Lütfen tekrar deneyin.');
         return;
       }
 
