@@ -23,7 +23,6 @@ export default function CreateOrderScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [deliveryTime, setDeliveryTime] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [isUrgent, setIsUrgent] = useState(false);
   const [searchRadius, setSearchRadius] = useState(20);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -251,10 +250,7 @@ export default function CreateOrderScreen() {
       Alert.alert('Eksik bilgi', 'Lütfen kaç kişilik olduğunu girin.');
       return;
     }
-    if (isUrgent && !deliveryTime) {
-      Alert.alert('Eksik bilgi', 'Acil siparişlerde teslimat saati seçilmelidir.');
-      return;
-    }
+
 
     setIsSubmitting(true);
     try {
@@ -269,7 +265,7 @@ export default function CreateOrderScreen() {
         p_delivery_longitude: null,
         p_delivery_date: deliveryDate ? toISODate(deliveryDate) : null,
         p_delivery_time: deliveryTime ? toTimeString(deliveryTime) : null,
-        p_is_urgent: isUrgent,
+        p_is_urgent: false,
         p_latitude: userLocation?.lat ?? DEFAULT_LOCATION.latitude,
         p_longitude: userLocation?.lng ?? DEFAULT_LOCATION.longitude,
         p_search_radius_km: searchRadius,
@@ -341,7 +337,6 @@ export default function CreateOrderScreen() {
       setDeliveryAddress('');
       setDeliveryDate(null);
       setDeliveryTime(null);
-      setIsUrgent(false);
       setPhotos([]);
       setLocationLabel(null);
 
@@ -477,26 +472,6 @@ export default function CreateOrderScreen() {
             </View>
           </View>
 
-          {/* ─── Acil Sipariş ─────────────────────────────── */}
-          <View style={styles.field}>
-            <TouchableOpacity
-              style={[styles.toggleRow, {
-                backgroundColor: isUrgent ? C.primary + '15' : C.card,
-                borderColor: isUrgent ? C.primary : C.border,
-              }]}
-              onPress={() => setIsUrgent((v) => !v)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.toggleBtnText, { color: isUrgent ? C.primary : C.textSecondary, flex: 1, textAlign: 'center' }]}>
-                {isUrgent ? '⚡ Acil Sipariş' : '⚡ Acil Sipariş Değil'}
-              </Text>
-            </TouchableOpacity>
-            {isUrgent && (
-              <Text style={{ fontSize: FontSize.xs, color: C.textSecondary }}>
-                Acil siparişlerde teslimat saati zorunludur.
-              </Text>
-            )}
-          </View>
 
           {/* Teslimat Adresi */}
           {deliveryType === 'delivery' && (
@@ -582,12 +557,12 @@ export default function CreateOrderScreen() {
           {/* ─── Teslim Saati ─────────────────────────────── */}
           <View style={styles.field}>
             <Text style={[styles.label, { color: C.text }]}>
-              Teslim Saati{isUrgent && <Text style={{ color: C.error }}> *</Text>}
+              Teslim Saati
             </Text>
             <TouchableOpacity
               style={[styles.datePicker, {
                 backgroundColor: C.card,
-                borderColor: deliveryTime ? C.primary : (isUrgent ? C.error + '80' : C.border),
+                borderColor: deliveryTime ? C.primary : C.border,
               }]}
               onPress={() => setShowTimePicker(true)}
               activeOpacity={0.75}

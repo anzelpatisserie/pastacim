@@ -68,8 +68,8 @@ export default function MakeOfferScreen() {
       .select('id')
       .eq('order_id', orderId)
       .eq('baker_id', userId)
-      .maybeSingle();
-    if (offerRes.data) setAlreadyOffered(true);
+      .limit(1);
+    if (offerRes.data && offerRes.data.length > 0) setAlreadyOffered(true);
 
     setIsLoading(false);
   }, [orderId]);
@@ -100,17 +100,22 @@ export default function MakeOfferScreen() {
     });
     setIsSubmitting(false);
 
-    if (error || (data as { error?: string } | null)?.error) {
-      const msg = (data as { error?: string } | null)?.error ?? 'Teklif gönderilemedi. Lütfen tekrar deneyin.';
-      if (msg === 'siparis_kabul_edildi') {
+    if (error) {
+      Alert.alert('Hata', 'Teklif gönderilemedi. Lütfen tekrar deneyin.');
+      return;
+    }
+    const rpcError = (data as { error?: string } | null)?.error;
+    if (rpcError) {
+      if (rpcError === 'siparis_kabul_edildi') {
         setOrderClosed(true);
         Alert.alert('Sipariş Kapatıldı', 'Müşteri bir teklifi kabul etti. Bu siparişe artık teklif verilemez.');
-      } else if (msg.includes('already') || msg.includes('mevcut')) {
+      } else if (rpcError === 'mevcut_teklif' || rpcError.includes('already') || rpcError.includes('mevcut')) {
+        setAlreadyOffered(true);
         Alert.alert('Zaten Teklif Verildi', 'Bu sipariş için zaten bir teklifiniz var.');
-      } else if (msg.includes('bakiye') || msg.includes('balance')) {
-        Alert.alert('Yetersiz Bakiye', msg);
+      } else if (rpcError === 'yetersiz_bakiye' || rpcError.includes('bakiye') || rpcError.includes('balance')) {
+        Alert.alert('Yetersiz Bakiye', 'Cüzdanınızda yeterli bakiye bulunmuyor.');
       } else {
-        Alert.alert('Hata', msg);
+        Alert.alert('Hata', rpcError);
       }
       return;
     }

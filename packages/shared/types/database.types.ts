@@ -79,6 +79,13 @@ export type Database = {
           is_active: boolean;
           rating: number;
           review_count: number;
+          instagram_url: string | null;
+          facebook_url: string | null;
+          tiktok_url: string | null;
+          youtube_url: string | null;
+          google_maps_url: string | null;
+          google_rating: number | null;
+          google_review_count: number;
           created_at: string;
           updated_at: string;
         };
@@ -96,6 +103,13 @@ export type Database = {
           is_active?: boolean;
           rating?: number;
           review_count?: number;
+          instagram_url?: string | null;
+          facebook_url?: string | null;
+          tiktok_url?: string | null;
+          youtube_url?: string | null;
+          google_maps_url?: string | null;
+          google_rating?: number | null;
+          google_review_count?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -111,6 +125,13 @@ export type Database = {
           is_active?: boolean;
           rating?: number;
           review_count?: number;
+          instagram_url?: string | null;
+          facebook_url?: string | null;
+          tiktok_url?: string | null;
+          youtube_url?: string | null;
+          google_maps_url?: string | null;
+          google_rating?: number | null;
+          google_review_count?: number;
           updated_at?: string;
         };
       };
@@ -337,6 +358,31 @@ export type Database = {
           created_at?: string;
         };
       };
+      wallet_top_up_requests: {
+        Row: {
+          id: string;
+          user_id: string;
+          amount: number;
+          status: 'pending' | 'approved' | 'rejected';
+          note: string | null;
+          created_at: string;
+          approved_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          amount: number;
+          status?: 'pending' | 'approved' | 'rejected';
+          note?: string | null;
+          created_at?: string;
+          approved_at?: string | null;
+        };
+        Update: {
+          status?: 'pending' | 'approved' | 'rejected';
+          note?: string | null;
+          approved_at?: string | null;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -418,6 +464,14 @@ export type Database = {
       };
       add_wallet_balance: {
         Args: { p_amount: number };
+        Returns: { success?: boolean; error?: string } | null;
+      };
+      request_wallet_top_up: {
+        Args: { p_amount: number; p_note?: string | null };
+        Returns: { success?: boolean; request_id?: string; error?: string } | null;
+      };
+      approve_wallet_top_up: {
+        Args: { p_request_id: string };
         Returns: { success?: boolean; error?: string } | null;
       };
       cancel_order: {

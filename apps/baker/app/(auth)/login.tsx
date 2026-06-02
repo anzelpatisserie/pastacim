@@ -12,18 +12,29 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
+import { makeRedirectUri } from 'expo-auth-session';
 import { Colors, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
 
 export default function LoginScreen() {
   const C = useThemeColors();
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleGoogleLogin = async () => {
+    setError(null);
+    setIsGoogleLoading(true);
+    const redirectUrl = makeRedirectUri({ scheme: 'pastacim-pro', path: 'auth/callback' });
+    const { error: gError } = await signInWithGoogle(redirectUrl);
+    setIsGoogleLoading(false);
+    if (gError) setError(gError);
+  };
 
   const handleLogin = async () => {
     setError(null);
@@ -159,6 +170,30 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* ─── Ayraç ───────────────────────────────────────────────── */}
+        <View style={styles.divider}>
+          <View style={[styles.dividerLine, { backgroundColor: C.border }]} />
+          <Text style={[styles.dividerText, { color: C.placeholder }]}>veya</Text>
+          <View style={[styles.dividerLine, { backgroundColor: C.border }]} />
+        </View>
+
+        {/* ─── Google Giriş ────────────────────────────────────────── */}
+        <TouchableOpacity
+          style={[styles.googleBtn, { borderColor: C.border, backgroundColor: C.card }]}
+          onPress={handleGoogleLogin}
+          disabled={isGoogleLoading}
+          activeOpacity={0.85}
+        >
+          {isGoogleLoading ? (
+            <ActivityIndicator color={C.text} />
+          ) : (
+            <>
+              <Text style={styles.googleBtnIcon}>G</Text>
+              <Text style={[styles.googleBtnText, { color: C.text }]}>Google ile Giriş Yap</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
         {/* ─── Alt Link ────────────────────────────────────────────── */}
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: C.textSecondary }]}>
@@ -268,6 +303,33 @@ const styles = StyleSheet.create({
   },
   btnDisabled: {
     opacity: 0.7,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginVertical: Spacing.md,
+  },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { fontSize: FontSize.sm },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1.5,
+    borderRadius: Radius.full,
+    paddingVertical: 14,
+    marginBottom: Spacing.lg,
+  },
+  googleBtnIcon: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#4285F4',
+  },
+  googleBtnText: {
+    fontSize: FontSize.md,
+    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',

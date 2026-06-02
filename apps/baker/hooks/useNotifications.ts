@@ -5,7 +5,7 @@
  * Bildirim listesi NotificationsScreen'in kendi yerel state'indedir
  * → çift Supabase kanalı / çift listener sorunu ortadan kalkar.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
@@ -34,12 +34,20 @@ export function useNotifications(userId?: string) {
     setUnreadCount(count ?? 0);
   }, []);
 
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => {
     if (!userId) return;
     fetchUnread(userId);
 
+    // Önceki kanalı temizle, sonra yeni oluştur
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     const channel = supabase
-      .channel(`notif_badge:${userId}`)
+      .channel(`notif_badge:${userId}:${Date.now()}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
@@ -47,7 +55,12 @@ export function useNotifications(userId?: string) {
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    channelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
   }, [userId, fetchUnread]);
 
   return { unreadCount };

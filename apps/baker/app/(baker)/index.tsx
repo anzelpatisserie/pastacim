@@ -27,6 +27,8 @@ type MyOffer = {
   status: string;
 };
 
+type OfferStats = { count: number; avgRating: number | null };
+
 const DELIVERY_TYPE_LABELS: Record<string, string> = {
   delivery: '🚚 Adrese Teslim',
   pickup: '🏪 Gel-Al',
@@ -45,6 +47,7 @@ export default function BakerHomeScreen() {
 
   const [orders, setOrders] = useState<NearbyOrder[]>([]);
   const [myOfferMap, setMyOfferMap] = useState<Map<string, MyOffer>>(new Map());
+  const [offerStatsMap, setOfferStatsMap] = useState<Map<string, OfferStats>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,17 +109,54 @@ export default function BakerHomeScreen() {
     const newOrders = data ?? [];
     setOrders(newOrders);
 
-    // Kendi tekliflerimi getir (bu siparişler için)
+    // Kendi tekliflerimi + teklif istatistiklerini getir
     if (newOrders.length > 0 && user?.id) {
       const orderIds = newOrders.map((o) => o.id);
-      const { data: offerData } = await _db
+      // Kendi tekliflerim
+      const { data: myOfferData } = await _db
         .from('offers')
         .select('id, order_id, price, status')
         .eq('baker_id', user.id)
         .in('order_id', orderIds);
-      setMyOfferMap(new Map((offerData ?? []).map((o: MyOffer) => [o.order_id, o])));
+      setMyOfferMap(new Map((myOfferData ?? []).map((o: MyOffer) => [o.order_id, o])));
+
+      // Teklif istatistikleri: baker_id'leri al, sonra shop puanlarını ayrı sorgula
+      type OfferRow = { order_id: string; baker_id: string };
+      const { data: offerRows } = await _db
+        .from('offers')
+        .select('order_id, baker_id')
+        .in('order_id', orderIds)
+        .neq('status', 'withdrawn')
+        .neq('status', 'rejected') as { data: OfferRow[] | null };
+
+      const bakerIds = [...new Set((offerRows ?? []).map((r) => r.baker_id))];
+      const ratingMap = new Map<string, number>();
+      if (bakerIds.length > 0) {
+        const { data: shopData } = await _db
+          .from('pastry_shops')
+          .select('user_id, rating')
+          .in('user_id', bakerIds) as { data: { user_id: string; rating: number }[] | null };
+        for (const s of shopData ?? []) ratingMap.set(s.user_id, s.rating);
+      }
+
+      const statsMap = new Map<string, OfferStats>();
+      for (const row of offerRows ?? []) {
+        const prev = statsMap.get(row.order_id);
+        const rating = ratingMap.has(row.baker_id) ? (ratingMap.get(row.baker_id) ?? null) : null;
+        if (!prev) {
+          statsMap.set(row.order_id, { count: 1, avgRating: rating });
+        } else {
+          const newCount = prev.count + 1;
+          const newAvg = rating != null
+            ? ((prev.avgRating ?? 0) * prev.count + rating) / newCount
+            : prev.avgRating;
+          statsMap.set(row.order_id, { count: newCount, avgRating: newAvg });
+        }
+      }
+      setOfferStatsMap(statsMap);
     } else {
       setMyOfferMap(new Map());
+      setOfferStatsMap(new Map());
     }
 
     if (refresh) setIsRefreshing(false);
@@ -262,6 +302,7 @@ export default function BakerHomeScreen() {
               order={item}
               colors={C}
               myOffer={myOfferMap.get(item.id)}
+              offerStats={offerStatsMap.get(item.id)}
             />
           )}
           contentContainerStyle={styles.list}
@@ -289,11 +330,12 @@ export default function BakerHomeScreen() {
 
 // ─── RequestCard ─────────────────────────────────────────────────────────────
 function RequestCard({
-  order, colors: C, myOffer,
+  order, colors: C, myOffer, offerStats,
 }: {
   order: NearbyOrder;
   colors: ThemeColors;
   myOffer?: MyOffer;
+  offerStats?: OfferStats;
 }) {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return null;
@@ -381,6 +423,18 @@ function RequestCard({
           </View>
         )}
       </View>
+
+      {/* Teklif istatistikleri (anonimleştirilmiş) */}
+      {offerStats && offerStats.count > 0 && (
+        <View style={[styles.statsChip, { backgroundColor: C.background, borderColor: C.border }]}>
+          <Text style={[styles.statsChipText, { color: C.textSecondary }]}>
+            👥 {offerStats.count} teklif
+            {offerStats.avgRating != null && offerStats.avgRating > 0
+              ? `  ·  ⭐ ${offerStats.avgRating.toFixed(1)}`
+              : ''}
+          </Text>
+        </View>
+      )}
 
       {/* Kendi teklif durumu */}
       {offerConfig && (
@@ -489,4 +543,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   offeredBtnText: { fontSize: FontSize.sm, fontWeight: '700' },
+  statsChip: {
+    borderWidth: 1, borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm, paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  statsChipText: { fontSize: FontSize.xs, fontWeight: '600' },
 });

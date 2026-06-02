@@ -1,7 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Session, User } from '@supabase/supabase-js';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/database.types';
+
+WebBrowser.maybeCompleteAuthSession();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -21,6 +24,7 @@ interface AuthState {
 interface AuthActions {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (params: SignUpParams) => Promise<{ error: string | null }>;
+  signInWithGoogle: (redirectUrl: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -134,6 +138,24 @@ export function useAuth(): AuthState & AuthActions {
     return { error: null };
   }, []);
 
+  const signInWithGoogle = useCallback(async (redirectUrl: string): Promise<{ error: string | null }> => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
+    });
+
+    if (error || !data.url) return { error: 'Google girişi başlatılamadı.' };
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+    if (result.type === 'success') {
+      const { error: sessionError } = await supabase.auth.exchangeCodeForSession(result.url);
+      if (sessionError) return { error: 'Google oturumu açılamadı.' };
+      return { error: null };
+    }
+    return { error: result.type === 'cancel' ? null : 'Google girişi tamamlanamadı.' };
+  }, []);
+
   const signOut = useCallback(async () => {
     const uid = (await supabase.auth.getUser()).data.user?.id;
     if (uid) {
@@ -153,6 +175,7 @@ export function useAuth(): AuthState & AuthActions {
     isAuthenticated: !!session,
     signIn,
     signUp,
+    signInWithGoogle,
     signOut,
     refreshProfile,
   };

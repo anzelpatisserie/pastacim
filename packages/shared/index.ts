@@ -14,6 +14,7 @@ export {
   rpcGetConversations,
   rpcCreateNotification,
   rpcAddWalletBalance,
+  rpcRequestWalletTopUp,
   rpcSetOrderStatus,
   rpcDeleteConversation,
   rpcDeleteMessageForMe,

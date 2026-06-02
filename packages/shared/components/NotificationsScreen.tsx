@@ -92,14 +92,6 @@ function NotifCard({
         )}
       </TouchableOpacity>
 
-      {/* Sil butonu */}
-      <TouchableOpacity
-        style={[styles.deleteBtn, { borderTopColor: C.border }]}
-        onPress={() => onDelete(item.id)}
-        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-      >
-        <Text style={[styles.deleteBtnText, { color: C.placeholder }]}>🗑️</Text>
-      </TouchableOpacity>
     </View>
   );
 }

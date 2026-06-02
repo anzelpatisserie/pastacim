@@ -2,13 +2,22 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
   TouchableOpacity, TextInput, ActivityIndicator, Alert,
+  Modal, Clipboard, Pressable,
 } from 'react-native';
-import { supabase, rpcAddWalletBalance, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcRequestWalletTopUp, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 type WalletTransaction = Database['public']['Tables']['wallet_transactions']['Row'];
+type TopUpRequest = Database['public']['Tables']['wallet_top_up_requests']['Row'];
 
 const PRESET_AMOUNTS = [50, 100, 200, 500];
+
+// Havale bilgileri — gerçek IBAN ve ad/soyadı buraya girin
+const IBAN_INFO = {
+  iban: 'TR00 0000 0000 0000 0000 0000 00',
+  name: 'Anzel Pastisserie',
+  bank: 'Ziraat Bankası',
+};
 
 export default function WalletScreen() {
   const C = useThemeColors();
@@ -16,43 +25,72 @@ export default function WalletScreen() {
 
   const [balance, setBalance] = useState<number>(0);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<TopUpRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [customAmount, setCustomAmount] = useState('');
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
-  const [isTopUpLoading, setIsTopUpLoading] = useState(false);
-
-  // Kredi kartı alanları (simülasyon)
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [cardName, setCardName] = useState('');
-  const [showCardForm, setShowCardForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showIbanModal, setShowIbanModal] = useState(false);
+  const [modalAmount, setModalAmount] = useState<number>(0);
+  const [sentConfirmed, setSentConfirmed] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
     setIsLoading(true);
 
-    const { data: profileData } = await supabase
-      .from('users')
-      .select('wallet_balance')
-      .eq('id', user.id)
-      .single() as { data: { wallet_balance: number } | null; error: unknown };
+    const [profileRes, txRes, reqRes] = await Promise.all([
+      supabase
+        .from('users')
+        .select('wallet_balance')
+        .eq('id', user.id)
+        .single() as unknown as Promise<{ data: { wallet_balance: number } | null; error: unknown }>,
+      supabase
+        .from('wallet_transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('wallet_top_up_requests')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10),
+    ]);
 
-    setBalance(profileData?.wallet_balance ?? 0);
-
-    const { data: txData } = await supabase
-      .from('wallet_transactions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    setTransactions((txData ?? []) as WalletTransaction[]);
-
+    setBalance(profileRes.data?.wallet_balance ?? 0);
+    setTransactions((txRes.data ?? []) as WalletTransaction[]);
+    setPendingRequests((reqRes.data ?? []) as TopUpRequest[]);
     setIsLoading(false);
   }, [user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Bakiye ve talep durumu değişince otomatik güncelle
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`wallet:${user.id}:${Date.now()}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
+        (payload) => {
+          const updated = payload.new as { wallet_balance: number };
+          if (updated.wallet_balance !== undefined) setBalance(updated.wallet_balance);
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'wallet_top_up_requests', filter: `user_id=eq.${user.id}` },
+        () => fetchData()
+      )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'wallet_transactions', filter: `user_id=eq.${user.id}` },
+        () => fetchData()
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, fetchData]);
 
   const getAmount = (): number | null => {
     if (selectedAmount) return selectedAmount;
@@ -60,69 +98,47 @@ export default function WalletScreen() {
     return isNaN(parsed) || parsed < 10 ? null : parsed;
   };
 
-  const handleTopUp = async () => {
+  const handleYukle = () => {
     const amount = getAmount();
     if (!amount) {
-      Alert.alert('Geçersiz Tutar', 'Lütfen en az ₺10 yükleyin.');
+      Alert.alert('Geçersiz Tutar', 'Lütfen en az ₺10 tutarında bir miktar seçin.');
       return;
     }
-    if (!cardNumber.replace(/\s/g, '') || cardNumber.replace(/\s/g, '').length < 16) {
-      Alert.alert('Kart Bilgisi', 'Lütfen geçerli bir kart numarası girin.');
-      return;
-    }
-    if (!cardExpiry || cardExpiry.length < 5) {
-      Alert.alert('Kart Bilgisi', 'Lütfen son kullanma tarihini girin (AA/YY).');
-      return;
-    }
-    if (!cardCvv || cardCvv.length < 3) {
-      Alert.alert('Kart Bilgisi', 'Lütfen CVV kodunu girin.');
-      return;
-    }
-
-    Alert.alert(
-      '💳 Ödemeyi Onayla',
-      `₺${amount} yüklenecek. Onaylıyor musunuz?`,
-      [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Onayla',
-          onPress: async () => {
-            setIsTopUpLoading(true);
-            const { data, error } = await rpcAddWalletBalance({ p_amount: amount });
-            setIsTopUpLoading(false);
-
-            if (error || (data as { error?: string } | null)?.error) {
-              Alert.alert('Hata', (data as { error?: string } | null)?.error ?? 'Yükleme başarısız.');
-              return;
-            }
-
-            const newBalance = (data as { new_balance?: number } | null)?.new_balance ?? (balance + amount);
-            setBalance(newBalance);
-            setSelectedAmount(null);
-            setCustomAmount('');
-            setCardNumber('');
-            setCardExpiry('');
-            setCardCvv('');
-            setCardName('');
-            setShowCardForm(false);
-            fetchData();
-
-            Alert.alert('✅ Yükleme Başarılı', `₺${amount} cüzdanınıza eklendi. Yeni bakiye: ₺${newBalance}`);
-          },
-        },
-      ]
-    );
+    setModalAmount(amount);
+    setSentConfirmed(false);
+    setShowIbanModal(true);
   };
 
-  const formatCardNumber = (text: string) => {
-    const cleaned = text.replace(/\D/g, '').slice(0, 16);
-    return cleaned.replace(/(.{4})/g, '$1 ').trim();
+  const referenceCode = user?.id ? user.id.replace(/-/g, '').slice(-8).toUpperCase() : '';
+
+  const copyIban = () => {
+    Clipboard.setString(IBAN_INFO.iban.replace(/\s/g, ''));
+    Alert.alert('Kopyalandı', 'IBAN numarası kopyalandı.');
   };
 
-  const formatExpiry = (text: string) => {
-    const cleaned = text.replace(/\D/g, '').slice(0, 4);
-    if (cleaned.length >= 3) return `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
-    return cleaned;
+  const handleParayiGonderdim = async () => {
+    setIsSubmitting(true);
+    const { data, error } = await rpcRequestWalletTopUp({
+      p_amount: modalAmount,
+      p_note: referenceCode,
+    });
+    setIsSubmitting(false);
+
+    if (error || (data as { error?: string } | null)?.error) {
+      Alert.alert('Hata', 'Talep kaydedilemedi. Lütfen tekrar deneyin.');
+      return;
+    }
+
+    setSentConfirmed(true);
+    fetchData();
+  };
+
+  const handleModalKapat = () => {
+    setShowIbanModal(false);
+    if (sentConfirmed) {
+      setSelectedAmount(null);
+      setCustomAmount('');
+    }
   };
 
   const txTypeLabel = (type: WalletTransaction['type']): { label: string; color: string } => {
@@ -158,12 +174,35 @@ export default function WalletScreen() {
         <View style={[styles.balanceCard, { backgroundColor: C.primary }]}>
           <Text style={styles.balanceLabel}>Kullanılabilir Bakiye</Text>
           <Text style={styles.balanceAmount}>₺{Math.floor(Number(balance)).toLocaleString('en-US')}</Text>
-          <Text style={styles.balanceNote} />
         </View>
 
-        {/* Hızlı Yükle */}
+        {/* Bekleyen Talepler */}
+        {pendingRequests.filter(r => r.status === 'pending').length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: C.text }]}>⏳ Bekleyen Talepler</Text>
+            {pendingRequests.filter(r => r.status === 'pending').map((req) => (
+              <View key={req.id} style={[styles.pendingItem, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.pendingAmount, { color: '#92400E' }]}>₺{Number(req.amount).toFixed(0)} — Havale Onay Bekliyor</Text>
+                  <Text style={[styles.pendingDate, { color: '#92400E' }]}>
+                    {new Date(req.created_at).toLocaleDateString('tr-TR', {
+                      day: 'numeric', month: 'short', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 20 }}>🕐</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Bakiye Yükle */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: C.text }]}>💳 Bakiye Yükle</Text>
+          <Text style={[styles.infoText, { color: C.textSecondary }]}>
+            Havale ile bakiye yükleyebilirsiniz. Miktar seçip "Yükle" butonuna basın, IBAN bilgilerini göreceksiniz.
+          </Text>
 
           <View style={styles.presetRow}>
             {PRESET_AMOUNTS.map((amt) => (
@@ -189,7 +228,7 @@ export default function WalletScreen() {
           </View>
 
           <TextInput
-            style={[styles.customInput, { backgroundColor: C.card, borderColor: selectedAmount ? C.border : (customAmount ? C.primary : C.border), color: C.text }]}
+            style={[styles.customInput, { backgroundColor: C.card, borderColor: customAmount ? C.primary : C.border, color: C.text }]}
             placeholder="Özel tutar girin (₺)"
             placeholderTextColor={C.placeholder}
             value={customAmount}
@@ -198,95 +237,13 @@ export default function WalletScreen() {
             maxLength={6}
           />
 
-          {(selectedAmount || customAmount) ? (
-            <TouchableOpacity
-              style={[styles.showCardBtn, { borderColor: C.border }]}
-              onPress={() => setShowCardForm((v) => !v)}
-            >
-              <Text style={[styles.showCardBtnText, { color: C.primary }]}>
-                {showCardForm ? '▲ Kart Bilgisini Gizle' : '▼ Kart Bilgisi Gir'}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {showCardForm && (
-            <View style={[styles.cardForm, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Text style={[styles.cardFormTitle, { color: C.text }]}>Kart Bilgileri</Text>
-
-              <View style={styles.cardField}>
-                <Text style={[styles.cardLabel, { color: C.textSecondary }]}>Kart Üzerindeki İsim</Text>
-                <TextInput
-                  style={[styles.cardInput, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                  placeholder="AD SOYAD"
-                  placeholderTextColor={C.placeholder}
-                  value={cardName}
-                  onChangeText={(t) => setCardName(t.toUpperCase())}
-                  autoCapitalize="characters"
-                />
-              </View>
-
-              <View style={styles.cardField}>
-                <Text style={[styles.cardLabel, { color: C.textSecondary }]}>Kart Numarası</Text>
-                <TextInput
-                  style={[styles.cardInput, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                  placeholder="0000 0000 0000 0000"
-                  placeholderTextColor={C.placeholder}
-                  value={cardNumber}
-                  onChangeText={(t) => setCardNumber(formatCardNumber(t))}
-                  keyboardType="number-pad"
-                  maxLength={19}
-                />
-              </View>
-
-              <View style={styles.cardRow}>
-                <View style={[styles.cardField, { flex: 1 }]}>
-                  <Text style={[styles.cardLabel, { color: C.textSecondary }]}>Son Kullanma</Text>
-                  <TextInput
-                    style={[styles.cardInput, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                    placeholder="AA/YY"
-                    placeholderTextColor={C.placeholder}
-                    value={cardExpiry}
-                    onChangeText={(t) => setCardExpiry(formatExpiry(t))}
-                    keyboardType="number-pad"
-                    maxLength={5}
-                  />
-                </View>
-                <View style={{ width: Spacing.md }} />
-                <View style={[styles.cardField, { flex: 1 }]}>
-                  <Text style={[styles.cardLabel, { color: C.textSecondary }]}>CVV</Text>
-                  <TextInput
-                    style={[styles.cardInput, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                    placeholder="000"
-                    placeholderTextColor={C.placeholder}
-                    value={cardCvv}
-                    onChangeText={(t) => setCardCvv(t.replace(/\D/g, '').slice(0, 4))}
-                    keyboardType="number-pad"
-                    maxLength={4}
-                    secureTextEntry
-                  />
-                </View>
-              </View>
-
-              <View style={[styles.secureNote, { backgroundColor: C.background }]}>
-                <Text style={[styles.secureNoteText, { color: C.textSecondary }]}>
-                  🔒 Kart bilgileriniz 256-bit SSL ile şifrelenerek işlenir
-                </Text>
-              </View>
-            </View>
-          )}
-
           {topUpAmount && (
             <TouchableOpacity
               style={[styles.topUpBtn, { backgroundColor: C.primary }]}
-              onPress={handleTopUp}
-              disabled={isTopUpLoading}
+              onPress={handleYukle}
               activeOpacity={0.85}
             >
-              {isTopUpLoading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.topUpBtnText}>₺{topUpAmount} Yükle</Text>
-              )}
+              <Text style={styles.topUpBtnText}>₺{topUpAmount} Yükle</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -297,9 +254,7 @@ export default function WalletScreen() {
 
           {transactions.length === 0 ? (
             <View style={[styles.emptyTx, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Text style={[styles.emptyTxText, { color: C.textSecondary }]}>
-                Henüz işlem yok
-              </Text>
+              <Text style={[styles.emptyTxText, { color: C.textSecondary }]}>Henüz işlem yok</Text>
             </View>
           ) : (
             transactions.map((tx) => {
@@ -321,7 +276,7 @@ export default function WalletScreen() {
                       })}
                     </Text>
                   </View>
-                  <Text style={[styles.txAmount, { color: color }]}>
+                  <Text style={[styles.txAmount, { color }]}>
                     {isPositive ? '+' : ''}₺{Number(tx.amount).toFixed(2)}
                   </Text>
                 </View>
@@ -332,6 +287,98 @@ export default function WalletScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* IBAN Modal */}
+      <Modal
+        visible={showIbanModal}
+        animationType="slide"
+        transparent
+        onRequestClose={handleModalKapat}
+      >
+        <Pressable style={styles.modalOverlay} onPress={handleModalKapat}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: C.card }]} onPress={() => {}}>
+            {!sentConfirmed ? (
+              <>
+                <Text style={[styles.modalTitle, { color: C.text }]}>🏦 Havale Bilgileri</Text>
+                <Text style={[styles.modalSubtitle, { color: C.textSecondary }]}>
+                  Aşağıdaki hesaba ₺{modalAmount} havale yapın, ardından "Parayı Gönderdim" butonuna basın.
+                </Text>
+
+                <View style={[styles.ibanBox, { backgroundColor: C.background, borderColor: C.border }]}>
+                  <View style={styles.ibanRow}>
+                    <Text style={[styles.ibanLabel, { color: C.textSecondary }]}>Banka</Text>
+                    <Text style={[styles.ibanValue, { color: C.text }]}>{IBAN_INFO.bank}</Text>
+                  </View>
+                  <View style={[styles.divider, { backgroundColor: C.border }]} />
+                  <View style={styles.ibanRow}>
+                    <Text style={[styles.ibanLabel, { color: C.textSecondary }]}>Ad Soyad</Text>
+                    <Text style={[styles.ibanValue, { color: C.text }]}>{IBAN_INFO.name}</Text>
+                  </View>
+                  <View style={[styles.divider, { backgroundColor: C.border }]} />
+                  <View style={styles.ibanRow}>
+                    <Text style={[styles.ibanLabel, { color: C.textSecondary }]}>IBAN</Text>
+                    <TouchableOpacity onPress={copyIban} style={{ flex: 1, alignItems: 'flex-end' }}>
+                      <Text style={[styles.ibanValue, { color: C.primary }]}>{IBAN_INFO.iban}</Text>
+                      <Text style={[styles.copyHint, { color: C.primary }]}>Kopyala</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={[styles.divider, { backgroundColor: C.border }]} />
+                  <View style={styles.ibanRow}>
+                    <Text style={[styles.ibanLabel, { color: C.textSecondary }]}>Tutar</Text>
+                    <Text style={[styles.ibanValue, { color: C.text }]}>₺{modalAmount}</Text>
+                  </View>
+                  <View style={[styles.divider, { backgroundColor: C.border }]} />
+                  <View style={styles.ibanRow}>
+                    <Text style={[styles.ibanLabel, { color: C.textSecondary }]}>Açıklama</Text>
+                    <TouchableOpacity onPress={() => { Clipboard.setString(referenceCode); Alert.alert('Kopyalandı', 'Referans kodu kopyalandı.'); }} style={{ flex: 1, alignItems: 'flex-end' }}>
+                      <Text style={[styles.ibanValue, { color: C.primary }]}>{referenceCode}</Text>
+                      <Text style={[styles.copyHint, { color: C.primary }]}>Kopyala</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <Text style={[styles.noteText, { color: C.textSecondary }]}>
+                  Açıklama alanına referans kodunu yazmayı unutmayın. Havale onaylandıktan sonra bakiyenize eklenecektir.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.sentBtn, { backgroundColor: C.primary }]}
+                  onPress={handleParayiGonderdim}
+                  disabled={isSubmitting}
+                  activeOpacity={0.85}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={styles.sentBtnText}>✅ Parayı Gönderdim</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={handleModalKapat} style={styles.cancelBtn}>
+                  <Text style={[styles.cancelBtnText, { color: C.textSecondary }]}>Henüz Göndermedim</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.modalTitle, { color: C.text }]}>✅ Talebiniz Alındı</Text>
+                <Text style={[styles.modalSubtitle, { color: C.textSecondary }]}>
+                  ₺{modalAmount} tutarındaki havale talebiniz kaydedildi. Havale onaylandıktan sonra bakiyenize otomatik eklenecektir.
+                </Text>
+                <Text style={[styles.noteText, { color: C.textSecondary, textAlign: 'center' }]}>
+                  Onay genellikle aynı iş günü içinde yapılır.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.sentBtn, { backgroundColor: C.primary }]}
+                  onPress={handleModalKapat}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.sentBtnText}>Tamam</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -349,9 +396,9 @@ const styles = StyleSheet.create({
   },
   balanceLabel: { color: 'rgba(255,255,255,0.75)', fontSize: FontSize.sm, fontWeight: '500' },
   balanceAmount: { color: '#FFF', fontSize: 48, fontWeight: '800' },
-  balanceNote: { color: 'rgba(255,255,255,0.0)', fontSize: FontSize.xs, marginTop: 4 },
   section: { paddingHorizontal: Spacing.lg, gap: Spacing.sm, marginBottom: Spacing.xl },
   sectionTitle: { fontSize: FontSize.md, fontWeight: '700', marginBottom: Spacing.xs },
+  infoText: { fontSize: FontSize.sm, lineHeight: 20 },
   presetRow: { flexDirection: 'row', gap: Spacing.sm },
   presetBtn: {
     flex: 1, paddingVertical: 12, borderRadius: Radius.md,
@@ -363,25 +410,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, paddingVertical: 12,
     fontSize: FontSize.md,
   },
-  showCardBtn: {
-    borderWidth: 1, borderRadius: Radius.md, paddingVertical: 10,
-    alignItems: 'center',
-  },
-  showCardBtnText: { fontSize: FontSize.sm, fontWeight: '600' },
-  cardForm: {
-    borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.md, gap: Spacing.sm,
-  },
-  cardFormTitle: { fontSize: FontSize.md, fontWeight: '700', marginBottom: Spacing.xs },
-  cardField: { gap: 4 },
-  cardLabel: { fontSize: FontSize.xs, fontWeight: '500' },
-  cardInput: {
-    borderWidth: 1, borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md, paddingVertical: 10,
-    fontSize: FontSize.md,
-  },
-  cardRow: { flexDirection: 'row' },
-  secureNote: { padding: Spacing.sm, borderRadius: Radius.sm, marginTop: Spacing.xs },
-  secureNoteText: { fontSize: FontSize.xs, textAlign: 'center' },
   topUpBtn: {
     paddingVertical: 16, borderRadius: Radius.full, alignItems: 'center',
     shadowColor: '#D4526E', shadowOffset: { width: 0, height: 4 },
@@ -389,6 +417,12 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
   },
   topUpBtnText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '800' },
+  pendingItem: {
+    flexDirection: 'row', alignItems: 'center',
+    padding: Spacing.md, borderRadius: Radius.lg, borderWidth: 1,
+  },
+  pendingAmount: { fontSize: FontSize.sm, fontWeight: '700' },
+  pendingDate: { fontSize: 11, marginTop: 2 },
   emptyTx: {
     padding: Spacing.lg, borderRadius: Radius.lg, borderWidth: 1, alignItems: 'center',
   },
@@ -401,4 +435,36 @@ const styles = StyleSheet.create({
   txDesc: { fontSize: FontSize.xs, marginTop: 1 },
   txDate: { fontSize: 10, marginTop: 2 },
   txAmount: { fontSize: FontSize.md, fontWeight: '800' },
+  // Modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
+    padding: Spacing.xl, gap: Spacing.md,
+    paddingBottom: 40,
+  },
+  modalTitle: { fontSize: FontSize.lg, fontWeight: '800', textAlign: 'center' },
+  modalSubtitle: { fontSize: FontSize.sm, textAlign: 'center', lineHeight: 20 },
+  ibanBox: {
+    borderWidth: 1, borderRadius: Radius.lg, overflow: 'hidden',
+    marginVertical: Spacing.xs,
+  },
+  ibanRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    padding: Spacing.md,
+  },
+  ibanLabel: { fontSize: FontSize.sm, fontWeight: '500', flex: 0 },
+  ibanValue: { fontSize: FontSize.sm, fontWeight: '700', textAlign: 'right', flex: 1, marginLeft: Spacing.sm },
+  copyHint: { fontSize: 10, fontWeight: '500', marginTop: 2 },
+  divider: { height: 1 },
+  noteText: { fontSize: FontSize.xs, lineHeight: 18 },
+  sentBtn: {
+    paddingVertical: 16, borderRadius: Radius.full, alignItems: 'center',
+    marginTop: Spacing.xs,
+  },
+  sentBtnText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '800' },
+  cancelBtn: { alignItems: 'center', paddingVertical: Spacing.sm },
+  cancelBtnText: { fontSize: FontSize.sm },
 });

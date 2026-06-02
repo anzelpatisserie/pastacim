@@ -124,6 +124,13 @@ export async function rpcAddWalletBalance(
   return result as { data: Functions['add_wallet_balance']['Returns'] | null; error: Error | null };
 }
 
+export async function rpcRequestWalletTopUp(
+  args: Functions['request_wallet_top_up']['Args']
+): Promise<{ data: Functions['request_wallet_top_up']['Returns'] | null; error: Error | null }> {
+  const result = await _rpc('request_wallet_top_up', args as Record<string, unknown>);
+  return result as { data: Functions['request_wallet_top_up']['Returns'] | null; error: Error | null };
+}
+
 export async function rpcSetOrderStatus(
   args: Functions['set_order_status']['Args']
 ): Promise<{ data: Functions['set_order_status']['Returns'] | null; error: Error | null }> {

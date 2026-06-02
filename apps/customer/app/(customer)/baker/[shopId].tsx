@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
-  TouchableOpacity, ActivityIndicator, Image, RefreshControl,
+  TouchableOpacity, ActivityIndicator, Image, RefreshControl, Linking,
 } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
@@ -210,6 +210,67 @@ export default function CustomerBakerProfileScreen() {
           {shop.address && (
             <Text style={[styles.address, { color: C.textSecondary }]}>📍 {shop.address}</Text>
           )}
+
+          {/* Google Bilgileri */}
+          {(shop.google_rating != null || shop.google_review_count > 0 || shop.google_maps_url) && (
+            <View style={[styles.googleRow, { backgroundColor: C.background }]}>
+              <Text style={{ fontSize: 14 }}>🌐</Text>
+              <Text style={[styles.googleLabel, { color: C.text }]}>Google</Text>
+              {shop.google_rating != null && (
+                <View style={[styles.statChip, { backgroundColor: '#F5A623' + '20' }]}>
+                  <Text style={[styles.statText, { color: '#F5A623' }]}>★ {shop.google_rating.toFixed(1)}</Text>
+                </View>
+              )}
+              {shop.google_review_count > 0 && (
+                <Text style={[styles.googleReviewText, { color: C.textSecondary }]}>
+                  ({shop.google_review_count} yorum)
+                </Text>
+              )}
+              {shop.google_maps_url && (
+                <TouchableOpacity onPress={() => Linking.openURL(shop.google_maps_url!)}>
+                  <Text style={[styles.googleMapsLink, { color: C.primary }]}>Haritada Gör →</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Sosyal Medya Linkleri */}
+          {(shop.instagram_url || shop.facebook_url || shop.tiktok_url || shop.youtube_url) && (
+            <View style={styles.socialRow}>
+              {shop.instagram_url && (
+                <TouchableOpacity
+                  style={[styles.socialBtn, { backgroundColor: '#E1306C' + '18', borderColor: '#E1306C' + '44' }]}
+                  onPress={() => Linking.openURL(shop.instagram_url!)}
+                >
+                  <Text style={[styles.socialBtnText, { color: '#E1306C' }]}>📸 Instagram</Text>
+                </TouchableOpacity>
+              )}
+              {shop.facebook_url && (
+                <TouchableOpacity
+                  style={[styles.socialBtn, { backgroundColor: '#1877F2' + '18', borderColor: '#1877F2' + '44' }]}
+                  onPress={() => Linking.openURL(shop.facebook_url!)}
+                >
+                  <Text style={[styles.socialBtnText, { color: '#1877F2' }]}>👍 Facebook</Text>
+                </TouchableOpacity>
+              )}
+              {shop.tiktok_url && (
+                <TouchableOpacity
+                  style={[styles.socialBtn, { backgroundColor: C.border + '40', borderColor: C.border }]}
+                  onPress={() => Linking.openURL(shop.tiktok_url!)}
+                >
+                  <Text style={[styles.socialBtnText, { color: C.text }]}>🎵 TikTok</Text>
+                </TouchableOpacity>
+              )}
+              {shop.youtube_url && (
+                <TouchableOpacity
+                  style={[styles.socialBtn, { backgroundColor: '#FF0000' + '18', borderColor: '#FF0000' + '44' }]}
+                  onPress={() => Linking.openURL(shop.youtube_url!)}
+                >
+                  <Text style={[styles.socialBtnText, { color: '#FF0000' }]}>▶ YouTube</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Yorumlar */}
@@ -316,4 +377,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
   ctaBtnText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '700' },
+  googleRow: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+    gap: 6, borderRadius: Radius.md, padding: Spacing.sm,
+  },
+  googleLabel: { fontSize: FontSize.sm, fontWeight: '600' },
+  googleReviewText: { fontSize: FontSize.xs },
+  googleMapsLink: { fontSize: FontSize.xs, fontWeight: '700', textDecorationLine: 'underline' },
+  socialRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  socialBtn: {
+    paddingHorizontal: Spacing.sm, paddingVertical: 6,
+    borderRadius: Radius.full, borderWidth: 1,
+  },
+  socialBtnText: { fontSize: FontSize.xs, fontWeight: '700' },
 });

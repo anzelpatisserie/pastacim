@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image, Switch, Share,
+  KeyboardAvoidingView, Platform, Image, Switch, Share, Linking,
 } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +11,32 @@ import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_L
 import type { Database } from '@pastacim/shared';
 
 type Shop = Database['public']['Tables']['pastry_shops']['Row'];
+
+function extractHandle(url: string, platform: 'instagram' | 'facebook' | 'tiktok' | 'youtube'): string {
+  if (!url) return '';
+  if (!url.startsWith('http')) return url.replace(/^@/, '');
+  const patterns: Record<string, RegExp> = {
+    instagram: /instagram\.com\/@?([^/?#\s]+)/,
+    facebook:  /facebook\.com\/@?([^/?#\s]+)/,
+    tiktok:    /tiktok\.com\/@?([^/?#\s]+)/,
+    youtube:   /youtube\.com\/(?:@|channel\/|user\/)?([^/?#\s]+)/,
+  };
+  const m = url.match(patterns[platform]);
+  return m ? m[1] : url;
+}
+
+function buildSocialUrl(handle: string, platform: 'instagram' | 'facebook' | 'tiktok' | 'youtube'): string | null {
+  const h = handle.trim().replace(/^@/, '');
+  if (!h) return null;
+  if (/^https?:\/\//i.test(h)) return h;
+  const bases = {
+    instagram: 'https://www.instagram.com/',
+    facebook:  'https://www.facebook.com/',
+    tiktok:    'https://www.tiktok.com/@',
+    youtube:   'https://www.youtube.com/@',
+  };
+  return bases[platform] + h;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -59,6 +85,15 @@ export default function BakerProfileScreen() {
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [workingHours, setWorkingHours] = useState<WorkingHours>({ ...DEFAULT_HOURS });
 
+  // Sosyal medya & Google form state
+  const [instagramUrl, setInstagramUrl] = useState('');
+  const [facebookUrl, setFacebookUrl] = useState('');
+  const [tiktokUrl, setTiktokUrl] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [googleMapsUrl, setGoogleMapsUrl] = useState('');
+  const [googleRating, setGoogleRating] = useState('');
+  const [googleReviewCount, setGoogleReviewCount] = useState('');
+
   const loadShop = useCallback(async () => {
     if (!profile?.id) return;
     setIsLoading(true);
@@ -81,6 +116,13 @@ export default function BakerProfileScreen() {
       setCoverImageUrl(shopData.cover_image_url ?? null);
       const wh = shopData.working_hours as WorkingHours | null;
       setWorkingHours(wh ?? { ...DEFAULT_HOURS });
+      setInstagramUrl(extractHandle(shopData.instagram_url ?? '', 'instagram'));
+      setFacebookUrl(extractHandle(shopData.facebook_url ?? '', 'facebook'));
+      setTiktokUrl(extractHandle(shopData.tiktok_url ?? '', 'tiktok'));
+      setYoutubeUrl(extractHandle(shopData.youtube_url ?? '', 'youtube'));
+      setGoogleMapsUrl(shopData.google_maps_url ?? '');
+      setGoogleRating(shopData.google_rating != null ? String(shopData.google_rating) : '');
+      setGoogleReviewCount(shopData.google_review_count > 0 ? String(shopData.google_review_count) : '');
 
       // Yorumları yükle
       const { data: revData } = await _db
@@ -198,6 +240,13 @@ export default function BakerProfileScreen() {
       latitude,
       longitude,
       working_hours: workingHours,
+      instagram_url: buildSocialUrl(instagramUrl, 'instagram'),
+      facebook_url: buildSocialUrl(facebookUrl, 'facebook'),
+      tiktok_url: buildSocialUrl(tiktokUrl, 'tiktok'),
+      youtube_url: buildSocialUrl(youtubeUrl, 'youtube'),
+      google_maps_url: googleMapsUrl.trim() || null,
+      google_rating: googleRating ? parseFloat(googleRating) : null,
+      google_review_count: googleReviewCount ? parseInt(googleReviewCount, 10) : 0,
     };
 
     if (shop) {
@@ -351,7 +400,7 @@ export default function BakerProfileScreen() {
                   </View>
                   <View style={[styles.statBox, { backgroundColor: C.background }]}>
                     <Text style={[styles.statValue, { color: C.primary }]}>{shop.review_count}</Text>
-                    <Text style={[styles.statLabel, { color: C.textSecondary }]}>💬 Yorum</Text>
+                    <Text style={[styles.statLabel, { color: C.textSecondary }]}>📝 Yorum</Text>
                   </View>
                   <View style={[styles.statBox, { backgroundColor: C.background }]}>
                     <Text style={[styles.statValue, { color: shop.is_active ? C.success : C.error }]}>
@@ -363,12 +412,69 @@ export default function BakerProfileScreen() {
                 {shop.address && (
                   <Text style={[styles.shopAddress, { color: C.textSecondary }]}>📍 {shop.address}</Text>
                 )}
+
+                {/* Google Bilgileri */}
+                {(shop.google_rating != null || shop.google_review_count > 0) && (
+                  <View style={[styles.googleRow, { backgroundColor: C.background }]}>
+                    <Text style={{ fontSize: 16 }}>🌐</Text>
+                    <Text style={[styles.googleText, { color: C.text }]}>Google</Text>
+                    {shop.google_rating != null && (
+                      <Text style={[styles.googleRatingText, { color: '#F5A623' }]}>★ {shop.google_rating.toFixed(1)}</Text>
+                    )}
+                    {shop.google_review_count > 0 && (
+                      <Text style={[styles.googleReviewText, { color: C.textSecondary }]}>({shop.google_review_count} yorum)</Text>
+                    )}
+                    {shop.google_maps_url ? (
+                      <TouchableOpacity onPress={() => Linking.openURL(shop.google_maps_url!)}>
+                        <Text style={[styles.socialLinkBtn, { color: C.primary }]}>Haritada Gör →</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                )}
+
+                {/* Sosyal Medya Linkleri */}
+                {(shop.instagram_url || shop.facebook_url || shop.tiktok_url || shop.youtube_url) && (
+                  <View style={styles.socialRow}>
+                    {shop.instagram_url && (
+                      <TouchableOpacity
+                        style={[styles.socialBtn, { backgroundColor: '#E1306C' + '22', borderColor: '#E1306C' + '44' }]}
+                        onPress={() => Linking.openURL(shop.instagram_url!)}
+                      >
+                        <Text style={[styles.socialBtnText, { color: '#E1306C' }]}>Instagram</Text>
+                      </TouchableOpacity>
+                    )}
+                    {shop.facebook_url && (
+                      <TouchableOpacity
+                        style={[styles.socialBtn, { backgroundColor: '#1877F2' + '22', borderColor: '#1877F2' + '44' }]}
+                        onPress={() => Linking.openURL(shop.facebook_url!)}
+                      >
+                        <Text style={[styles.socialBtnText, { color: '#1877F2' }]}>Facebook</Text>
+                      </TouchableOpacity>
+                    )}
+                    {shop.tiktok_url && (
+                      <TouchableOpacity
+                        style={[styles.socialBtn, { backgroundColor: '#000000' + '15', borderColor: C.border }]}
+                        onPress={() => Linking.openURL(shop.tiktok_url!)}
+                      >
+                        <Text style={[styles.socialBtnText, { color: C.text }]}>TikTok</Text>
+                      </TouchableOpacity>
+                    )}
+                    {shop.youtube_url && (
+                      <TouchableOpacity
+                        style={[styles.socialBtn, { backgroundColor: '#FF0000' + '15', borderColor: '#FF0000' + '44' }]}
+                        onPress={() => Linking.openURL(shop.youtube_url!)}
+                      >
+                        <Text style={[styles.socialBtnText, { color: '#FF0000' }]}>YouTube</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
               </View>
 
               {/* Yorum Listesi */}
               {reviews.length > 0 && (
                 <View style={[styles.reviewsSection, { backgroundColor: C.card, borderColor: C.border }]}>
-                  <Text style={[styles.reviewsTitle, { color: C.text }]}>💬 Müşteri Yorumları</Text>
+                  <Text style={[styles.reviewsTitle, { color: C.text }]}>📝 Müşteri Yorumları</Text>
                   {reviews.map((r) => (
                     <View key={r.id} style={[styles.reviewItem, { borderTopColor: C.border }]}>
                       <View style={styles.reviewHeader}>
@@ -512,6 +618,81 @@ export default function BakerProfileScreen() {
                 </View>
               </View>
 
+              {/* Sosyal Medya */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: C.text }]}>Sosyal Medya (kullanıcı adı)</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                  placeholder="📸 Instagram kullanıcı adı"
+                  placeholderTextColor={C.placeholder}
+                  value={instagramUrl}
+                  onChangeText={setInstagramUrl}
+                  autoCapitalize="none"
+                  keyboardType="default"
+                />
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                  placeholder="👍 Facebook kullanıcı adı"
+                  placeholderTextColor={C.placeholder}
+                  value={facebookUrl}
+                  onChangeText={setFacebookUrl}
+                  autoCapitalize="none"
+                  keyboardType="default"
+                />
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                  placeholder="🎵 TikTok kullanıcı adı"
+                  placeholderTextColor={C.placeholder}
+                  value={tiktokUrl}
+                  onChangeText={setTiktokUrl}
+                  autoCapitalize="none"
+                  keyboardType="default"
+                />
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                  placeholder="▶ YouTube kullanıcı adı veya kanal adı"
+                  placeholderTextColor={C.placeholder}
+                  value={youtubeUrl}
+                  onChangeText={setYoutubeUrl}
+                  autoCapitalize="none"
+                  keyboardType="default"
+                />
+              </View>
+
+              {/* Google Bilgileri */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: C.text }]}>Google Bilgileri</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                  placeholder="Google Maps URL"
+                  placeholderTextColor={C.placeholder}
+                  value={googleMapsUrl}
+                  onChangeText={setGoogleMapsUrl}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                />
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                    placeholder="Google Puanı (ör: 4.7)"
+                    placeholderTextColor={C.placeholder}
+                    value={googleRating}
+                    onChangeText={setGoogleRating}
+                    keyboardType="decimal-pad"
+                    maxLength={3}
+                  />
+                  <TextInput
+                    style={[styles.input, { flex: 1, backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                    placeholder="Yorum Sayısı"
+                    placeholderTextColor={C.placeholder}
+                    value={googleReviewCount}
+                    onChangeText={setGoogleReviewCount}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                  />
+                </View>
+              </View>
+
               <View style={styles.formBtns}>
                 <TouchableOpacity
                   style={[styles.cancelBtn, { borderColor: C.border }]}
@@ -522,6 +703,13 @@ export default function BakerProfileScreen() {
                       setDescription(shop.description ?? '');
                       setAddress(shop.address ?? '');
                       setWorkingHours((shop.working_hours as WorkingHours | null) ?? { ...DEFAULT_HOURS });
+                      setInstagramUrl(shop.instagram_url ?? '');
+                      setFacebookUrl(shop.facebook_url ?? '');
+                      setTiktokUrl(shop.tiktok_url ?? '');
+                      setYoutubeUrl(shop.youtube_url ?? '');
+                      setGoogleMapsUrl(shop.google_maps_url ?? '');
+                      setGoogleRating(shop.google_rating != null ? String(shop.google_rating) : '');
+                      setGoogleReviewCount(shop.google_review_count > 0 ? String(shop.google_review_count) : '');
                     }
                   }}
                 >
@@ -609,7 +797,7 @@ const styles = StyleSheet.create({
   coverPlaceholderEmoji: { fontSize: 40 },
   coverPlaceholderText: { fontSize: FontSize.sm },
   uploadOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center', justifyContent: 'center',
   },
@@ -689,4 +877,18 @@ const styles = StyleSheet.create({
   shareTitle: { fontSize: FontSize.md, fontWeight: '700' },
   shareSub: { fontSize: FontSize.xs, marginTop: 2 },
   shareArrow: { fontSize: 20, fontWeight: '300' },
+  googleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: Radius.md, padding: Spacing.sm, flexWrap: 'wrap',
+  },
+  googleText: { fontSize: FontSize.sm, fontWeight: '600' },
+  googleRatingText: { fontSize: FontSize.sm, fontWeight: '700' },
+  googleReviewText: { fontSize: FontSize.xs },
+  socialLinkBtn: { fontSize: FontSize.xs, fontWeight: '700', textDecorationLine: 'underline' },
+  socialRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  socialBtn: {
+    paddingHorizontal: Spacing.sm, paddingVertical: 5,
+    borderRadius: Radius.full, borderWidth: 1,
+  },
+  socialBtnText: { fontSize: FontSize.xs, fontWeight: '700' },
 });

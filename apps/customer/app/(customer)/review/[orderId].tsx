@@ -131,11 +131,7 @@ export default function ReviewScreen() {
   const isReadOnly = existingReview !== null;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.border }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -147,7 +143,12 @@ export default function ReviewScreen() {
           <View style={{ width: 60 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Sipariş bilgisi */}
           <View style={[styles.orderCard, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[styles.shopName, { color: C.text }]}>🎂 {shopName}</Text>
@@ -223,8 +224,8 @@ export default function ReviewScreen() {
             </TouchableOpacity>
           )}
         </ScrollView>
-      </SafeAreaView>
-    </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
