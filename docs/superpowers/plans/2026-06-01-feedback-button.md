@@ -1,7 +1,79 @@
+# Geri Bildirim Butonu — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Her iki uygulamaya sağ üst köşeye geri bildirim butonu ekle; kullanıcılar metin + isteğe bağlı ekran görüntüsü ile geri bildirim gönderebilsin.
+
+**Architecture:**
+- DB: `feedbacks` tablosu Supabase'de oluşturulur (Management API ile).
+- Shared: `FeedbackModal` komponenti `packages/shared/components/` altında oluşturulur; `@pastacim/shared`'dan export edilir.
+- Apps: Baker ve Customer ana ekranlarına (index.tsx) sağ üst köşeye 💬 butonu eklenir; butona basınca modal açılır.
+- Screenshot: `expo-image-picker` ile galeride seçilir veya kamerada çekilir; Supabase Storage `feedbacks` bucket'ına yüklenir.
+
+**Tech Stack:** React Native Modal, expo-image-picker (zaten kurulu), Supabase Storage, TypeScript
+
+---
+
+### Task 1: Veritabanında feedbacks tablosu ve storage bucket oluştur
+
+**Files:**
+- Modify: `supabase/schema.sql` (referans yorumu ekle)
+
+- [ ] **Adım 1: feedbacks tablosunu oluştur**
+
+```bash
+SUPABASE_ACCESS_TOKEN=$(cat /Users/soneripekci/.claude/projects/-Users-soneripekci-Documents-Dev-VsCode-Pastac-m/memory/supabase-pat.md | grep -oP '(?<=Token: ).*' | head -1 | tr -d '[:space:]')
+curl -s -X POST "https://api.supabase.com/v1/projects/lvrbzhziayegyinkcuka/database/query" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "CREATE TABLE IF NOT EXISTS public.feedbacks (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL, message text NOT NULL, screenshot_url text, app_name text NOT NULL DEFAULT '\''unknown'\'', created_at timestamptz NOT NULL DEFAULT now());"
+  }'
+```
+
+- [ ] **Adım 2: RLS politikalarını ekle**
+
+```bash
+curl -s -X POST "https://api.supabase.com/v1/projects/lvrbzhziayegyinkcuka/database/query" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "ALTER TABLE public.feedbacks ENABLE ROW LEVEL SECURITY; CREATE POLICY \"feedbacks: authenticated insert\" ON public.feedbacks FOR INSERT TO authenticated WITH CHECK (true); CREATE POLICY \"feedbacks: admin select\" ON public.feedbacks FOR SELECT TO authenticated USING (user_id = auth.uid());"
+  }'
+```
+
+- [ ] **Adım 3: Feedbacks storage bucket oluştur**
+
+Supabase Dashboard → Storage → New bucket → `feedbacks` (private). Eğer API ile yapmak istersen:
+```bash
+curl -s -X POST "https://api.supabase.com/v1/projects/lvrbzhziayegyinkcuka/storage/buckets" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "feedbacks", "name": "feedbacks", "public": false}'
+```
+
+- [ ] **Adım 4: Commit**
+
+```bash
+git commit --allow-empty -m "feat(db): add feedbacks table and storage bucket"
+```
+
+---
+
+### Task 2: FeedbackModal komponenti oluştur (shared)
+
+**Files:**
+- Create: `packages/shared/components/FeedbackModal.tsx`
+- Modify: `packages/shared/index.ts`
+
+- [ ] **Adım 1: FeedbackModal.tsx oluştur**
+
+`packages/shared/components/FeedbackModal.tsx`:
+```tsx
 import { useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Image,
+  StyleSheet, Alert, ActivityIndicator, Image, Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
@@ -36,7 +108,7 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
             return;
           }
           const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: 'images',
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.6,
             allowsEditing: false,
           });
@@ -54,7 +126,7 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
             return;
           }
           const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: 'images',
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.6,
           });
           if (!result.canceled && result.assets[0]) {
@@ -104,7 +176,7 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
       setMessage('');
       setScreenshotUri(null);
       onClose();
-    } catch {
+    } catch (e) {
       Alert.alert('Hata', 'Geri bildirim gönderilemedi. Lütfen tekrar deneyin.');
     } finally {
       setIsSubmitting(false);
@@ -128,7 +200,7 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
         <View style={[styles.sheet, { backgroundColor: C.background }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: C.border }]}>
-            <Text style={[styles.title, { color: C.text }]}>📣 Geri Bildirim</Text>
+            <Text style={[styles.title, { color: C.text }]}>💬 Geri Bildirim</Text>
             <TouchableOpacity onPress={handleClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={[styles.closeBtn, { color: C.textSecondary }]}>✕</Text>
             </TouchableOpacity>
@@ -232,3 +304,136 @@ const styles = StyleSheet.create({
   },
   submitBtnText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '700' },
 });
+```
+
+- [ ] **Adım 2: shared index.ts'e FeedbackModal'ı export et**
+
+`packages/shared/index.ts` dosyasında `// Components` bölümüne ekle:
+```ts
+export { default as FeedbackModal } from './components/FeedbackModal';
+```
+
+- [ ] **Adım 3: TypeScript kontrolü**
+
+```bash
+cd /Users/soneripekci/Documents/Dev_VsCode/Pastacım && npx tsc --noEmit 2>&1 | head -40
+```
+
+- [ ] **Adım 4: Commit**
+
+```bash
+git add packages/shared/components/FeedbackModal.tsx packages/shared/index.ts
+git commit -m "feat(shared): add FeedbackModal component with screenshot support"
+```
+
+---
+
+### Task 3: Baker ana ekranına geri bildirim butonu ekle
+
+**Files:**
+- Modify: `apps/baker/app/(baker)/index.tsx`
+
+- [ ] **Adım 1: FeedbackModal import et**
+
+Dosyanın import bölümüne ekle:
+```tsx
+import { FeedbackModal } from '@pastacim/shared';
+```
+
+- [ ] **Adım 2: State ekle**
+
+```tsx
+const [showFeedback, setShowFeedback] = useState(false);
+```
+
+- [ ] **Adım 3: Header'a feedback butonu ekle**
+
+Mevcut header'ın sağ tarafına (bildirim zili butonu eklendikten sonra, onun yanına):
+```tsx
+<TouchableOpacity
+  onPress={() => setShowFeedback(true)}
+  style={{ padding: 4 }}
+  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+>
+  <Text style={{ fontSize: 20 }}>💬</Text>
+</TouchableOpacity>
+```
+
+- [ ] **Adım 4: Modal'ı JSX'e ekle**
+
+Return'ün en altına, `</SafeAreaView>` öncesine:
+```tsx
+<FeedbackModal
+  visible={showFeedback}
+  onClose={() => setShowFeedback(false)}
+  appName="baker"
+/>
+```
+
+- [ ] **Adım 5: TypeScript kontrolü**
+
+```bash
+cd /Users/soneripekci/Documents/Dev_VsCode/Pastacım && npx tsc --noEmit 2>&1 | head -30
+```
+
+- [ ] **Adım 6: Commit**
+
+```bash
+git add apps/baker/app/\(baker\)/index.tsx
+git commit -m "feat(baker): add feedback button to home screen header"
+```
+
+---
+
+### Task 4: Customer ana ekranına geri bildirim butonu ekle
+
+**Files:**
+- Modify: `apps/customer/app/(customer)/index.tsx`
+
+- [ ] **Adım 1: FeedbackModal import et**
+
+```tsx
+import { FeedbackModal } from '@pastacim/shared';
+```
+
+- [ ] **Adım 2: State ekle**
+
+```tsx
+const [showFeedback, setShowFeedback] = useState(false);
+```
+
+- [ ] **Adım 3: Header'a feedback butonu ekle**
+
+Aynı pattern — bildirim zili butonunun yanına:
+```tsx
+<TouchableOpacity
+  onPress={() => setShowFeedback(true)}
+  style={{ padding: 4 }}
+  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+>
+  <Text style={{ fontSize: 20 }}>💬</Text>
+</TouchableOpacity>
+```
+
+- [ ] **Adım 4: Modal'ı JSX'e ekle**
+
+```tsx
+<FeedbackModal
+  visible={showFeedback}
+  onClose={() => setShowFeedback(false)}
+  appName="customer"
+/>
+```
+
+- [ ] **Adım 5: TypeScript kontrolü**
+
+```bash
+cd /Users/soneripekci/Documents/Dev_VsCode/Pastacım && npx tsc --noEmit 2>&1 | head -30
+```
+
+- [ ] **Adım 6: Commit**
+
+```bash
+git add apps/customer/app/\(customer\)/index.tsx
+git commit -m "feat(customer): add feedback button to home screen header"
+```

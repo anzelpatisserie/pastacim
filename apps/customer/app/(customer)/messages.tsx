@@ -130,7 +130,6 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   name: { fontSize: FontSize.md, fontWeight: '700', flex: 1 },
   time: { fontSize: FontSize.xs, flexShrink: 0 },
-  orderTitle: { fontSize: FontSize.xs },
   lastMsgRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   lastMsg: { fontSize: FontSize.sm, flex: 1 },
   badge: { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, flexShrink: 0 },

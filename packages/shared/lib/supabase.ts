@@ -1,11 +1,15 @@
 import 'react-native-url-polyfill/auto';
 import * as SecureStore from 'expo-secure-store';
 import { createClient } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 import type { Database } from '../types/database.types';
 
 // ─── Supabase Bağlantı Bilgileri ─────────────────────────────────────────────
-const SUPABASE_URL = 'https://lvrbzhziayegyinkcuka.supabase.co';
+const SUPABASE_URL =
+  (Constants.expoConfig?.extra?.supabaseUrl as string | undefined) ??
+  'https://lvrbzhziayegyinkcuka.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY =
+  (Constants.expoConfig?.extra?.supabaseAnonKey as string | undefined) ??
   'sb_publishable_GRPzr4yIvnC54VpN6G7K3A_awa6OyWp';
 
 // ─── Güvenli Oturum Depolama (iOS Keychain / Android Keystore) ───────────────
@@ -115,20 +119,6 @@ export async function rpcCreateNotification(
 ): Promise<{ data: string | null; error: Error | null }> {
   const result = await _rpc('create_notification', args as Record<string, unknown>);
   return result as { data: string | null; error: Error | null };
-}
-
-export async function rpcAddWalletBalance(
-  args: Functions['add_wallet_balance']['Args']
-): Promise<{ data: Functions['add_wallet_balance']['Returns'] | null; error: Error | null }> {
-  const result = await _rpc('add_wallet_balance', args as Record<string, unknown>);
-  return result as { data: Functions['add_wallet_balance']['Returns'] | null; error: Error | null };
-}
-
-export async function rpcRequestWalletTopUp(
-  args: Functions['request_wallet_top_up']['Args']
-): Promise<{ data: Functions['request_wallet_top_up']['Returns'] | null; error: Error | null }> {
-  const result = await _rpc('request_wallet_top_up', args as Record<string, unknown>);
-  return result as { data: Functions['request_wallet_top_up']['Returns'] | null; error: Error | null };
 }
 
 export async function rpcSetOrderStatus(

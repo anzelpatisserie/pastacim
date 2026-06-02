@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image, FlatList,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { rpcPlaceOrder, rpcNearbyBakers, supabase, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION } from '@pastacim/shared';
+
+const SEARCH_RADIUS = 20;
 
 export default function CreateOrderScreen() {
   const C = useThemeColors();
@@ -23,7 +25,6 @@ export default function CreateOrderScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [deliveryTime, setDeliveryTime] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [searchRadius, setSearchRadius] = useState(20);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -69,7 +70,7 @@ export default function CreateOrderScreen() {
               return;
             }
             const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              mediaTypes: 'images',
               quality: 0.7,
               allowsEditing: true,
               aspect: [4, 3],
@@ -88,7 +89,7 @@ export default function CreateOrderScreen() {
               return;
             }
             const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              mediaTypes: 'images',
               quality: 0.7,
               allowsMultipleSelection: true,
               selectionLimit: 5 - photos.length,
@@ -268,7 +269,7 @@ export default function CreateOrderScreen() {
         p_is_urgent: false,
         p_latitude: userLocation?.lat ?? DEFAULT_LOCATION.latitude,
         p_longitude: userLocation?.lng ?? DEFAULT_LOCATION.longitude,
-        p_search_radius_km: searchRadius,
+        p_search_radius_km: SEARCH_RADIUS,
       });
 
       if (error || data?.error) {
@@ -311,7 +312,7 @@ export default function CreateOrderScreen() {
       if (orderId) {
         const lat = userLocation?.lat ?? DEFAULT_LOCATION.latitude;
         const lng = userLocation?.lng ?? DEFAULT_LOCATION.longitude;
-        rpcNearbyBakers({ lat, lng, radius_km: searchRadius }).then(({ data: bakers }) => {
+        rpcNearbyBakers({ lat, lng, radius_km: SEARCH_RADIUS }).then(({ data: bakers }) => {
           if (!bakers || bakers.length === 0) return;
           const body = [
             title.trim(),
@@ -697,9 +698,6 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', borderWidth: 1, borderRadius: Radius.md, overflow: 'hidden' },
   toggleBtn: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   toggleBtnText: { fontSize: FontSize.sm, fontWeight: '600' },
-  radiusRow: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
-  radiusBtn: { paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: Radius.full, borderWidth: 1.5 },
-  radiusBtnText: { fontSize: FontSize.sm, fontWeight: '600' },
   submitBtn: {
     paddingVertical: 16, borderRadius: Radius.full, alignItems: 'center', marginTop: Spacing.sm,
     shadowColor: '#D4526E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,

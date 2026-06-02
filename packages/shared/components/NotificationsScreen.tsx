@@ -40,13 +40,12 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 function NotifCard({
-  item, C, role, onRead, onDelete,
+  item, C, role, onRead,
 }: {
   item: NotificationRow;
   C: ReturnType<typeof useThemeColors>;
   role: NotificationRole;
   onRead: (id: string) => void;
-  onDelete: (id: string) => void;
 }) {
   const meta = TYPE_META[item.type] ?? { emoji: '🔔', color: '#A0AEC0' };
 
@@ -84,7 +83,7 @@ function NotifCard({
               {item.body}
             </Text>
           )}
-          <Text style={[styles.time, { color: C.placeholder }]}>{formatTimeAgo(item.created_at)}</Text>
+          <Text style={[styles.time, { color: C.placeholder }]}>{formatTimeAgo(item.created_at ?? '')}</Text>
         </View>
 
         {!item.is_read && (
@@ -137,11 +136,6 @@ export default function NotificationsScreen() {
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
   }, [user?.id]);
 
-  const deleteNotification = useCallback(async (id: string) => {
-    await _db.from('notifications').delete().eq('id', id);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
-
   const deleteAll = useCallback(async () => {
     if (!user?.id) return;
     await _db.from('notifications').delete().eq('user_id', user.id);
@@ -182,7 +176,7 @@ export default function NotificationsScreen() {
         <FlatList
           data={notifications}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <NotifCard item={item} C={C} role={notifRole} onRead={markRead} onDelete={deleteNotification} />}
+          renderItem={({ item }) => <NotifCard item={item} C={C} role={notifRole} onRead={markRead} />}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -226,11 +220,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md,
     padding: Spacing.md,
   },
-  deleteBtn: {
-    alignItems: 'center', paddingVertical: 6,
-    borderTopWidth: 1,
-  },
-  deleteBtnText: { fontSize: 15 },
   iconCircle:   { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   iconEmoji:    { fontSize: 22 },
   title:        { fontSize: FontSize.sm, fontWeight: '700' },

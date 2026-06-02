@@ -28,17 +28,17 @@ export default function OnboardingScreen() {
         <View style={[styles.logoCircle, { backgroundColor: C.primary }]}>
           <Text style={styles.logoEmoji}>🎂</Text>
         </View>
-        <Text style={[styles.appName, { color: C.primary }]}>Pastacım</Text>
+        <Text style={[styles.appName, { color: C.primary }]}>Pastacım Pro</Text>
         <Text style={[styles.tagline, { color: C.textSecondary }]}>
-          Hayalindeki pastayı{'\n'}yakınındaki ustalar yapsın
+          Yakınındaki siparişleri al,{'\n'}işini büyüt
         </Text>
       </View>
 
       {/* ─── Özellik Kartları ────────────────────────────────────────── */}
       <View style={styles.featuresRow}>
-        <FeatureCard emoji="📍" label="Yakınında" color={C} />
-        <FeatureCard emoji="🏆" label="En iyiler" color={C} />
-        <FeatureCard emoji="💬" label="Teklif al" color={C} />
+        <FeatureCard emoji="📍" label="Yakın Siparişler" color={C} />
+        <FeatureCard emoji="💰" label="Teklif Ver" color={C} />
+        <FeatureCard emoji="📈" label="Kazanç Sağla" color={C} />
       </View>
 
 

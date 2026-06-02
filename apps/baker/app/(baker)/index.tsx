@@ -185,7 +185,7 @@ export default function BakerHomeScreen() {
             style={{ padding: 4 }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={{ fontSize: 20 }}>💬</Text>
+            <Text style={{ fontSize: 20 }}>📣</Text>
           </TouchableOpacity>
           {/* Bildirim zili */}
           <TouchableOpacity

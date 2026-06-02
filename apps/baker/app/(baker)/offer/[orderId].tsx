@@ -22,10 +22,8 @@ export default function MakeOfferScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [shop, setShop] = useState<Shop | null>(null);
   const [shopError, setShopError] = useState<string | null>(null);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [price, setPrice] = useState('');
   const [message, setMessage] = useState('');
-  const [estimatedDays, setEstimatedDays] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alreadyOffered, setAlreadyOffered] = useState(false);
@@ -40,10 +38,6 @@ export default function MakeOfferScreen() {
     // Sipariş
     const orderRes = await _db.from('orders').select('*').eq('id', orderId).single();
     if (orderRes.data) setOrder(orderRes.data as Order);
-
-    // Cüzdan bakiyesi
-    const walletRes = await _db.from('users').select('wallet_balance').eq('id', userId).single();
-    if (walletRes.data) setWalletBalance(Number(walletRes.data.wallet_balance ?? 0));
 
     // Dükkan
     const shopRes = await _db
@@ -96,7 +90,6 @@ export default function MakeOfferScreen() {
       p_order_id: orderId,
       p_price: parseFloat(price),
       p_message: message.trim() || null,
-      p_estimated_days: estimatedDays ? parseInt(estimatedDays) : null,
     });
     setIsSubmitting(false);
 
@@ -112,8 +105,6 @@ export default function MakeOfferScreen() {
       } else if (rpcError === 'mevcut_teklif' || rpcError.includes('already') || rpcError.includes('mevcut')) {
         setAlreadyOffered(true);
         Alert.alert('Zaten Teklif Verildi', 'Bu sipariş için zaten bir teklifiniz var.');
-      } else if (rpcError === 'yetersiz_bakiye' || rpcError.includes('bakiye') || rpcError.includes('balance')) {
-        Alert.alert('Yetersiz Bakiye', 'Cüzdanınızda yeterli bakiye bulunmuyor.');
       } else {
         Alert.alert('Hata', rpcError);
       }
@@ -369,7 +360,6 @@ export default function MakeOfferScreen() {
                         <Image
                           source={{ uri }}
                           style={[styles.photoThumb, { borderColor: C.border }]}
-                          onError={() => console.log('Image load error:', uri)}
                         />
                       </TouchableOpacity>
                     ))}
@@ -405,46 +395,6 @@ export default function MakeOfferScreen() {
               🏪 <Text style={{ fontWeight: '700' }}>{shop.name}</Text> adına teklif veriyorsunuz
             </Text>
           </View>
-
-          {/* Cüzdan & Teklif Bedeli */}
-          {(() => {
-            const offerFee = (order?.serving_size ?? 0) * 5;
-            const hasEnough = walletBalance >= offerFee;
-            return (
-              <View style={[styles.feeCard, {
-                backgroundColor: hasEnough ? '#48BB7812' : '#E53E3E12',
-                borderColor: hasEnough ? '#48BB7844' : '#E53E3E44',
-              }]}>
-                <View style={styles.feeRow}>
-                  <Text style={[styles.feeLabel, { color: C.textSecondary }]}>💰 Cüzdan Bakiyesi</Text>
-                  <Text style={[styles.feeValue, { color: C.text }]}>
-                    ₺{Math.floor(walletBalance).toLocaleString('en-US')}
-                  </Text>
-                </View>
-                <View style={styles.feeDivider} />
-                <View style={styles.feeRow}>
-                  <Text style={[styles.feeLabel, { color: C.textSecondary }]}>
-                    🎯 Teklif Bedeli
-                  </Text>
-                  <Text style={[styles.feeValue, { color: '#E53E3E', fontWeight: '800' }]}>
-                    -₺{offerFee}
-                  </Text>
-                </View>
-                <View style={styles.feeDivider} />
-                <View style={styles.feeRow}>
-                  <Text style={[styles.feeLabel, { color: C.textSecondary }]}>Kalan Bakiye</Text>
-                  <Text style={[styles.feeValue, { color: hasEnough ? '#48BB78' : '#E53E3E', fontWeight: '800' }]}>
-                    ₺{Math.floor(walletBalance - offerFee).toLocaleString('en-US')}
-                  </Text>
-                </View>
-                {!hasEnough && (
-                  <Text style={styles.feeWarning}>
-                    ⚠️ Yetersiz bakiye. Cüzdanınıza ₺{offerFee - Math.floor(walletBalance)} daha yükleyin.
-                  </Text>
-                )}
-              </View>
-            );
-          })()}
 
           <View style={styles.field}>
             <Text style={[styles.label, { color: C.text }]}>Fiyat (₺) *</Text>
@@ -485,7 +435,7 @@ export default function MakeOfferScreen() {
               <ActivityIndicator color="#FFF" />
             ) : (
               <Text style={styles.submitBtnText}>
-                🎉 Teklif Gönder · ₺{(order?.serving_size ?? 0) * 5}
+                🎉 Teklif Gönder
               </Text>
             )}
           </TouchableOpacity>
@@ -533,22 +483,11 @@ const styles = StyleSheet.create({
   metaChip: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.sm, fontSize: FontSize.xs },
   shopInfo: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   shopInfoText: { fontSize: FontSize.sm },
-  feeCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.xs },
-  feeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  feeLabel: { fontSize: FontSize.sm, flex: 1, flexWrap: 'wrap' },
-  feeValue: { fontSize: FontSize.sm, fontWeight: '700', marginLeft: Spacing.sm },
-  feeDivider: { height: 1, backgroundColor: 'rgba(0,0,0,0.08)', marginVertical: 2 },
-  feeWarning: { fontSize: FontSize.xs, color: '#E53E3E', fontWeight: '600', marginTop: Spacing.xs },
   field: { gap: Spacing.xs },
   label: { fontSize: FontSize.sm, fontWeight: '600' },
   input: {
     borderWidth: 1, borderRadius: Radius.md,
     paddingHorizontal: Spacing.md, paddingVertical: 12, fontSize: FontSize.md,
-  },
-  inputSmall: {
-    borderWidth: 1, borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md, paddingVertical: 12, fontSize: FontSize.md,
-    alignSelf: 'flex-start', minWidth: 120,
   },
   inputMulti: {
     borderWidth: 1, borderRadius: Radius.md,

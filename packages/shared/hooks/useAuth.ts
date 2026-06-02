@@ -44,7 +44,7 @@ export function useAuth(): AuthState & AuthActions {
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('users')
-      .select('id, email, phone, full_name, avatar_url, is_customer, is_baker, wallet_balance, created_at, updated_at')
+      .select('id, email, phone, full_name, avatar_url, is_customer, is_baker, wallet_balance, push_token, role, token_balance, created_at, updated_at')
       .eq('id', userId)
       .single();
 
@@ -143,11 +143,8 @@ export function useAuth(): AuthState & AuthActions {
       provider: 'google',
       options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
     });
-
     if (error || !data.url) return { error: 'Google girişi başlatılamadı.' };
-
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-
     if (result.type === 'success') {
       const { error: sessionError } = await supabase.auth.exchangeCodeForSession(result.url);
       if (sessionError) return { error: 'Google oturumu açılamadı.' };

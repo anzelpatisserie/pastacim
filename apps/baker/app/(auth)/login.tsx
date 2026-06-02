@@ -5,7 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -145,7 +145,7 @@ export default function LoginScreen() {
           )}
 
           {/* Şifremi unuttum */}
-          <TouchableOpacity style={styles.forgotWrapper}>
+          <TouchableOpacity style={styles.forgotWrapper} onPress={() => Alert.alert('Yakında', 'Bu özellik yakında aktif olacak.')}>
             <Text style={[styles.forgotText, { color: C.primary }]}>
               Şifremi unuttum
             </Text>

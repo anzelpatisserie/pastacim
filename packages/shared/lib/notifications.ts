@@ -62,6 +62,9 @@ export function navigateFromNotification(
         router.push('/(customer)/my-orders' as never);
         break;
       }
+      case 'campaign':
+        router.push('/' as never);
+        break;
       default:
         break;
     }

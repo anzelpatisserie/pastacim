@@ -38,6 +38,33 @@ function buildSocialUrl(handle: string, platform: 'instagram' | 'facebook' | 'ti
   return bases[platform] + h;
 }
 
+const PLACES_API_KEY = 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo';
+
+async function fetchGooglePlaceByName(shopName: string): Promise<{
+  rating: number | null; reviewCount: number; mapsUrl: string | null;
+} | null> {
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(shopName + ' pastane')}&key=${PLACES_API_KEY}`
+    );
+    const data = await res.json();
+    if (data.results && data.results.length > 0) {
+      const place = data.results[0];
+      const mapsUrl = place.place_id
+        ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
+        : null;
+      return {
+        rating: place.rating ?? null,
+        reviewCount: place.user_ratings_total ?? 0,
+        mapsUrl,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
 
@@ -69,12 +96,13 @@ export default function BakerProfileScreen() {
 
   const [shop, setShop] = useState<Shop | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isFetchingGoogle, setIsFetchingGoogle] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -97,8 +125,6 @@ export default function BakerProfileScreen() {
   const loadShop = useCallback(async () => {
     if (!profile?.id) return;
     setIsLoading(true);
-    const walletRes = await _db.from('users').select('wallet_balance').eq('id', profile.id).single();
-    if (walletRes.data) setWalletBalance(Number(walletRes.data.wallet_balance ?? 0));
 
     const { data } = await _db
       .from('pastry_shops')
@@ -318,21 +344,6 @@ export default function BakerProfileScreen() {
               <Text style={[styles.userEmail, { color: C.textSecondary }]}>{profile?.email ?? '—'}</Text>
             </View>
           </View>
-
-          {/* Cüzdan Özeti */}
-          <TouchableOpacity
-            style={[styles.walletCard, { backgroundColor: C.primary }]}
-            onPress={() => (router as any).push('/(baker)/wallet')}
-            activeOpacity={0.85}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.walletLabel}>💰 Cüzdan Bakiyesi</Text>
-              <Text style={styles.walletAmount}>
-                ₺{Math.floor(walletBalance).toLocaleString('en-US')}
-              </Text>
-            </View>
-            <Text style={styles.walletArrow}>→</Text>
-          </TouchableOpacity>
 
           {/* Dükkan Profili */}
           {!shop && !editMode ? (
@@ -662,35 +673,39 @@ export default function BakerProfileScreen() {
               {/* Google Bilgileri */}
               <View style={styles.field}>
                 <Text style={[styles.label, { color: C.text }]}>Google Bilgileri</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                  placeholder="Google Maps URL"
-                  placeholderTextColor={C.placeholder}
-                  value={googleMapsUrl}
-                  onChangeText={setGoogleMapsUrl}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                />
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TextInput
-                    style={[styles.input, { flex: 1, backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                    placeholder="Google Puanı (ör: 4.7)"
-                    placeholderTextColor={C.placeholder}
-                    value={googleRating}
-                    onChangeText={setGoogleRating}
-                    keyboardType="decimal-pad"
-                    maxLength={3}
-                  />
-                  <TextInput
-                    style={[styles.input, { flex: 1, backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                    placeholder="Yorum Sayısı"
-                    placeholderTextColor={C.placeholder}
-                    value={googleReviewCount}
-                    onChangeText={setGoogleReviewCount}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                  />
-                </View>
+                <TouchableOpacity
+                  style={[styles.locationBtn, { backgroundColor: isFetchingGoogle ? C.border : '#4285F4' + '15', borderColor: '#4285F4' + '55' }]}
+                  disabled={isFetchingGoogle || !name.trim()}
+                  onPress={async () => {
+                    if (!name.trim()) {
+                      Alert.alert('Dükkan Adı Gerekli', 'Önce dükkan adını girin.');
+                      return;
+                    }
+                    setIsFetchingGoogle(true);
+                    const result = await fetchGooglePlaceByName(name.trim());
+                    setIsFetchingGoogle(false);
+                    if (result) {
+                      if (result.rating != null) setGoogleRating(String(result.rating));
+                      if (result.reviewCount > 0) setGoogleReviewCount(String(result.reviewCount));
+                      if (result.mapsUrl) setGoogleMapsUrl(result.mapsUrl);
+                      Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum`);
+                    } else {
+                      Alert.alert('Bulunamadı', `"${name.trim()}" için Google'da işletme bulunamadı. Dükkan adının Google Maps'teki adla aynı olduğundan emin olun.`);
+                    }
+                  }}
+                >
+                  {isFetchingGoogle
+                    ? <ActivityIndicator color="#4285F4" size="small" />
+                    : <Text style={[styles.locationBtnText, { color: '#4285F4' }]}>🌐 Google'dan Otomatik Getir</Text>
+                  }
+                </TouchableOpacity>
+                {(googleRating || googleReviewCount) ? (
+                  <View style={[styles.googlePreview, { backgroundColor: '#4285F4' + '12', borderColor: '#4285F4' + '33' }]}>
+                    <Text style={{ color: '#4285F4', fontSize: 13, fontWeight: '600' }}>
+                      🌐 Google · ★ {googleRating || '—'} · {googleReviewCount || '0'} yorum
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
               <View style={styles.formBtns}>
@@ -703,10 +718,10 @@ export default function BakerProfileScreen() {
                       setDescription(shop.description ?? '');
                       setAddress(shop.address ?? '');
                       setWorkingHours((shop.working_hours as WorkingHours | null) ?? { ...DEFAULT_HOURS });
-                      setInstagramUrl(shop.instagram_url ?? '');
-                      setFacebookUrl(shop.facebook_url ?? '');
-                      setTiktokUrl(shop.tiktok_url ?? '');
-                      setYoutubeUrl(shop.youtube_url ?? '');
+                      setInstagramUrl(extractHandle(shop.instagram_url ?? '', 'instagram'));
+                      setFacebookUrl(extractHandle(shop.facebook_url ?? '', 'facebook'));
+                      setTiktokUrl(extractHandle(shop.tiktok_url ?? '', 'tiktok'));
+                      setYoutubeUrl(extractHandle(shop.youtube_url ?? '', 'youtube'));
                       setGoogleMapsUrl(shop.google_maps_url ?? '');
                       setGoogleRating(shop.google_rating != null ? String(shop.google_rating) : '');
                       setGoogleReviewCount(shop.google_review_count > 0 ? String(shop.google_review_count) : '');
@@ -748,6 +763,43 @@ export default function BakerProfileScreen() {
                 </Text>
               </View>
               <Text style={[styles.shareArrow, { color: C.primary }]}>→</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Hesabı Sil */}
+          {!editMode && (
+            <TouchableOpacity
+              style={[styles.deleteAccountBtn, { borderColor: '#E53E3E' + '55', opacity: isDeleting ? 0.6 : 1 }]}
+              disabled={isDeleting}
+              onPress={() => {
+                Alert.alert(
+                  'Hesabı Sil',
+                  'Hesabınız kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?',
+                  [
+                    { text: 'İptal', style: 'cancel' },
+                    {
+                      text: 'Sil',
+                      style: 'destructive',
+                      onPress: async () => {
+                        setIsDeleting(true);
+                        const { error } = await supabase.rpc('delete_account');
+                        if (error) {
+                          setIsDeleting(false);
+                          Alert.alert('Hata', 'Hesap silinemedi. Lütfen tekrar deneyin.');
+                        } else {
+                          await signOut();
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              {isDeleting ? (
+                <ActivityIndicator size="small" color="#E53E3E" />
+              ) : (
+                <Text style={styles.deleteAccountText}>🗑 Hesabımı Sil</Text>
+              )}
             </TouchableOpacity>
           )}
 
@@ -860,15 +912,6 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontSize: FontSize.sm, fontWeight: '600' },
   saveBtn: { flex: 2, paddingVertical: 12, borderRadius: Radius.full, alignItems: 'center' },
   saveBtnText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
-  walletCard: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: Radius.xl, padding: Spacing.lg,
-    shadowColor: '#D4526E', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
-  },
-  walletLabel: { color: 'rgba(255,255,255,0.8)', fontSize: FontSize.sm, marginBottom: 4 },
-  walletAmount: { color: '#FFF', fontSize: 32, fontWeight: '800' },
-  walletArrow: { color: 'rgba(255,255,255,0.8)', fontSize: 24, fontWeight: '300' },
   shareCard: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,
@@ -891,4 +934,12 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full, borderWidth: 1,
   },
   socialBtnText: { fontSize: FontSize.xs, fontWeight: '700' },
+  googlePreview: {
+    padding: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, alignItems: 'center',
+  },
+  deleteAccountBtn: {
+    paddingVertical: 14, borderRadius: Radius.full, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  deleteAccountText: { color: '#E53E3E', fontSize: FontSize.sm, fontWeight: '700' },
 });

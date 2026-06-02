@@ -52,19 +52,15 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your camera</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
+	<string>Geri bildirim ekran görüntüsü veya fotoğraf için kamera erişimi gerekir.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your location</string>
+	<string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your location</string>
+	<string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your location</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your microphone</string>
+	<string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your photos</string>
+	<string>Sipariş görseli seçmek için fotoğraflarınıza erişim gerekir.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

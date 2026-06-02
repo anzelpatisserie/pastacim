@@ -34,15 +34,13 @@ export default function MessagesScreen() {
   const otherUserId = params.conversationId;   // karşı kişinin user_id'si
   const initialOrderId = params.orderId;       // ilk açılışta hangi sipariş bağlamı
 
-  const { user, isBaker, isCustomer } = useAuth();
+  const { user } = useAuth();
   const [messages, setMessages] = useState<MessageWithOrder[]>([]);
   const [otherUserName, setOtherUserName] = useState('');
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [sendOrderId, setSendOrderId] = useState<string | null>(initialOrderId ?? null);
-  const [deliveryDate, setDeliveryDate] = useState<Date | null>(null);
-  const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const mountedRef = useRef(true);
@@ -51,20 +49,6 @@ export default function MessagesScreen() {
   useEffect(() => {
     return () => { mountedRef.current = false; };
   }, []);
-
-  // Teslim tarihi + sipariş durumunu çek — sendOrderId değişince güncelle
-  useEffect(() => {
-    if (!sendOrderId) return;
-    _db.from('orders').select('delivery_date, status').eq('id', sendOrderId).single()
-      .then(({ data }: { data: { delivery_date: string | null; status: string } | null }) => {
-        if (!mountedRef.current) return;
-        setOrderStatus(data?.status ?? null);
-        setDeliveryDate(data?.delivery_date ? new Date(data.delivery_date) : null);
-      });
-  }, [sendOrderId]);
-
-  const chatBlockReason = null;
-  const isBeforeOffer = false;
 
   // Aktif süreç: iki kullanıcı arasında pending/accepted teklif + tamamlanmamış sipariş
   const [hasActiveProcess, setHasActiveProcess] = useState<boolean>(true);
@@ -255,7 +239,7 @@ export default function MessagesScreen() {
             return;
           }
           const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: 'images',
             quality: 0.7,
             allowsEditing: true,
           });
@@ -273,7 +257,7 @@ export default function MessagesScreen() {
             return;
           }
           const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: 'images',
             quality: 0.7,
           });
           if (!result.canceled && result.assets[0]) {
@@ -548,14 +532,6 @@ export default function MessagesScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.lockedTitle, { color: C.text }]}>Sohbet Kapatıldı</Text>
               <Text style={[styles.lockedSub, { color: C.textSecondary }]}>{expiredReason}</Text>
-            </View>
-          </View>
-        ) : isBeforeOffer ? (
-          <View style={[styles.lockedBar, { backgroundColor: C.card, borderTopColor: C.border }]}>
-            <Text style={styles.lockedEmoji}>⏳</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.lockedTitle, { color: C.text }]}>Mesajlaşma Henüz Aktif Değil</Text>
-              <Text style={[styles.lockedSub, { color: C.textSecondary }]}>{chatBlockReason}</Text>
             </View>
           </View>
         ) : (

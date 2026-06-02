@@ -77,10 +77,6 @@ export const FontSize = {
   xxxl: 30,
 } as const;
 
-// ─── Jeton ────────────────────────────────────────────────────────────────────
-export const TOKEN_WELCOME_BONUS = 3;
-export const TOKEN_ORDER_COST = 1;
-
 // ─── Harita ───────────────────────────────────────────────────────────────────
 export const DEFAULT_RADIUS_KM = 20;
 export const MAX_RADIUS_KM = 50;

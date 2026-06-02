@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { supabase, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize, FeedbackModal } from '@pastacim/shared';
@@ -40,6 +41,31 @@ export default function CustomerHomeScreen() {
   const [isLoading, setIsLoading]     = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [isDeleting, setIsDeleting]   = useState(false);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Hesabı Sil',
+      'Hesabınız kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            const { error } = await supabase.rpc('delete_account');
+            if (error) {
+              setIsDeleting(false);
+              Alert.alert('Hata', 'Hesap silinemedi. Lütfen tekrar deneyin.');
+            } else {
+              await signOut();
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // ─── Siparişler + Teklif Sayıları ─────────────────────────────────────────
   const fetchAll = useCallback(async (refresh = false) => {
@@ -109,7 +135,7 @@ export default function CustomerHomeScreen() {
             style={{ padding: 4 }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={{ fontSize: 20 }}>💬</Text>
+            <Text style={{ fontSize: 20 }}>📣</Text>
           </TouchableOpacity>
           {/* Bildirim zili */}
           <TouchableOpacity
@@ -145,6 +171,21 @@ export default function CustomerHomeScreen() {
         onClose={() => setShowFeedback(false)}
         appName="customer"
       />
+
+      {/* Hesabı Sil linki */}
+      {profile && (
+        <TouchableOpacity
+          style={[styles.deleteAccountRow, { borderBottomColor: C.border }]}
+          onPress={handleDeleteAccount}
+          disabled={isDeleting}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color="#E53E3E" />
+          ) : (
+            <Text style={styles.deleteAccountLink}>🗑 Hesabımı Sil</Text>
+          )}
+        </TouchableOpacity>
+      )}
 
       {/* İçerik */}
       {isLoading ? (
@@ -313,6 +354,10 @@ const styles = StyleSheet.create({
   name: { fontSize: FontSize.xl, fontWeight: '800' },
   signOutBtn: { paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.sm },
   signOutText: { fontSize: FontSize.xs, fontWeight: '600' },
+  deleteAccountRow: {
+    alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1,
+  },
+  deleteAccountLink: { color: '#E53E3E', fontSize: FontSize.xs, fontWeight: '600' },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   loadingText: { fontSize: FontSize.md },
