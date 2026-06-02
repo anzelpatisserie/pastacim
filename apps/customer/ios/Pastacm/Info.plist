@@ -31,12 +31,6 @@
 				<string>com.pastacim.customer</string>
 			</array>
 		</dict>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>exp+pastacim-customer</string>
-			</array>
-		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
@@ -53,20 +47,30 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Geri bildirim ekran görüntüsü veya fotoğraf için kamera erişimi gerekir.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>
+	<string>Allow $(PRODUCT_NAME) to access your location</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>
+	<string>Allow $(PRODUCT_NAME) to access your location</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Allow $(PRODUCT_NAME) to access your microphone</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Allow $(PRODUCT_NAME) to detect your current motion activity</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Sipariş görseli seçmek için fotoğraflarınıza erişim gerekir.</string>
+	<string>Sipariş veya dükkan görseli seçmek için fotoğraflarınıza erişim gerekir.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
 	</array>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

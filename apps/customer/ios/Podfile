@@ -1,3 +1,5 @@
+# Set by expo-router. This enables Fabric-only features from react-native-screens
+ENV['RNS_GAMMA_ENABLED'] ||= '1'
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
 
@@ -60,34 +62,5 @@ target 'Pastacm' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-    # Xcode 26 / Apple Clang 26 default C++ standard changed in a way that
-    # breaks Folly's static_assert(__cplusplus >= 201703L). Force c++20 on
-    # every pod target after react_native_post_install has already run.
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
-      end
-    end
-    # ExpoModulesCore.xcframework already compiles EXImageLoader with a newer
-    # API. The expo-image-loader pod ships an older source version that conflicts
-    # at both compile time (different module definitions) and link time (duplicate
-    # symbol). Exclude the .m from the pod so the xcframework's copy is used.
-    installer.pods_project.targets.each do |target|
-      if target.name == 'EXImageLoader'
-        target.build_configurations.each do |config|
-          config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = 'EXImageLoader.m'
-        end
-      end
-    end
-    # fmt 11.0.2 consteval is broken with Apple Clang 26+. Disable it for all
-    # Apple Clang by broadening the existing version-guarded disable check.
-    fmt_base_h = "#{installer.sandbox.root}/fmt/include/fmt/base.h"
-    if File.exist?(fmt_base_h)
-      content = File.read(fmt_base_h)
-      old_guard = "#elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L\n#  define FMT_USE_CONSTEVAL 0  // consteval is broken in Apple clang < 14."
-      new_guard = "#elif defined(__apple_build_version__)\n#  define FMT_USE_CONSTEVAL 0  // consteval is broken in Apple clang."
-      patched = content.include?(old_guard) ? content.gsub(old_guard, new_guard) : content
-      File.write(fmt_base_h, patched) if patched != content
-    end
   end
 end
