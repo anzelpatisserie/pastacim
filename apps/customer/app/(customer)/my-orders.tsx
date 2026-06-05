@@ -4,8 +4,9 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
+import { useNotifications } from '@/hooks/useNotifications';
 
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +27,7 @@ const STATUS_LABELS: Record<Order['status'], { label: string; color: string; emo
 export default function CustomerMyOrdersScreen() {
   const C = useThemeColors();
   const { user } = useAuth();
+  const { unreadCount } = useNotifications(user?.id);
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -176,9 +178,26 @@ export default function CustomerMyOrdersScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
-      <View style={[styles.header, { borderBottomColor: C.border }]}>
-        <Text style={[styles.title, { color: C.text }]}>Siparişlerim</Text>
-      </View>
+      <TabHeader
+        title="Siparişlerim"
+        unreadCount={unreadCount}
+        onBellPress={() => router.push('/(customer)/notifications' as never)}
+        onAddPress={() => router.push('/(customer)/order/create')}
+      />
+
+      {/* Üst CTA: Teklif Al */}
+      <TouchableOpacity
+        style={[styles.heroCta, { backgroundColor: C.primary }]}
+        onPress={() => router.push('/(customer)/order/create')}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.heroCtaEmoji}>🎂</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.heroCtaTitle}>Teklif Al</Text>
+          <Text style={styles.heroCtaSub}>Hayalindeki pastayı tarif et, ustalar teklif versin</Text>
+        </View>
+        <Text style={styles.heroCtaArrow}>→</Text>
+      </TouchableOpacity>
 
       {isLoading ? (
         <View style={styles.centered}>
@@ -192,17 +211,34 @@ export default function CustomerMyOrdersScreen() {
           </TouchableOpacity>
         </View>
       ) : orders.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyEmoji}>📦</Text>
+        <View style={styles.emptyWrap}>
+          <View style={[styles.emptyCircle, { backgroundColor: C.primary + '15' }]}>
+            <Text style={styles.emptyHeroEmoji}>🎂</Text>
+          </View>
           <Text style={[styles.emptyTitle, { color: C.text }]}>Henüz sipariş yok</Text>
           <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-            İlk siparişini oluşturmak için ana sayfaya git
+            Hayalindeki pastayı tarif et,{'\n'}yakındaki ustalar sana teklif göndersin.
           </Text>
+          <View style={styles.emptyHints}>
+            <View style={styles.emptyHintRow}>
+              <Text style={styles.emptyHintEmoji}>📝</Text>
+              <Text style={[styles.emptyHintText, { color: C.textSecondary }]}>Ne istediğini detaylı yaz</Text>
+            </View>
+            <View style={styles.emptyHintRow}>
+              <Text style={styles.emptyHintEmoji}>📸</Text>
+              <Text style={[styles.emptyHintText, { color: C.textSecondary }]}>İstersen referans görsel ekle</Text>
+            </View>
+            <View style={styles.emptyHintRow}>
+              <Text style={styles.emptyHintEmoji}>🎯</Text>
+              <Text style={[styles.emptyHintText, { color: C.textSecondary }]}>Gelen tekliflerden en iyisini seç</Text>
+            </View>
+          </View>
           <TouchableOpacity
-            style={[styles.createBtn, { backgroundColor: C.primary }]}
+            style={[styles.emptyCta, { backgroundColor: C.primary }]}
             onPress={() => router.push('/(customer)/order/create')}
+            activeOpacity={0.85}
           >
-            <Text style={styles.createBtnText}>+ Teklif Al</Text>
+            <Text style={styles.emptyCtaText}>🎂 İlk Siparişini Oluştur</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -407,6 +443,39 @@ function OrderCard({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1 },
+  heroCta: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    marginHorizontal: Spacing.lg, marginTop: Spacing.md,
+    paddingHorizontal: Spacing.md, paddingVertical: 14,
+    borderRadius: Radius.full,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+  },
+  heroCtaEmoji: { fontSize: 28 },
+  heroCtaTitle: { color: '#FFF', fontSize: FontSize.md, fontWeight: '800' },
+  heroCtaSub: { color: '#FFF', fontSize: 11, opacity: 0.9, marginTop: 1 },
+  heroCtaArrow: { color: '#FFF', fontSize: 22, fontWeight: '300' },
+  emptyWrap: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: Spacing.xl, gap: Spacing.md,
+  },
+  emptyCircle: {
+    width: 130, height: 130, borderRadius: 65,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyHeroEmoji: { fontSize: 72 },
+  emptyHints: { gap: Spacing.sm, marginTop: Spacing.md, marginBottom: Spacing.md, alignSelf: 'stretch' },
+  emptyHintRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  emptyHintEmoji: { fontSize: 20 },
+  emptyHintText: { fontSize: FontSize.sm, flex: 1 },
+  emptyCta: {
+    paddingHorizontal: Spacing.xl, paddingVertical: 14,
+    borderRadius: Radius.full, alignSelf: 'stretch', alignItems: 'center',
+    shadowColor: '#D4526E', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 4,
+  },
+  emptyCtaText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '700' },
   title: { fontSize: FontSize.xl, fontWeight: '800' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   errorText: { fontSize: FontSize.md, textAlign: 'center' },

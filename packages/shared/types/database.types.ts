@@ -394,6 +394,7 @@ export type Database = {
           created_at: string
           customer_id: string
           id: string
+          is_anonymous: boolean
           order_id: string
           rating: number
           shop_id: string
@@ -404,6 +405,7 @@ export type Database = {
           created_at?: string
           customer_id: string
           id?: string
+          is_anonymous?: boolean
           order_id: string
           rating: number
           shop_id: string
@@ -414,6 +416,7 @@ export type Database = {
           created_at?: string
           customer_id?: string
           id?: string
+          is_anonymous?: boolean
           order_id?: string
           rating?: number
           shop_id?: string
@@ -631,6 +634,7 @@ export type Database = {
     }
     Functions: {
       accept_offer: { Args: { p_offer_id: string }; Returns: Json }
+      add_wallet_balance: { Args: { p_amount: number }; Returns: Json }
       approve_wallet_top_up: { Args: { p_request_id: string }; Returns: Json }
       baker_has_offer_for_order: {
         Args: { p_order_id: string }
@@ -651,9 +655,17 @@ export type Database = {
         Args: {
           p_address: string
           p_description: string
+          p_facebook_url?: string
+          p_google_maps_url?: string
+          p_google_rating?: number
+          p_google_review_count?: number
+          p_instagram_url?: string
           p_latitude: number
           p_longitude: number
           p_name: string
+          p_tiktok_url?: string
+          p_working_hours?: Json
+          p_youtube_url?: string
         }
         Returns: Json
       }
@@ -666,6 +678,7 @@ export type Database = {
         Args: { p_message_id: string }
         Returns: undefined
       }
+      earth: { Args: Record<PropertyKey, never>; Returns: number }
       get_conversations: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -674,6 +687,27 @@ export type Database = {
           other_user_id: string
           other_user_name: string
           unread_count: number
+        }[]
+      }
+      get_customer_summary_for_baker: {
+        Args: { p_order_id: string }
+        Returns: {
+          avatar_url: string | null
+          cancelled_orders: number
+          completed_orders: number
+          full_name: string | null
+          member_days: number
+          member_since: string
+          total_orders: number
+        }[]
+      }
+      get_order_offer_summary: {
+        Args: { p_order_id: string }
+        Returns: {
+          is_mine: boolean
+          price: number
+          shop_rating: number
+          shop_review_count: number
         }[]
       }
       nearby_bakers: {
@@ -695,88 +729,64 @@ export type Database = {
         Args: { lat: number; lng: number; radius_km: number }
         Returns: {
           created_at: string
+          customer_avatar_url: string | null
+          customer_completed_orders: number
+          customer_full_name: string | null
           customer_id: string
-          delivery_date: string
+          customer_member_days: number
+          customer_total_orders: number
+          delivery_address: string | null
+          delivery_date: string | null
+          delivery_time: string | null
           delivery_type: string
-          description: string
+          description: string | null
           distance_km: number
           id: string
+          is_urgent: boolean
           photos: Json
-          serving_size: number
+          serving_size: number | null
           status: string
           title: string
         }[]
       }
-      place_order:
-        | {
-            Args: {
-              p_delivery_address?: string
-              p_delivery_date?: string
-              p_delivery_latitude?: number
-              p_delivery_longitude?: number
-              p_delivery_type?: string
-              p_description?: string
-              p_latitude?: number
-              p_longitude?: number
-              p_search_radius_km?: number
-              p_serving_size?: number
-              p_title: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_delivery_address?: string
-              p_delivery_date?: string
-              p_delivery_latitude?: number
-              p_delivery_longitude?: number
-              p_delivery_time?: string
-              p_delivery_type?: string
-              p_description?: string
-              p_is_urgent?: boolean
-              p_latitude?: number
-              p_longitude?: number
-              p_search_radius_km?: number
-              p_serving_size?: number
-              p_title: string
-            }
-            Returns: Json
-          }
+      place_order: {
+        Args: {
+          p_delivery_address?: string
+          p_delivery_date?: string
+          p_delivery_latitude?: number
+          p_delivery_longitude?: number
+          p_delivery_time?: string
+          p_delivery_type?: string
+          p_description?: string
+          p_is_urgent?: boolean
+          p_latitude?: number
+          p_longitude?: number
+          p_search_radius_km?: number
+          p_serving_size?: number
+          p_title: string
+        }
+        Returns: Json
+      }
       register_push_token: { Args: { p_token: string }; Returns: undefined }
       reject_offer: { Args: { p_offer_id: string }; Returns: Json }
       request_wallet_top_up: {
         Args: { p_amount: number; p_note?: string }
         Returns: Json
       }
-      set_order_status:
-        | {
-            Args: {
-              p_order_id: string
-              p_status: Database["public"]["Enums"]["order_status"]
-            }
-            Returns: Json
-          }
-        | { Args: { p_order_id: string; p_status: string }; Returns: Json }
-      submit_offer:
-        | {
-            Args: {
-              p_estimated_days: number
-              p_message: string
-              p_order_id: string
-              p_price: number
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_estimated_days?: number
-              p_message?: string
-              p_order_id: string
-              p_price: number
-              p_shop_id: string
-            }
-            Returns: Json
-          }
+      set_order_status: {
+        Args: { p_order_id: string; p_status: Database["public"]["Enums"]["order_status"] }
+        Returns: Json
+      }
+      submit_offer: {
+        Args: {
+          p_estimated_days?: number
+          p_message?: string
+          p_order_id: string
+          p_price: number
+          p_shop_id: string
+        }
+        Returns: Json
+      }
       withdraw_offer: { Args: { p_offer_id: string }; Returns: Json }
     }
     Enums: {

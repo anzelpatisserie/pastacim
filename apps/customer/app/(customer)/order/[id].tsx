@@ -192,7 +192,11 @@ export default function OrderDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
           <View style={{ width: 48 }} />
@@ -218,7 +222,11 @@ export default function OrderDetailScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: C.border }]}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          activeOpacity={0.6}
+        >
           <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: C.text }]}>Sipariş Detayı</Text>

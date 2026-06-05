@@ -4,13 +4,16 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { rpcGetConversations, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { rpcGetConversations, useAuth, useThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
+import { useNotifications } from '../../hooks/useNotifications';
 
 type Conversation = Database['public']['Functions']['get_conversations']['Returns'][number];
 
 export default function BakerMessagesScreen() {
   const C = useThemeColors();
+  const { user } = useAuth();
+  const { unreadCount } = useNotifications(user?.id);
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -28,9 +31,11 @@ export default function BakerMessagesScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
-      <View style={[styles.header, { borderBottomColor: C.border }]}>
-        <Text style={[styles.title, { color: C.text }]}>Mesajlar</Text>
-      </View>
+      <TabHeader
+        title="Mesajlar"
+        unreadCount={unreadCount}
+        onBellPress={() => router.push('/(baker)/notifications' as never)}
+      />
 
       {isLoading ? (
         <View style={styles.centered}><ActivityIndicator size="large" color={C.primary} /></View>

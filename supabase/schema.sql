@@ -2,9 +2,21 @@
 --  Pastacım — Supabase Baseline Şema
 --  Çalıştırma: Supabase Dashboard > SQL Editor > New Query
 --
---  Bu dosya production veritabanının şu anki halini yansıtır.
---  Sıfırdan kurulum için tüm dosyayı çalıştırın; sonraki
---  değişiklikler `supabase/migrations/` altına eklenmelidir.
+--  Bu dosya 1 Haziran 2026 baseline'ını yansıtır.
+--
+--  ⚠️ Sıfırdan kurulum sırası:
+--    1. Bu dosyayı (schema.sql) çalıştırın
+--    2. supabase/migrations/0002_remove_wallet_fee.sql
+--    3. supabase/migrations/0003_delete_account_rpc.sql
+--    4. supabase/migrations/0004_consolidated_jun3_jun5.sql
+--       (3-5 Haziran arası uygulanan 15 değişikliği toplar:
+--        feedbacks/wallet_top_up_requests tabloları, user-avatars
+--        storage bucket, RLS policies, yeni/değişen RPC'ler,
+--        pg_cron schedule, reviews.is_anonymous, pastry_shops UNIQUE)
+--
+--  Sonraki değişiklikler için yeni `0005_*.sql` migration dosyası
+--  yazılmalı; Supabase Dashboard veya MCP üzerinden direkt
+--  uygulamak yerine repo'ya commit edilmeli.
 -- ============================================================
 
 -- ─── Gerekli Extension'lar ────────────────────────────────────

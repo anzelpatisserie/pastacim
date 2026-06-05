@@ -3,11 +3,17 @@ import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, Image, Switch, Share, Linking,
+  Modal, LayoutAnimation, UIManager,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION } from '@pastacim/shared';
+import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, FeedbackModal, TabHeader } from '@pastacim/shared';
+import { useNotifications } from '../../hooks/useNotifications';
 import type { Database } from '@pastacim/shared';
 
 type Shop = Database['public']['Tables']['pastry_shops']['Row'];
@@ -40,8 +46,30 @@ function buildSocialUrl(handle: string, platform: 'instagram' | 'facebook' | 'ti
 
 const PLACES_API_KEY = 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo';
 
+function normalizeShopName(s: string): string {
+  return s
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[^a-z0-9çğıöşü\s]/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function nameSimilarity(a: string, b: string): number {
+  const A = normalizeShopName(a);
+  const B = normalizeShopName(b);
+  if (!A || !B) return 0;
+  if (A === B) return 1;
+  if (B.includes(A) || A.includes(B)) return 0.85;
+  const aTokens = new Set(A.split(' '));
+  const bTokens = new Set(B.split(' '));
+  let common = 0;
+  aTokens.forEach((t) => { if (bTokens.has(t)) common += 1; });
+  const denom = Math.max(aTokens.size, bTokens.size);
+  return denom > 0 ? common / denom : 0;
+}
+
 async function fetchGooglePlaceByName(shopName: string): Promise<{
   rating: number | null; reviewCount: number; mapsUrl: string | null;
+  matchedName: string | null; similarity: number;
 } | null> {
   try {
     const res = await fetch(
@@ -50,6 +78,8 @@ async function fetchGooglePlaceByName(shopName: string): Promise<{
     const data = await res.json();
     if (data.results && data.results.length > 0) {
       const place = data.results[0];
+      const matchedName = (place.name ?? null) as string | null;
+      const sim = matchedName ? nameSimilarity(shopName, matchedName) : 0;
       const mapsUrl = place.place_id
         ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
         : null;
@@ -57,6 +87,8 @@ async function fetchGooglePlaceByName(shopName: string): Promise<{
         rating: place.rating ?? null,
         reviewCount: place.user_ratings_total ?? 0,
         mapsUrl,
+        matchedName,
+        similarity: sim,
       };
     }
     return null;
@@ -73,6 +105,7 @@ type Review = {
   rating: number;
   comment: string | null;
   created_at: string;
+  is_anonymous: boolean;
   customer: { full_name: string | null } | null;
 };
 
@@ -92,7 +125,8 @@ const DEFAULT_HOURS: WorkingHours = DAY_KEYS.reduce((acc, d) => {
 
 export default function BakerProfileScreen() {
   const C = useThemeColors();
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, refreshProfile } = useAuth();
+  const { unreadCount } = useNotifications(profile?.id);
 
   const [shop, setShop] = useState<Shop | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -103,6 +137,125 @@ export default function BakerProfileScreen() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+
+  // Collapse + hesap ayarları
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  const toggleSettings = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSettingsOpen((v) => !v);
+  };
+  const toggleReviews = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setReviewsOpen((v) => !v);
+  };
+
+  const pickAvatar = async () => {
+    if (!profile?.id) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('İzin Gerekli', 'Profil resmi seçmek için galeri erişimine izin verin.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const asset = result.assets[0];
+      const path = `${profile.id}/avatar.jpg`;
+      const response = await fetch(asset.uri);
+      if (!response.ok) throw new Error('Görsel okunamadı');
+      const arrayBuffer = await response.arrayBuffer();
+      const { error: upErr } = await supabase.storage
+        .from('user-avatars')
+        .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+      if (upErr) throw new Error(upErr.message);
+      const { data: urlData } = supabase.storage.from('user-avatars').getPublicUrl(path);
+      const url = urlData.publicUrl + `?t=${Date.now()}`;
+      const { error: updErr } = await _db.from('users').update({ avatar_url: url }).eq('id', profile.id);
+      if (updErr) throw new Error(updErr.message);
+      await refreshProfile();
+      Alert.alert('✅ Güncellendi', 'Profil resminiz güncellendi.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      Alert.alert('Hata', `Profil resmi yüklenemedi: ${msg}`);
+    }
+    setIsUploadingAvatar(false);
+  };
+
+  const openPhoneModal = () => {
+    setPhoneInput(profile?.phone ?? '');
+    setShowPhoneModal(true);
+  };
+
+  const savePhone = async () => {
+    if (!profile?.id) return;
+    setIsSavingPhone(true);
+    const { error } = await _db
+      .from('users')
+      .update({ phone: phoneInput.trim() || null })
+      .eq('id', profile.id);
+    setIsSavingPhone(false);
+    if (error) {
+      Alert.alert('Hata', 'Telefon kaydedilemedi.');
+    } else {
+      await refreshProfile();
+      setShowPhoneModal(false);
+    }
+  };
+
+  const handlePasswordReset = () => {
+    if (!profile?.email) {
+      Alert.alert('Hata', 'E-posta adresiniz bulunamadı.');
+      return;
+    }
+    Alert.alert(
+      'Şifre Sıfırlama',
+      `Şifre sıfırlama bağlantısı ${profile.email} adresine gönderilsin mi?`,
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Gönder',
+          onPress: async () => {
+            setIsResettingPassword(true);
+            const { error } = await supabase.auth.resetPasswordForEmail(profile.email!, {
+              redirectTo: 'pastacim-pro://auth-callback?type=recovery',
+            });
+            setIsResettingPassword(false);
+            if (error) {
+              Alert.alert('Hata', 'Bağlantı gönderilemedi: ' + error.message);
+            } else {
+              Alert.alert('✅ Gönderildi', 'E-posta kutunuzu kontrol edin.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSignOut = () => {
+    Alert.alert(
+      'Çıkış Yap',
+      'Hesabınızdan çıkmak istediğinizden emin misiniz?',
+      [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Çıkış Yap', style: 'destructive', onPress: signOut },
+      ]
+    );
+  };
 
   // Form state
   const [name, setName] = useState('');
@@ -126,12 +279,14 @@ export default function BakerProfileScreen() {
     if (!profile?.id) return;
     setIsLoading(true);
 
-    const { data } = await _db
+    // En yeni dükkanı al (güvenlik için — duplicate olursa son yaratılan tutulur)
+    const { data: shopRows } = await _db
       .from('pastry_shops')
       .select('*')
       .eq('user_id', profile.id)
-      .maybeSingle();
-    const shopData = data as Shop | null;
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const shopData = (shopRows && shopRows.length > 0 ? shopRows[0] : null) as Shop | null;
     setShop(shopData ?? null);
     if (shopData) {
       setName(shopData.name);
@@ -153,7 +308,7 @@ export default function BakerProfileScreen() {
       // Yorumları yükle
       const { data: revData } = await _db
         .from('reviews')
-        .select('id, rating, comment, created_at, customer:users!customer_id(full_name)')
+        .select('id, rating, comment, created_at, is_anonymous, customer:users!customer_id(full_name)')
         .eq('shop_id', shopData.id)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -285,14 +440,25 @@ export default function BakerProfileScreen() {
         setEditMode(false);
       }
     } else {
-      const { error } = await _db.from('pastry_shops').insert({
-        user_id: profile.id,
-        ...payload,
-        latitude: payload.latitude ?? DEFAULT_LOCATION.latitude,
-        longitude: payload.longitude ?? DEFAULT_LOCATION.longitude,
+      // RPC ile oluştur — duplicate koruması ve is_baker güncellemesi otomatik
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: rpcData, error: rpcErr } = await (supabase as any).rpc('create_shop', {
+        p_name: payload.name,
+        p_description: payload.description,
+        p_address: payload.address,
+        p_latitude: payload.latitude ?? DEFAULT_LOCATION.latitude,
+        p_longitude: payload.longitude ?? DEFAULT_LOCATION.longitude,
       });
-      if (error) {
-        Alert.alert('Hata', 'Dükkan oluşturulamadı: ' + error.message);
+      const rpcErrMsg = (rpcData as { error?: string } | null)?.error;
+      if (rpcErr) {
+        Alert.alert('Hata', 'Dükkan oluşturulamadı: ' + rpcErr.message);
+      } else if (rpcErrMsg === 'mevcut_dukkan') {
+        // Zaten dükkanı var, son halini yükle
+        Alert.alert('Bilgi', 'Zaten bir dükkanınız var, mevcut dükkan yüklendi.');
+        await loadShop();
+        setEditMode(false);
+      } else if (rpcErrMsg) {
+        Alert.alert('Hata', rpcErrMsg);
       } else {
         Alert.alert('🎉 Dükkan Oluşturuldu!', 'Artık taleplere teklif verebilirsiniz.');
         await loadShop();
@@ -322,12 +488,11 @@ export default function BakerProfileScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <Text style={[styles.title, { color: C.text }]}>Profilim</Text>
-          <TouchableOpacity style={[styles.signOutBtn, { backgroundColor: C.border }]} onPress={signOut}>
-            <Text style={[styles.signOutText, { color: C.textSecondary }]}>Çıkış</Text>
-          </TouchableOpacity>
-        </View>
+        <TabHeader
+          title="Profilim"
+          unreadCount={unreadCount}
+          onBellPress={() => router.push('/(baker)/notifications' as never)}
+        />
 
         <ScrollView
           contentContainerStyle={styles.content}
@@ -336,12 +501,29 @@ export default function BakerProfileScreen() {
         >
           {/* Kullanıcı Bilgileri */}
           <View style={[styles.userCard, { backgroundColor: C.card, borderColor: C.border }]}>
-            <View style={[styles.avatarCircle, { backgroundColor: C.primary + '22' }]}>
-              <Text style={styles.avatarEmoji}>👨‍🍳</Text>
-            </View>
+            <TouchableOpacity
+              onPress={pickAvatar}
+              disabled={isUploadingAvatar}
+              style={[styles.avatarCircle, { backgroundColor: C.primary + '22' }]}
+              activeOpacity={0.8}
+            >
+              {profile?.avatar_url ? (
+                <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarEmoji}>👨‍🍳</Text>
+              )}
+              {isUploadingAvatar ? (
+                <View style={styles.avatarOverlay}>
+                  <ActivityIndicator color="#FFF" />
+                </View>
+              ) : null}
+            </TouchableOpacity>
             <View style={{ flex: 1 }}>
               <Text style={[styles.userName, { color: C.text }]}>{profile?.full_name ?? '—'}</Text>
               <Text style={[styles.userEmail, { color: C.textSecondary }]}>{profile?.email ?? '—'}</Text>
+              {profile?.phone ? (
+                <Text style={[styles.userPhone, { color: C.textSecondary }]}>📱 {profile.phone}</Text>
+              ) : null}
             </View>
           </View>
 
@@ -448,64 +630,44 @@ export default function BakerProfileScreen() {
                   <View style={styles.socialRow}>
                     {shop.instagram_url && (
                       <TouchableOpacity
-                        style={[styles.socialBtn, { backgroundColor: '#E1306C' + '22', borderColor: '#E1306C' + '44' }]}
+                        style={[styles.socialBtn, { backgroundColor: '#E1306C' }]}
                         onPress={() => Linking.openURL(shop.instagram_url!)}
+                        activeOpacity={0.85}
                       >
-                        <Text style={[styles.socialBtnText, { color: '#E1306C' }]}>Instagram</Text>
+                        <Text style={styles.socialBtnText}>📸 Instagram'ı Gör →</Text>
                       </TouchableOpacity>
                     )}
                     {shop.facebook_url && (
                       <TouchableOpacity
-                        style={[styles.socialBtn, { backgroundColor: '#1877F2' + '22', borderColor: '#1877F2' + '44' }]}
+                        style={[styles.socialBtn, { backgroundColor: '#1877F2' }]}
                         onPress={() => Linking.openURL(shop.facebook_url!)}
+                        activeOpacity={0.85}
                       >
-                        <Text style={[styles.socialBtnText, { color: '#1877F2' }]}>Facebook</Text>
+                        <Text style={styles.socialBtnText}>👍 Facebook'u Gör →</Text>
                       </TouchableOpacity>
                     )}
                     {shop.tiktok_url && (
                       <TouchableOpacity
-                        style={[styles.socialBtn, { backgroundColor: '#000000' + '15', borderColor: C.border }]}
+                        style={[styles.socialBtn, { backgroundColor: '#000000' }]}
                         onPress={() => Linking.openURL(shop.tiktok_url!)}
+                        activeOpacity={0.85}
                       >
-                        <Text style={[styles.socialBtnText, { color: C.text }]}>TikTok</Text>
+                        <Text style={styles.socialBtnText}>🎵 TikTok'u Gör →</Text>
                       </TouchableOpacity>
                     )}
                     {shop.youtube_url && (
                       <TouchableOpacity
-                        style={[styles.socialBtn, { backgroundColor: '#FF0000' + '15', borderColor: '#FF0000' + '44' }]}
+                        style={[styles.socialBtn, { backgroundColor: '#FF0000' }]}
                         onPress={() => Linking.openURL(shop.youtube_url!)}
+                        activeOpacity={0.85}
                       >
-                        <Text style={[styles.socialBtnText, { color: '#FF0000' }]}>YouTube</Text>
+                        <Text style={styles.socialBtnText}>▶ YouTube'u Gör →</Text>
                       </TouchableOpacity>
                     )}
                   </View>
                 )}
               </View>
 
-              {/* Yorum Listesi */}
-              {reviews.length > 0 && (
-                <View style={[styles.reviewsSection, { backgroundColor: C.card, borderColor: C.border }]}>
-                  <Text style={[styles.reviewsTitle, { color: C.text }]}>📝 Müşteri Yorumları</Text>
-                  {reviews.map((r) => (
-                    <View key={r.id} style={[styles.reviewItem, { borderTopColor: C.border }]}>
-                      <View style={styles.reviewHeader}>
-                        <Text style={[styles.reviewCustomer, { color: C.text }]}>
-                          {r.customer?.full_name ?? 'Müşteri'}
-                        </Text>
-                        <Text style={styles.reviewStars}>
-                          {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
-                        </Text>
-                      </View>
-                      {r.comment && (
-                        <Text style={[styles.reviewComment, { color: C.textSecondary }]}>{r.comment}</Text>
-                      )}
-                      <Text style={[styles.reviewDate, { color: C.placeholder }]}>
-                        {new Date(r.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
             </>
           ) : null}
 
@@ -632,42 +794,39 @@ export default function BakerProfileScreen() {
               {/* Sosyal Medya */}
               <View style={styles.field}>
                 <Text style={[styles.label, { color: C.text }]}>Sosyal Medya (kullanıcı adı)</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                  placeholder="📸 Instagram kullanıcı adı"
-                  placeholderTextColor={C.placeholder}
-                  value={instagramUrl}
-                  onChangeText={setInstagramUrl}
-                  autoCapitalize="none"
-                  keyboardType="default"
-                />
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                  placeholder="👍 Facebook kullanıcı adı"
-                  placeholderTextColor={C.placeholder}
-                  value={facebookUrl}
-                  onChangeText={setFacebookUrl}
-                  autoCapitalize="none"
-                  keyboardType="default"
-                />
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                  placeholder="🎵 TikTok kullanıcı adı"
-                  placeholderTextColor={C.placeholder}
-                  value={tiktokUrl}
-                  onChangeText={setTiktokUrl}
-                  autoCapitalize="none"
-                  keyboardType="default"
-                />
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
-                  placeholder="▶ YouTube kullanıcı adı veya kanal adı"
-                  placeholderTextColor={C.placeholder}
-                  value={youtubeUrl}
-                  onChangeText={setYoutubeUrl}
-                  autoCapitalize="none"
-                  keyboardType="default"
-                />
+                {([
+                  { key: 'instagram' as const, value: instagramUrl, set: setInstagramUrl, placeholder: '📸 Instagram kullanıcı adı' },
+                  { key: 'facebook'  as const, value: facebookUrl,  set: setFacebookUrl,  placeholder: '👍 Facebook kullanıcı adı' },
+                  { key: 'tiktok'    as const, value: tiktokUrl,    set: setTiktokUrl,    placeholder: '🎵 TikTok kullanıcı adı' },
+                  { key: 'youtube'   as const, value: youtubeUrl,   set: setYoutubeUrl,   placeholder: '▶ YouTube kullanıcı adı veya kanal adı' },
+                ]).map((row) => (
+                  <View key={row.key} style={styles.socialInputRow}>
+                    <TextInput
+                      style={[styles.input, styles.socialInputFlex, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                      placeholder={row.placeholder}
+                      placeholderTextColor={C.placeholder}
+                      value={row.value}
+                      onChangeText={row.set}
+                      autoCapitalize="none"
+                      keyboardType="default"
+                    />
+                    <TouchableOpacity
+                      style={[styles.verifyBtn, { borderColor: row.value.trim() ? C.primary + '88' : C.border }]}
+                      onPress={() => {
+                        const url = buildSocialUrl(row.value, row.key);
+                        if (!url) {
+                          Alert.alert('Kullanıcı Adı Boş', 'Önce bir kullanıcı adı yazın.');
+                          return;
+                        }
+                        Linking.openURL(url).catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'));
+                      }}
+                      disabled={!row.value.trim()}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={[styles.verifyBtnText, { color: row.value.trim() ? C.primary : C.placeholder }]}>🔗 Aç</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
               </View>
 
               {/* Google Bilgileri */}
@@ -684,13 +843,20 @@ export default function BakerProfileScreen() {
                     setIsFetchingGoogle(true);
                     const result = await fetchGooglePlaceByName(name.trim());
                     setIsFetchingGoogle(false);
-                    if (result) {
-                      if (result.rating != null) setGoogleRating(String(result.rating));
-                      if (result.reviewCount > 0) setGoogleReviewCount(String(result.reviewCount));
-                      if (result.mapsUrl) setGoogleMapsUrl(result.mapsUrl);
-                      Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum`);
-                    } else {
+                    if (!result) {
                       Alert.alert('Bulunamadı', `"${name.trim()}" için Google'da işletme bulunamadı. Dükkan adının Google Maps'teki adla aynı olduğundan emin olun.`);
+                      return;
+                    }
+                    if (result.rating != null) setGoogleRating(String(result.rating));
+                    if (result.reviewCount > 0) setGoogleReviewCount(String(result.reviewCount));
+                    if (result.mapsUrl) setGoogleMapsUrl(result.mapsUrl);
+                    if (result.similarity < 0.5 && result.matchedName) {
+                      Alert.alert(
+                        '⚠️ Tam Eşleşme Bulunamadı',
+                        `Google'dan dönen: "${result.matchedName}"\nSizin yazdığınız: "${name.trim()}"\n\nBilgiler dolduruldu ama yanlış işletme olabilir. Lütfen kontrol edip kaydetmeden önce gerekirse temizleyin.`
+                      );
+                    } else {
+                      Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum${result.matchedName ? `\n(${result.matchedName})` : ''}`);
                     }
                   }}
                 >
@@ -745,6 +911,207 @@ export default function BakerProfileScreen() {
             </View>
           )}
 
+          <FeedbackModal
+            visible={showFeedback}
+            onClose={() => setShowFeedback(false)}
+            appName="baker"
+          />
+
+          {/* Müşteri Yorumları (Collapsible) */}
+          {!editMode && shop && reviews.length > 0 && (
+            <View style={[styles.settingsCard, { backgroundColor: C.card, borderColor: C.border }]}>
+              <TouchableOpacity style={styles.settingsHeader} onPress={toggleReviews} activeOpacity={0.7}>
+                <Text style={[styles.settingsTitle, { color: C.text }]}>
+                  📝 Müşteri Yorumları ({reviews.length})
+                </Text>
+                <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                  {reviewsOpen ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {reviewsOpen && reviews.map((r) => (
+                <View key={r.id} style={[styles.reviewItem, { borderTopColor: C.border }]}>
+                  <View style={styles.reviewHeader}>
+                    <Text style={[styles.reviewCustomer, { color: C.text }]}>
+                      {r.is_anonymous ? 'Anonim' : (r.customer?.full_name ?? 'Müşteri')}
+                    </Text>
+                    <Text style={styles.reviewStars}>
+                      {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                    </Text>
+                  </View>
+                  {r.comment && (
+                    <Text style={[styles.reviewComment, { color: C.textSecondary }]}>{r.comment}</Text>
+                  )}
+                  <Text style={[styles.reviewDate, { color: C.placeholder }]}>
+                    {new Date(r.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Hesap Ayarları (Collapsible) */}
+          {!editMode && (
+            <View style={[styles.settingsCard, { backgroundColor: C.card, borderColor: C.border }]}>
+              <TouchableOpacity style={styles.settingsHeader} onPress={toggleSettings} activeOpacity={0.7}>
+                <Text style={[styles.settingsTitle, { color: C.text }]}>⚙️ Hesap Ayarları</Text>
+                <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                  {settingsOpen ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+
+              {settingsOpen && (
+                <View>
+                  {/* Profil Resmi Düzenle */}
+                  <TouchableOpacity
+                    style={[styles.settingRow, { borderTopColor: C.border }]}
+                    onPress={pickAvatar}
+                    disabled={isUploadingAvatar}
+                  >
+                    <Text style={styles.settingEmoji}>🖼</Text>
+                    <Text style={[styles.settingText, { color: C.text }]}>Profil Resmi Düzenle</Text>
+                    {isUploadingAvatar ? (
+                      <ActivityIndicator size="small" color={C.primary} />
+                    ) : (
+                      <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Cep Telefonu */}
+                  <TouchableOpacity
+                    style={[styles.settingRow, { borderTopColor: C.border }]}
+                    onPress={openPhoneModal}
+                  >
+                    <Text style={styles.settingEmoji}>📱</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingText, { color: C.text }]}>Cep Telefonu</Text>
+                      {profile?.phone ? (
+                        <Text style={[styles.settingSub, { color: C.textSecondary }]}>{profile.phone}</Text>
+                      ) : (
+                        <Text style={[styles.settingSub, { color: C.placeholder }]}>Eklenmedi</Text>
+                      )}
+                    </View>
+                    <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                  </TouchableOpacity>
+
+                  {/* Şifre Değiştir */}
+                  <TouchableOpacity
+                    style={[styles.settingRow, { borderTopColor: C.border }]}
+                    onPress={handlePasswordReset}
+                    disabled={isResettingPassword}
+                  >
+                    <Text style={styles.settingEmoji}>🔒</Text>
+                    <Text style={[styles.settingText, { color: C.text }]}>Şifre Değiştir</Text>
+                    {isResettingPassword ? (
+                      <ActivityIndicator size="small" color={C.primary} />
+                    ) : (
+                      <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Çıkış Yap */}
+                  <TouchableOpacity
+                    style={[styles.settingRow, { borderTopColor: C.border }]}
+                    onPress={handleSignOut}
+                  >
+                    <Text style={styles.settingEmoji}>🚪</Text>
+                    <Text style={[styles.settingText, { color: C.text }]}>Çıkış Yap</Text>
+                    <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                  </TouchableOpacity>
+
+                  {/* Hesabımı Sil */}
+                  <TouchableOpacity
+                    style={[styles.settingRow, { borderTopColor: C.border, opacity: isDeleting ? 0.6 : 1 }]}
+                    disabled={isDeleting}
+                    onPress={() => {
+                      Alert.alert(
+                        'Hesabı Sil',
+                        'Hesabınız kalıcı olarak silinecek. Dükkan profiliniz, siparişleriniz ve cüzdan bakiyeniz kaybolacak. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?',
+                        [
+                          { text: 'İptal', style: 'cancel' },
+                          {
+                            text: 'Sil',
+                            style: 'destructive',
+                            onPress: async () => {
+                              setIsDeleting(true);
+                              const { error } = await supabase.rpc('delete_account');
+                              if (error) {
+                                setIsDeleting(false);
+                                Alert.alert('Hata', 'Hesap silinemedi. Lütfen tekrar deneyin.');
+                              } else {
+                                await signOut();
+                              }
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={styles.settingEmoji}>🗑</Text>
+                    <Text style={[styles.settingText, { color: '#E53E3E' }]}>Hesabımı Sil</Text>
+                    {isDeleting ? (
+                      <ActivityIndicator size="small" color="#E53E3E" />
+                    ) : (
+                      <Text style={[styles.settingArrow, { color: '#E53E3E' }]}>›</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Admin: Geri Bildirimler — sadece anzelpatisserie@gmail.com */}
+                  {profile?.email === 'anzelpatisserie@gmail.com' && (
+                    <TouchableOpacity
+                      style={[styles.settingRow, { borderTopColor: C.border }]}
+                      onPress={() => router.push('/(baker)/admin-feedbacks' as never)}
+                    >
+                      <Text style={styles.settingEmoji}>📬</Text>
+                      <Text style={[styles.settingText, { color: C.text }]}>Admin: Geri Bildirimler</Text>
+                      <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Telefon Modal */}
+          <Modal visible={showPhoneModal} transparent animationType="slide" onRequestClose={() => setShowPhoneModal(false)}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+              <View style={[styles.modalSheet, { backgroundColor: C.card }]}>
+                <Text style={[styles.modalTitle, { color: C.text }]}>Cep Telefonu</Text>
+                <Text style={[styles.modalSub, { color: C.textSecondary }]}>
+                  Müşteriler size ulaşmak için kullanır
+                </Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.background, borderColor: C.border, color: C.text }]}
+                  placeholder="0532 123 45 67"
+                  placeholderTextColor={C.placeholder}
+                  value={phoneInput}
+                  onChangeText={setPhoneInput}
+                  keyboardType="phone-pad"
+                  maxLength={20}
+                  autoFocus
+                />
+                <View style={styles.modalBtns}>
+                  <TouchableOpacity
+                    style={[styles.modalCancelBtn, { borderColor: C.border }]}
+                    onPress={() => setShowPhoneModal(false)}
+                  >
+                    <Text style={[styles.modalCancelText, { color: C.textSecondary }]}>İptal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalSaveBtn, { backgroundColor: C.primary }]}
+                    onPress={savePhone}
+                    disabled={isSavingPhone}
+                  >
+                    {isSavingPhone ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <Text style={styles.modalSaveText}>Kaydet</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          </Modal>
+
           {/* Uygulamayı Tavsiye Et */}
           {!editMode && (
             <TouchableOpacity
@@ -766,40 +1133,21 @@ export default function BakerProfileScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Hesabı Sil */}
+          {/* Geri Bildirim */}
           {!editMode && (
             <TouchableOpacity
-              style={[styles.deleteAccountBtn, { borderColor: '#E53E3E' + '55', opacity: isDeleting ? 0.6 : 1 }]}
-              disabled={isDeleting}
-              onPress={() => {
-                Alert.alert(
-                  'Hesabı Sil',
-                  'Hesabınız kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?',
-                  [
-                    { text: 'İptal', style: 'cancel' },
-                    {
-                      text: 'Sil',
-                      style: 'destructive',
-                      onPress: async () => {
-                        setIsDeleting(true);
-                        const { error } = await supabase.rpc('delete_account');
-                        if (error) {
-                          setIsDeleting(false);
-                          Alert.alert('Hata', 'Hesap silinemedi. Lütfen tekrar deneyin.');
-                        } else {
-                          await signOut();
-                        }
-                      },
-                    },
-                  ]
-                );
-              }}
+              style={[styles.shareCard, { backgroundColor: C.card, borderColor: C.border }]}
+              onPress={() => setShowFeedback(true)}
+              activeOpacity={0.85}
             >
-              {isDeleting ? (
-                <ActivityIndicator size="small" color="#E53E3E" />
-              ) : (
-                <Text style={styles.deleteAccountText}>🗑 Hesabımı Sil</Text>
-              )}
+              <Text style={styles.shareEmoji}>📣</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.shareTitle, { color: C.text }]}>Geri Bildirim Gönder</Text>
+                <Text style={[styles.shareSub, { color: C.textSecondary }]}>
+                  Görüş ve Önerilerini Paylaş
+                </Text>
+              </View>
+              <Text style={[styles.shareArrow, { color: C.primary }]}>→</Text>
             </TouchableOpacity>
           )}
 
@@ -814,19 +1162,33 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1,
   },
   title: { fontSize: FontSize.xl, fontWeight: '800' },
-  signOutBtn: { paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.sm },
-  signOutText: { fontSize: FontSize.xs, fontWeight: '600' },
   content: { padding: Spacing.lg, gap: Spacing.md },
   userCard: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,
   },
-  avatarCircle: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
-  avatarEmoji: { fontSize: 32 },
+  avatarCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden', position: 'relative',
+  },
+  avatarImage: { width: '100%', height: '100%' },
+  avatarEmoji: { fontSize: 36 },
+  avatarOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarEditBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 24, height: 24, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarEditIcon: { fontSize: 11 },
+  userPhone: { fontSize: FontSize.xs, marginTop: 4 },
   userName: { fontSize: FontSize.lg, fontWeight: '700' },
   userEmail: { fontSize: FontSize.sm },
   noShopBox: {
@@ -870,9 +1232,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: FontSize.lg, fontWeight: '800' },
   statLabel: { fontSize: FontSize.xs },
   shopAddress: { fontSize: FontSize.sm },
-  reviewsSection: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.sm },
-  reviewsTitle: { fontSize: FontSize.md, fontWeight: '700' },
-  reviewItem: { paddingTop: Spacing.sm, borderTopWidth: 1, gap: 3 },
+  reviewItem: { paddingTop: Spacing.sm, marginTop: Spacing.sm, borderTopWidth: 1, gap: 3 },
   reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   reviewCustomer: { fontSize: FontSize.sm, fontWeight: '700' },
   reviewStars: { fontSize: 13, color: '#F5A623' },
@@ -912,6 +1272,13 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontSize: FontSize.sm, fontWeight: '600' },
   saveBtn: { flex: 2, paddingVertical: 12, borderRadius: Radius.full, alignItems: 'center' },
   saveBtnText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
+  socialInputRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
+  socialInputFlex: { flex: 1 },
+  verifyBtn: {
+    borderWidth: 1.5, borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md, paddingVertical: 10,
+  },
+  verifyBtnText: { fontSize: FontSize.sm, fontWeight: '700' },
   shareCard: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,
@@ -928,18 +1295,49 @@ const styles = StyleSheet.create({
   googleRatingText: { fontSize: FontSize.sm, fontWeight: '700' },
   googleReviewText: { fontSize: FontSize.xs },
   socialLinkBtn: { fontSize: FontSize.xs, fontWeight: '700', textDecorationLine: 'underline' },
-  socialRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  socialRow: { gap: 6, marginTop: 4 },
   socialBtn: {
-    paddingHorizontal: Spacing.sm, paddingVertical: 5,
-    borderRadius: Radius.full, borderWidth: 1,
+    paddingHorizontal: Spacing.md, paddingVertical: 10,
+    borderRadius: Radius.full, alignItems: 'center',
   },
-  socialBtnText: { fontSize: FontSize.xs, fontWeight: '700' },
+  socialBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: '#FFF' },
   googlePreview: {
     padding: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, alignItems: 'center',
   },
-  deleteAccountBtn: {
-    paddingVertical: 14, borderRadius: Radius.full, borderWidth: 1.5,
-    alignItems: 'center', justifyContent: 'center',
+  settingsCard: {
+    borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,
   },
-  deleteAccountText: { color: '#E53E3E', fontSize: FontSize.sm, fontWeight: '700' },
+  settingsTitle: { fontSize: FontSize.md, fontWeight: '700' },
+  settingsHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  chevron: { fontSize: 18, fontWeight: '700' },
+  settingRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    paddingVertical: 12, borderTopWidth: 1, marginTop: 4,
+  },
+  settingEmoji: { fontSize: 17, width: 24 },
+  settingText: { flex: 1, fontSize: FontSize.sm, fontWeight: '600' },
+  settingSub: { fontSize: 11, marginTop: 2 },
+  settingArrow: { fontSize: 20, fontWeight: '300' },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: Spacing.lg, gap: Spacing.md,
+  },
+  modalTitle: { fontSize: FontSize.lg, fontWeight: '700' },
+  modalSub: { fontSize: FontSize.sm },
+  modalBtns: { flexDirection: 'row', gap: Spacing.sm, marginTop: 4 },
+  modalCancelBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: Radius.full,
+    borderWidth: 1.5, alignItems: 'center',
+  },
+  modalCancelText: { fontSize: FontSize.sm, fontWeight: '600' },
+  modalSaveBtn: {
+    flex: 2, paddingVertical: 12, borderRadius: Radius.full, alignItems: 'center',
+  },
+  modalSaveText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
 });

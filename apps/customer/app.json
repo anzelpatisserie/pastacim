@@ -11,7 +11,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.pastacim.customer",
       "buildNumber": "1",
-      "entitlements": { "aps-environment": "production" },
+      "entitlements": {
+        "aps-environment": "production",
+        "keychain-access-groups": ["$(AppIdentifierPrefix)$(CFBundleIdentifier)"]
+      },
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"],
         "NSLocationWhenInUseUsageDescription": "Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.",
@@ -52,7 +55,6 @@
           "sounds": []
         }
       ],
-      "@react-native-community/datetimepicker"
     ],
     "updates": {
       "url": "https://u.expo.dev/d513dbc9-8da6-4051-995f-6a7a40b37586",

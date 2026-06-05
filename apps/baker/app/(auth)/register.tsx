@@ -12,12 +12,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
+import { makeRedirectUri } from 'expo-auth-session';
 import { useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
 
 export default function RegisterScreen() {
   const C = useThemeColors();
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -25,8 +26,18 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const handleGoogleSignUp = async () => {
+    setError(null);
+    setIsGoogleLoading(true);
+    const redirectUrl = makeRedirectUri({ scheme: 'pastacim-pro', path: 'auth/callback' });
+    const { error: gError } = await signInWithGoogle(redirectUrl);
+    setIsGoogleLoading(false);
+    if (gError) setError(gError);
+  };
 
   const validate = (): string | null => {
     if (!fullName.trim()) return 'Ad soyad gerekli.';
@@ -97,7 +108,12 @@ export default function RegisterScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ─── Geri ───────────────────────────────────────────────── */}
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          activeOpacity={0.6}
+        >
           <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
         </TouchableOpacity>
 
@@ -190,6 +206,30 @@ export default function RegisterScreen() {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* ─── Ayraç ─────────────────────────────────────────────── */}
+        <View style={styles.divider}>
+          <View style={[styles.dividerLine, { backgroundColor: C.border }]} />
+          <Text style={[styles.dividerText, { color: C.placeholder }]}>veya</Text>
+          <View style={[styles.dividerLine, { backgroundColor: C.border }]} />
+        </View>
+
+        {/* ─── Google ile Kayıt ──────────────────────────────────── */}
+        <TouchableOpacity
+          style={[styles.googleBtn, { borderColor: C.border, backgroundColor: C.card }]}
+          onPress={handleGoogleSignUp}
+          disabled={isGoogleLoading}
+          activeOpacity={0.85}
+        >
+          {isGoogleLoading ? (
+            <ActivityIndicator color={C.text} />
+          ) : (
+            <>
+              <Text style={styles.googleBtnIcon}>G</Text>
+              <Text style={[styles.googleBtnText, { color: C.text }]}>Google ile Hesap Oluştur</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
         {/* ─── Alt Link ───────────────────────────────────────────── */}
         <View style={styles.footer}>
@@ -289,6 +329,15 @@ const styles = StyleSheet.create({
   },
   btnPrimaryText: { color: '#FFF', fontSize: FontSize.lg, fontWeight: '700' },
   btnDisabled: { opacity: 0.7 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginVertical: Spacing.md },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { fontSize: FontSize.sm },
+  googleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    borderWidth: 1.5, borderRadius: Radius.full, paddingVertical: 14,
+  },
+  googleBtnIcon: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
+  googleBtnText: { fontSize: FontSize.md, fontWeight: '600' },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: Spacing.lg },
   footerText: { fontSize: FontSize.md },
   footerLink: { fontSize: FontSize.md, fontWeight: '700' },

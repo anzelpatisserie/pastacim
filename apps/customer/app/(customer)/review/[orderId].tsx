@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
-  TextInput, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  TextInput, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Switch,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
@@ -14,11 +14,12 @@ type ReviewData = {
   rating: number;
   comment: string | null;
   created_at: string;
+  is_anonymous: boolean;
 };
 
 export default function ReviewScreen() {
   const C = useThemeColors();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
 
   const [orderTitle, setOrderTitle] = useState('');
@@ -29,6 +30,7 @@ export default function ReviewScreen() {
 
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -67,7 +69,7 @@ export default function ReviewScreen() {
     // Daha önce yorum yapıldı mı?
     const { data: review } = await _db
       .from('reviews')
-      .select('id, rating, comment, created_at')
+      .select('id, rating, comment, created_at, is_anonymous')
       .eq('order_id', orderId)
       .eq('customer_id', user!.id)
       .maybeSingle();
@@ -76,6 +78,7 @@ export default function ReviewScreen() {
       setExistingReview(review as ReviewData);
       setRating(review.rating);
       setComment(review.comment ?? '');
+      setIsAnonymous(review.is_anonymous ?? false);
     }
 
     setIsLoading(false);
@@ -99,6 +102,7 @@ export default function ReviewScreen() {
       shop_id:     shopId,
       rating,
       comment: comment.trim() || null,
+      is_anonymous: isAnonymous,
     });
     setIsSubmitting(false);
 
@@ -134,7 +138,12 @@ export default function ReviewScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
           <Text style={[styles.title, { color: C.text }]}>
@@ -197,6 +206,23 @@ export default function ReviewScreen() {
             onChangeText={setComment}
             editable={!isReadOnly}
           />
+
+          {/* Anonim yorum toggle */}
+          <View style={[styles.anonymousRow, { backgroundColor: C.card, borderColor: C.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.anonymousLabel, { color: C.text }]}>İsmimi gizle</Text>
+              <Text style={[styles.anonymousSub, { color: C.textSecondary }]}>
+                {isAnonymous ? 'Yorumun "Anonim" olarak görünür' : `Yorumun "${profile?.full_name ?? 'isminizle'}" görünür`}
+              </Text>
+            </View>
+            <Switch
+              value={isAnonymous}
+              onValueChange={setIsAnonymous}
+              disabled={isReadOnly}
+              trackColor={{ false: C.border, true: C.primary }}
+              thumbColor="#FFF"
+            />
+          </View>
 
           {isReadOnly ? (
             <View style={[styles.readOnlyBadge, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -265,4 +291,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, alignItems: 'center',
   },
   readOnlyText: { fontSize: FontSize.sm },
+  anonymousRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,
+  },
+  anonymousLabel: { fontSize: FontSize.md, fontWeight: '700' },
+  anonymousSub: { fontSize: FontSize.xs, marginTop: 2 },
 });

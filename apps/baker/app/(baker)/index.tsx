@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
-import { supabase, rpcNearbyOrders, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, FeedbackModal } from '@pastacim/shared';
+import { Alert } from 'react-native';
+import { supabase, rpcNearbyOrders, rpcWithdrawOffer, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, TabHeader } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -25,6 +26,19 @@ type MyOffer = {
   order_id: string;
   price: number;
   status: string;
+};
+
+// Bekleyen / reddedilen / geri çekilen teklifler için sipariş özetiyle birlikte tip
+type MyOfferWithOrder = MyOffer & {
+  created_at: string;
+  order: {
+    id: string;
+    title: string;
+    serving_size: number | null;
+    delivery_date: string | null;
+    status: string;
+    customer: { full_name: string | null; created_at: string } | null;
+  } | null;
 };
 
 type OfferStats = { count: number; avgRating: number | null };
@@ -42,18 +56,45 @@ const OFFER_STATUS_CONFIG: Record<string, { label: string; bg: string; text: str
 
 export default function BakerHomeScreen() {
   const C = useThemeColors();
-  const { profile, signOut, user } = useAuth();
+  const { profile, user } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
 
   const [orders, setOrders] = useState<NearbyOrder[]>([]);
   const [myOfferMap, setMyOfferMap] = useState<Map<string, MyOffer>>(new Map());
   const [offerStatsMap, setOfferStatsMap] = useState<Map<string, OfferStats>>(new Map());
+  const [pendingOffers, setPendingOffers] = useState<MyOfferWithOrder[]>([]);
+  const [inactiveOffers, setInactiveOffers] = useState<MyOfferWithOrder[]>([]);
+  const [inactiveExpanded, setInactiveExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
   const [shopLocation, setShopLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [showFeedback, setShowFeedback] = useState(false);
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+
+  const handleWithdraw = (offerId: string, title: string) => {
+    Alert.alert(
+      '↩️ Teklifi Geri Çek',
+      `"${title}" siparişindeki teklifinizi geri çekmek istediğinizden emin misiniz?`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Geri Çek', style: 'destructive',
+          onPress: async () => {
+            setWithdrawingId(offerId);
+            const { data, error } = await rpcWithdrawOffer({ p_offer_id: offerId });
+            setWithdrawingId(null);
+            if (error || (data as { error?: string } | null)?.error) {
+              Alert.alert('Hata', 'Teklif geri çekilemedi.');
+              return;
+            }
+            // Listeden çıkar
+            setPendingOffers((prev) => prev.filter((p) => p.id !== offerId));
+          },
+        },
+      ]
+    );
+  };
 
   // ─── Konum: önce dükkan koordinatı, yoksa cihaz GPS ───────────────────────
   useEffect(() => {
@@ -93,74 +134,99 @@ export default function BakerHomeScreen() {
     else setIsLoading(true);
     setError(null);
 
-    const { data, error: rpcError } = await rpcNearbyOrders({
-      lat: shopLocation.lat,
-      lng: shopLocation.lng,
-      radius_km: radiusKm,
-    });
+    try {
+      const { data, error: rpcError } = await rpcNearbyOrders({
+        lat: shopLocation.lat,
+        lng: shopLocation.lng,
+        radius_km: radiusKm,
+      });
 
-    if (rpcError) {
-      setError('Talepler yüklenemedi. Lütfen tekrar deneyin.');
+      if (rpcError) {
+        setError('Talepler yüklenemedi. Lütfen tekrar deneyin.');
+        return;
+      }
+
+      const newOrders = data ?? [];
+      setOrders(newOrders);
+
+      // Kendi tekliflerimi + teklif istatistiklerini getir
+      if (newOrders.length > 0 && user?.id) {
+        const orderIds = newOrders.map((o) => o.id);
+        // Kendi tekliflerim (yakındaki siparişlere)
+        const { data: myOfferData } = await _db
+          .from('offers')
+          .select('id, order_id, price, status')
+          .eq('baker_id', user.id)
+          .in('order_id', orderIds);
+        setMyOfferMap(new Map((myOfferData ?? []).map((o: MyOffer) => [o.order_id, o])));
+
+        // Teklif istatistikleri: baker_id'leri al, sonra shop puanlarını ayrı sorgula
+        type OfferRow = { order_id: string; baker_id: string };
+        const { data: offerRows } = await _db
+          .from('offers')
+          .select('order_id, baker_id')
+          .in('order_id', orderIds)
+          .neq('status', 'withdrawn')
+          .neq('status', 'rejected') as { data: OfferRow[] | null };
+
+        const bakerIds = [...new Set((offerRows ?? []).map((r) => r.baker_id))];
+        const ratingMap = new Map<string, number>();
+        if (bakerIds.length > 0) {
+          const { data: shopData } = await _db
+            .from('pastry_shops')
+            .select('user_id, rating')
+            .in('user_id', bakerIds) as { data: { user_id: string; rating: number }[] | null };
+          for (const s of shopData ?? []) ratingMap.set(s.user_id, s.rating);
+        }
+
+        const statsMap = new Map<string, OfferStats>();
+        for (const row of offerRows ?? []) {
+          const prev = statsMap.get(row.order_id);
+          const rating = ratingMap.has(row.baker_id) ? (ratingMap.get(row.baker_id) ?? null) : null;
+          if (!prev) {
+            statsMap.set(row.order_id, { count: 1, avgRating: rating });
+          } else {
+            const newCount = prev.count + 1;
+            const newAvg = rating != null
+              ? ((prev.avgRating ?? 0) * prev.count + rating) / newCount
+              : prev.avgRating;
+            statsMap.set(row.order_id, { count: newCount, avgRating: newAvg });
+          }
+        }
+        setOfferStatsMap(statsMap);
+      } else {
+        setMyOfferMap(new Map());
+        setOfferStatsMap(new Map());
+      }
+
+      // Bekleyen + reddedilen + geri çekilen tekliflerimi getir (sipariş özetiyle)
+      if (user?.id) {
+        const { data: allMyOffers } = await _db
+          .from('offers')
+          .select(`
+            id, order_id, price, status, created_at,
+            order:orders!order_id (
+              id, title, serving_size, delivery_date, status,
+              customer:users!customer_id ( full_name, created_at )
+            )
+          `)
+          .eq('baker_id', user.id)
+          .in('status', ['pending', 'rejected', 'withdrawn'])
+          .order('created_at', { ascending: false }) as { data: MyOfferWithOrder[] | null };
+
+        const all = allMyOffers ?? [];
+        setPendingOffers(all.filter((o) => o.status === 'pending'));
+        setInactiveOffers(all.filter((o) => o.status === 'rejected' || o.status === 'withdrawn'));
+      } else {
+        setPendingOffers([]);
+        setInactiveOffers([]);
+      }
+    } catch {
+      setError('Talepler yüklenirken bir sorun oluştu.');
+    } finally {
       if (refresh) setIsRefreshing(false);
       else setIsLoading(false);
-      return;
     }
-
-    const newOrders = data ?? [];
-    setOrders(newOrders);
-
-    // Kendi tekliflerimi + teklif istatistiklerini getir
-    if (newOrders.length > 0 && user?.id) {
-      const orderIds = newOrders.map((o) => o.id);
-      // Kendi tekliflerim
-      const { data: myOfferData } = await _db
-        .from('offers')
-        .select('id, order_id, price, status')
-        .eq('baker_id', user.id)
-        .in('order_id', orderIds);
-      setMyOfferMap(new Map((myOfferData ?? []).map((o: MyOffer) => [o.order_id, o])));
-
-      // Teklif istatistikleri: baker_id'leri al, sonra shop puanlarını ayrı sorgula
-      type OfferRow = { order_id: string; baker_id: string };
-      const { data: offerRows } = await _db
-        .from('offers')
-        .select('order_id, baker_id')
-        .in('order_id', orderIds)
-        .neq('status', 'withdrawn')
-        .neq('status', 'rejected') as { data: OfferRow[] | null };
-
-      const bakerIds = [...new Set((offerRows ?? []).map((r) => r.baker_id))];
-      const ratingMap = new Map<string, number>();
-      if (bakerIds.length > 0) {
-        const { data: shopData } = await _db
-          .from('pastry_shops')
-          .select('user_id, rating')
-          .in('user_id', bakerIds) as { data: { user_id: string; rating: number }[] | null };
-        for (const s of shopData ?? []) ratingMap.set(s.user_id, s.rating);
-      }
-
-      const statsMap = new Map<string, OfferStats>();
-      for (const row of offerRows ?? []) {
-        const prev = statsMap.get(row.order_id);
-        const rating = ratingMap.has(row.baker_id) ? (ratingMap.get(row.baker_id) ?? null) : null;
-        if (!prev) {
-          statsMap.set(row.order_id, { count: 1, avgRating: rating });
-        } else {
-          const newCount = prev.count + 1;
-          const newAvg = rating != null
-            ? ((prev.avgRating ?? 0) * prev.count + rating) / newCount
-            : prev.avgRating;
-          statsMap.set(row.order_id, { count: newCount, avgRating: newAvg });
-        }
-      }
-      setOfferStatsMap(statsMap);
-    } else {
-      setMyOfferMap(new Map());
-      setOfferStatsMap(new Map());
-    }
-
-    if (refresh) setIsRefreshing(false);
-    else setIsLoading(false);
   }, [shopLocation, radiusKm, user?.id]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
@@ -168,58 +234,34 @@ export default function BakerHomeScreen() {
   // Tab'a odaklanınca teklif durumunu güncelle
   useFocusEffect(useCallback(() => { fetchOrders(); }, [fetchOrders]));
 
+  // Realtime: kendi tekliflerim ve siparişler değişince listeyi tazele.
+  // NOT: DELETE event'lerinin baker_id filtresiyle düşmesi REPLICA IDENTITY FULL
+  // gerektirir; bu yüzden offers tablosunu filtresiz dinleyip refetch ediyoruz.
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`baker-home:${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'offers' },
+        () => { fetchOrders(true); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        () => { fetchOrders(true); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, fetchOrders]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: C.border }]}>
-        <View>
-          <Text style={[styles.greeting, { color: C.textSecondary }]}>Hoş geldin 👨‍🍳</Text>
-          <Text style={[styles.name, { color: C.text }]}>
-            {profile?.full_name?.split(' ')[0] ?? 'Pastacı'}
-          </Text>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {/* Geri bildirim butonu */}
-          <TouchableOpacity
-            onPress={() => setShowFeedback(true)}
-            style={{ padding: 4 }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={{ fontSize: 20 }}>📣</Text>
-          </TouchableOpacity>
-          {/* Bildirim zili */}
-          <TouchableOpacity
-            onPress={() => router.push('/(baker)/notifications' as never)}
-            style={{ position: 'relative', padding: 4 }}
-          >
-            <Text style={{ fontSize: 22 }}>🔔</Text>
-            {unreadCount > 0 && (
-              <View style={{
-                position: 'absolute', top: 0, right: 0,
-                backgroundColor: C.primary, borderRadius: 8,
-                minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center',
-                paddingHorizontal: 3,
-              }}>
-                <Text style={{ color: '#FFF', fontSize: 9, fontWeight: '800' }}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          {/* Çıkış butonu */}
-          <TouchableOpacity
-            style={[styles.signOutBtn, { backgroundColor: C.border }]}
-            onPress={signOut}
-          >
-            <Text style={[styles.signOutText, { color: C.textSecondary }]}>Çıkış</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <FeedbackModal
-        visible={showFeedback}
-        onClose={() => setShowFeedback(false)}
-        appName="baker"
+      <TabHeader
+        title={`Hoş geldin, ${profile?.full_name?.split(' ')[0] ?? 'Pastacı'}`}
+        subtitle="Talepleri inceleyip teklif verin"
+        unreadCount={unreadCount}
+        onBellPress={() => router.push('/(baker)/notifications' as never)}
       />
 
       {/* Mesafe Filtresi */}
@@ -322,6 +364,105 @@ export default function BakerHomeScreen() {
               }).length} açık talep
             </Text>
           }
+          ListFooterComponent={
+            <View>
+              {/* Bekleyen Tekliflerim */}
+              {pendingOffers.length > 0 && (
+                <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
+                  <Text style={[styles.sectionTitle, { color: C.text }]}>
+                    📤 Bekleyen Tekliflerim ({pendingOffers.length})
+                  </Text>
+                  <Text style={[styles.sectionHint, { color: C.placeholder }]}>
+                    Müşteri kararını bekliyor
+                  </Text>
+                  {pendingOffers.map((p) => {
+                    const memberDays = p.order?.customer?.created_at
+                      ? Math.max(0, Math.floor((Date.now() - new Date(p.order.customer.created_at).getTime()) / (1000 * 60 * 60 * 24)))
+                      : null;
+                    const memberStr = memberDays == null
+                      ? ''
+                      : memberDays < 30
+                        ? `${memberDays}g üye`
+                        : memberDays < 365
+                          ? `${Math.floor(memberDays / 30)}ay üye`
+                          : `${Math.floor(memberDays / 365)}y üye`;
+                    return (
+                    <View key={p.id} style={[styles.miniCard, { borderTopColor: C.border }]}>
+                      <TouchableOpacity
+                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}
+                        onPress={() => p.order && router.push({
+                          pathname: '/(baker)/offer/[orderId]',
+                          params: { orderId: p.order.id },
+                        })}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.miniTitle, { color: C.text }]} numberOfLines={1}>
+                            {p.order?.title ?? 'Sipariş'}
+                          </Text>
+                          {p.order?.customer?.full_name ? (
+                            <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
+                              👤 {p.order.customer.full_name}
+                              {memberStr ? ` · ${memberStr}` : ''}
+                            </Text>
+                          ) : null}
+                          <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
+                            ⏳ Bekleniyor
+                            {p.order?.serving_size ? ` · 👥 ${p.order.serving_size} kişilik` : ''}
+                          </Text>
+                        </View>
+                        <Text style={[styles.miniPrice, { color: C.primary }]}>₺{p.price}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.withdrawBtn, { borderColor: C.error + '88' }]}
+                        onPress={() => handleWithdraw(p.id, p.order?.title ?? 'Bu sipariş')}
+                        disabled={withdrawingId === p.id}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        {withdrawingId === p.id ? (
+                          <ActivityIndicator size="small" color={C.error} />
+                        ) : (
+                          <Text style={[styles.withdrawBtnText, { color: C.error }]}>↩️ Geri Çek</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Siparişe Dönmeyen Tekliflerim (Collapse) */}
+              {inactiveOffers.length > 0 && (
+                <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
+                  <TouchableOpacity
+                    style={styles.sectionHeaderRow}
+                    onPress={() => setInactiveExpanded((v) => !v)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.sectionTitle, { color: C.text }]}>
+                      📁 Siparişe Dönmeyen Tekliflerim ({inactiveOffers.length})
+                    </Text>
+                    <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                      {inactiveExpanded ? '▾' : '▸'}
+                    </Text>
+                  </TouchableOpacity>
+                  {inactiveExpanded && inactiveOffers.map((p) => (
+                    <View key={p.id} style={[styles.miniCard, { borderTopColor: C.border }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.miniTitle, { color: C.text }]} numberOfLines={1}>
+                          {p.order?.title ?? 'Sipariş'}
+                        </Text>
+                        <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
+                          {p.status === 'rejected' ? '❌ Müşteri başka teklif kabul etti' : '↩️ Geri çekildi'}
+                        </Text>
+                      </View>
+                      <Text style={[styles.miniPriceMuted, { color: C.placeholder }]}>₺{p.price}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          }
         />
       )}
     </SafeAreaView>
@@ -415,6 +556,13 @@ function RequestCard({
             <Text style={{ fontSize: FontSize.xs, color: '#C53030', fontWeight: '700' }}>⚡ Acil</Text>
           </View>
         )}
+        {order.delivery_address && (
+          <View style={[styles.metaChip, { backgroundColor: C.background }]}>
+            <Text style={[styles.metaChipText, { color: C.textSecondary }]} numberOfLines={1}>
+              📍 {order.delivery_address.length > 30 ? order.delivery_address.substring(0, 30) + '…' : order.delivery_address}
+            </Text>
+          </View>
+        )}
         {order.created_at && (
           <View style={[styles.metaChip, { backgroundColor: C.background }]}>
             <Text style={[styles.metaChipText, { color: C.placeholder }]}>
@@ -424,17 +572,42 @@ function RequestCard({
         )}
       </View>
 
-      {/* Teklif istatistikleri (anonimleştirilmiş) */}
-      {offerStats && offerStats.count > 0 && (
-        <View style={[styles.statsChip, { backgroundColor: C.background, borderColor: C.border }]}>
-          <Text style={[styles.statsChipText, { color: C.textSecondary }]}>
-            👥 {offerStats.count} teklif
-            {offerStats.avgRating != null && offerStats.avgRating > 0
-              ? `  ·  ⭐ ${offerStats.avgRating.toFixed(1)}`
-              : ''}
-          </Text>
+      {/* Müşteri özeti */}
+      {order.customer_full_name && (
+        <View style={[styles.customerRow, { backgroundColor: C.background, borderColor: C.border }]}>
+          <Text style={[styles.customerEmoji]}>👤</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.customerName, { color: C.text }]} numberOfLines={1}>
+              {order.customer_full_name}
+            </Text>
+            <Text style={[styles.customerStats, { color: C.textSecondary }]} numberOfLines={1}>
+              {order.customer_total_orders === 0 ? '🆕 İlk siparişi'
+                : `📦 ${order.customer_total_orders} sipariş · ✅ ${order.customer_completed_orders}`}
+              {' · '}
+              {order.customer_member_days < 30
+                ? `${order.customer_member_days}g`
+                : order.customer_member_days < 365
+                  ? `${Math.floor(order.customer_member_days / 30)}ay`
+                  : `${Math.floor(order.customer_member_days / 365)}y`} üye
+            </Text>
+          </View>
         </View>
       )}
+
+      {/* Teklif istatistikleri (her zaman göster — 0 ise ilk olma avantajını vurgula) */}
+      {(() => {
+        const count = offerStats?.count ?? 0;
+        const avg = offerStats?.avgRating;
+        return (
+          <View style={[styles.statsChip, { backgroundColor: count === 0 ? C.primary + '12' : C.background, borderColor: count === 0 ? C.primary + '44' : C.border }]}>
+            <Text style={[styles.statsChipText, { color: count === 0 ? C.primary : C.textSecondary }]}>
+              {count === 0
+                ? '💬 Henüz teklif yok — ilk olun!'
+                : `💬 ${count} teklif${avg != null && avg > 0 ? `  ·  ⭐ ${avg.toFixed(1)}` : ''}`}
+            </Text>
+          </View>
+        );
+      })()}
 
       {/* Kendi teklif durumu */}
       {offerConfig && (
@@ -476,12 +649,6 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: FontSize.sm },
   name: { fontSize: FontSize.xl, fontWeight: '800' },
-  signOutBtn: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: Radius.sm,
-  },
-  signOutText: { fontSize: FontSize.xs, fontWeight: '600' },
   filterBar: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
@@ -508,6 +675,30 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: FontSize.md, textAlign: 'center' },
   list: { padding: Spacing.md, gap: Spacing.sm, paddingBottom: 80 },
   listHeader: { fontSize: FontSize.sm, marginBottom: Spacing.xs },
+  sectionBox: {
+    borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  sectionTitle: { fontSize: FontSize.md, fontWeight: '700' },
+  sectionHint: { fontSize: FontSize.xs, marginTop: 2 },
+  chevron: { fontSize: 18, fontWeight: '700' },
+  miniCard: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    paddingVertical: 10, borderTopWidth: 1, marginTop: 8,
+  },
+  miniTitle: { fontSize: FontSize.sm, fontWeight: '700' },
+  miniMeta: { fontSize: FontSize.xs, marginTop: 2 },
+  miniPrice: { fontSize: FontSize.md, fontWeight: '800' },
+  miniPriceMuted: { fontSize: FontSize.sm, fontWeight: '600', textDecorationLine: 'line-through' },
+  withdrawBtn: {
+    borderWidth: 1, borderRadius: Radius.full,
+    paddingHorizontal: 12, paddingVertical: 6,
+    alignSelf: 'flex-start', marginTop: 4,
+  },
+  withdrawBtnText: { fontSize: FontSize.xs, fontWeight: '700' },
   card: {
     borderRadius: Radius.lg,
     borderWidth: 1,
@@ -549,4 +740,13 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   statsChipText: { fontSize: FontSize.xs, fontWeight: '600' },
+  customerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingHorizontal: Spacing.sm, paddingVertical: 8,
+    borderRadius: Radius.md, borderWidth: 1,
+    marginTop: 6,
+  },
+  customerEmoji: { fontSize: 18 },
+  customerName: { fontSize: FontSize.sm, fontWeight: '700' },
+  customerStats: { fontSize: 11, marginTop: 1 },
 });

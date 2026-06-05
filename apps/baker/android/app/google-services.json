@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "869793956433",
+    "project_id": "pastacim-59c34",
+    "storage_bucket": "pastacim-59c34.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:869793956433:android:0af1920dd619ea32c5ee70",
+        "android_client_info": {
+          "package_name": "com.pastacim.baker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1FaDFFVtv7-x6l4b8e_tzKTK5nC3gj9o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:869793956433:android:59c9523b74d8fc9dc5ee70",
+        "android_client_info": {
+          "package_name": "com.pastacim.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1FaDFFVtv7-x6l4b8e_tzKTK5nC3gj9o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

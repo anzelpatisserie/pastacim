@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Linking } from 'react-native';
 import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
@@ -6,7 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 
-import { useAuth, navigateFromNotification, supabase } from '@pastacim/shared';
+import { useAuth, navigateFromNotification, supabase, SplashAnimation } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
 
 export { ErrorBoundary } from 'expo-router';
@@ -27,14 +27,26 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     if (fontError) throw fontError;
   }, [fontError]);
 
   useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync();
+    if (fontsLoaded) {
+      requestAnimationFrame(() => { SplashScreen.hideAsync().catch(() => {}); });
+    }
   }, [fontsLoaded]);
+
+  if (showSplash) {
+    return (
+      <>
+        <StatusBar style="light" />
+        <SplashAnimation appName="Pastacım Pro" onComplete={() => setShowSplash(false)} />
+      </>
+    );
+  }
 
   if (!fontsLoaded) return null;
 
@@ -58,7 +70,7 @@ function handleAuthUrl(url: string) {
 }
 
 function RootLayoutNav() {
-  const { isLoading, isAuthenticated, isBaker } = useAuth();
+  const { isLoading, isAuthenticated, isBaker, profile } = useAuth();
   const notificationListener = useRef<Notifications.Subscription | null>(null);
 
   useEffect(() => {
@@ -75,9 +87,14 @@ function RootLayoutNav() {
       return;
     }
 
+    // Profil henüz yüklenmediyse yönlendirme yapma — aksi halde
+    // is_baker varsayılan false ile setup ekranına yanlış yönlendirilir
+    // (özellikle Google OAuth sonrası gözlenen bug).
+    if (!profile) return;
+
     // Users with no shop go to setup; existing bakers go to main tab
     router.replace(isBaker ? '/(baker)' : '/(baker)/setup');
-  }, [isLoading, isAuthenticated, isBaker]);
+  }, [isLoading, isAuthenticated, isBaker, profile]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

@@ -8,6 +8,8 @@ export {
   rpcPlaceOrder,
   rpcAcceptOffer,
   rpcSubmitOffer,
+  rpcGetOrderOfferSummary,
+  rpcGetCustomerSummaryForBaker,
   rpcRejectOffer,
   rpcCancelOrder,
   rpcWithdrawOffer,
@@ -47,6 +49,11 @@ export { useAuth } from './hooks/useAuth';
 // Components
 export { default as NotificationsScreen } from './components/NotificationsScreen';
 export { default as FeedbackModal } from './components/FeedbackModal';
+export { default as SplashAnimation } from './components/SplashAnimation';
+export { default as TabHeader } from './components/TabHeader';
+export { default as BackButton } from './components/BackButton';
+export { default as FeedbacksAdminScreen } from './components/FeedbacksAdminScreen';
 
 // Types
 export type { Database, Json } from './types/database.types';
+export type { OrderOfferSummaryRow, CustomerSummary } from './lib/supabase';

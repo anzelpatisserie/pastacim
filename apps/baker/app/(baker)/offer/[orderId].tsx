@@ -4,9 +4,9 @@ import {
   TextInput, ScrollView, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, Image, Modal, Pressable,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { supabase, rpcSubmitOffer, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
-import type { Database } from '@pastacim/shared';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import type { Database, OrderOfferSummaryRow, CustomerSummary } from '@pastacim/shared';
 
 type Order = Database['public']['Tables']['orders']['Row'];
 type Shop = Database['public']['Tables']['pastry_shops']['Row'];
@@ -29,6 +29,8 @@ export default function MakeOfferScreen() {
   const [alreadyOffered, setAlreadyOffered] = useState(false);
   const [orderClosed, setOrderClosed] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+  const [existingOffers, setExistingOffers] = useState<OrderOfferSummaryRow[]>([]);
+  const [customer, setCustomer] = useState<CustomerSummary | null>(null);
 
   const loadData = useCallback(async (userId: string) => {
     if (!orderId) return;
@@ -51,19 +53,35 @@ export default function MakeOfferScreen() {
       setShop(shopRes.data[0] as Shop);
     }
 
-    // Sipariş hâlâ teklif kabul ediyor mu?
-    if (orderRes.data && !['pending', 'offers_received'].includes(orderRes.data.status)) {
-      setOrderClosed(true);
-    }
-
-    // Daha önce teklif verilmiş mi?
+    // Daha önce AKTİF teklif verilmiş mi? (pending/accepted)
+    // rejected/withdrawn ise tekrar teklif verebilir
     const offerRes = await _db
       .from('offers')
-      .select('id')
+      .select('id, status')
       .eq('order_id', orderId)
       .eq('baker_id', userId)
+      .in('status', ['pending', 'accepted'])
       .limit(1);
-    if (offerRes.data && offerRes.data.length > 0) setAlreadyOffered(true);
+    const myActiveOffer = offerRes.data && offerRes.data.length > 0 ? offerRes.data[0] : null;
+    if (myActiveOffer) setAlreadyOffered(true);
+
+    // Sipariş kapalı sayılır:
+    // - status pending/offers_received DEĞİL VE
+    // - baker'ın kabul edilmiş teklifi yok (yani başkasının teklifi kabul edilmiş)
+    if (orderRes.data && !['pending', 'offers_received'].includes(orderRes.data.status)) {
+      const isMyAcceptedOrder = myActiveOffer?.status === 'accepted';
+      if (!isMyAcceptedOrder) {
+        setOrderClosed(true);
+      }
+    }
+
+    // Bu siparişe verilmiş diğer tekliflerin özetini al (rakip teklifleri görmek için)
+    const { data: summary } = await rpcGetOrderOfferSummary(orderId);
+    setExistingOffers(summary ?? []);
+
+    // Müşteri özet bilgisi
+    const { data: cust } = await rpcGetCustomerSummaryForBaker(orderId);
+    setCustomer(cust);
 
     setIsLoading(false);
   }, [orderId]);
@@ -73,6 +91,13 @@ export default function MakeOfferScreen() {
       loadData(user.id);
     }
   }, [user?.id, loadData]);
+
+  // Ekrana her döndüğünde fresh data — withdrawn → tekrar teklif vermek için
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) loadData(user.id);
+    }, [user?.id, loadData])
+  );
 
   const handleSubmit = async () => {
     if (!price.trim() || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
@@ -88,14 +113,17 @@ export default function MakeOfferScreen() {
     setIsSubmitting(true);
     const { data, error } = await rpcSubmitOffer({
       p_order_id: orderId,
+      p_shop_id: shop.id,
       p_price: parseFloat(price),
       p_message: message.trim(),
-      p_estimated_days: 0,
+      // estimated_days UI'de yok; constraint > 0 olduğu için undefined gönder (NULL kalır)
+      p_estimated_days: undefined,
     });
     setIsSubmitting(false);
 
     if (error) {
-      Alert.alert('Hata', 'Teklif gönderilemedi. Lütfen tekrar deneyin.');
+      console.error('[submit_offer] client error:', error.message, error);
+      Alert.alert('Hata', `Teklif gönderilemedi: ${error.message ?? 'bilinmeyen hata'}`);
       return;
     }
     const rpcError = (data as { error?: string } | null)?.error;
@@ -140,26 +168,32 @@ export default function MakeOfferScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: C.text }]}>Sipariş Detayı</Text>
           <View style={{ width: 48 }} />
         </View>
-        <View style={styles.centered}>
-          <Text style={{ fontSize: 48 }}>🔒</Text>
-          <Text style={[{ fontSize: 17, fontWeight: '700', color: C.text, marginTop: 12, textAlign: 'center' }]}>
-            Sipariş Kapatıldı
-          </Text>
-          <Text style={[{ fontSize: 14, color: C.textSecondary, marginTop: 6, textAlign: 'center', paddingHorizontal: 32 }]}>
-            Müşteri bir teklifi kabul etti. Bu siparişe artık teklif verilemez.
-          </Text>
-          <TouchableOpacity
-            style={[{ backgroundColor: C.primary, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 99, marginTop: 20 }]}
-            onPress={() => router.back()}
-          >
-            <Text style={{ color: '#FFF', fontWeight: '700' }}>← Geri Dön</Text>
-          </TouchableOpacity>
+        <View style={styles.closedCenter}>
+          <View style={[styles.closedCard, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Text style={styles.closedEmoji}>🔒</Text>
+            <Text style={[styles.closedTitle, { color: C.text }]}>Sipariş Kapatıldı</Text>
+            <Text style={[styles.closedSubtitle, { color: C.textSecondary }]}>
+              Müşteri başka bir teklifi kabul etti.
+            </Text>
+            <TouchableOpacity
+              style={[styles.closedBackBtn, { backgroundColor: C.primary }]}
+              onPress={() => router.back()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.closedBackBtnText}>← Talepler Listesine Dön</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -169,7 +203,11 @@ export default function MakeOfferScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: C.text }]}>Sipariş Detayı</Text>
@@ -244,6 +282,89 @@ export default function MakeOfferScreen() {
             </View>
           )}
 
+          {/* Müşteri özet bilgisi */}
+          {customer && (
+            <View style={[styles.customerCard, { backgroundColor: C.card, borderColor: C.border }]}>
+              <View style={styles.customerHeader}>
+                {customer.avatar_url ? (
+                  <Image source={{ uri: customer.avatar_url }} style={styles.customerAvatar} />
+                ) : (
+                  <View style={[styles.customerAvatar, { backgroundColor: C.primary + '22', alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ fontSize: 22 }}>👤</Text>
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.customerName, { color: C.text }]} numberOfLines={1}>
+                    {customer.full_name ?? 'Müşteri'}
+                  </Text>
+                  <Text style={[styles.customerMeta, { color: C.textSecondary }]}>
+                    📅 {customer.member_days < 30
+                      ? `${customer.member_days} gündür`
+                      : customer.member_days < 365
+                        ? `${Math.floor(customer.member_days / 30)} aydır`
+                        : `${Math.floor(customer.member_days / 365)} yıldır`} Pastacım üyesi
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.customerStats}>
+                <View style={styles.customerStat}>
+                  <Text style={[styles.customerStatNum, { color: C.primary }]}>{customer.total_orders}</Text>
+                  <Text style={[styles.customerStatLbl, { color: C.textSecondary }]}>Toplam</Text>
+                </View>
+                <View style={styles.customerStat}>
+                  <Text style={[styles.customerStatNum, { color: '#48BB78' }]}>{customer.completed_orders}</Text>
+                  <Text style={[styles.customerStatLbl, { color: C.textSecondary }]}>Tamamlandı</Text>
+                </View>
+                <View style={styles.customerStat}>
+                  <Text style={[styles.customerStatNum, { color: customer.cancelled_orders > 0 ? '#FC8181' : C.textSecondary }]}>
+                    {customer.cancelled_orders}
+                  </Text>
+                  <Text style={[styles.customerStatLbl, { color: C.textSecondary }]}>İptal</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Mevcut rakip teklifler — kullanıcı zaten teklif vermiş olsa da görebilsin */}
+          {existingOffers.length > 0 && (
+            <View style={[styles.offersSection, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.offersTitle, { color: C.text }]}>
+                📊 Bu siparişe verilmiş {existingOffers.length} teklif
+              </Text>
+              <Text style={[styles.offersHint, { color: C.placeholder }]}>
+                Puana göre sıralı
+              </Text>
+              {existingOffers.map((o, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.offerRow,
+                    { borderTopColor: C.border },
+                    o.is_mine && { backgroundColor: C.primary + '10', borderLeftWidth: 3, borderLeftColor: C.primary, paddingLeft: Spacing.sm },
+                  ]}
+                >
+                  <View style={[styles.rankBadge, { backgroundColor: o.is_mine ? C.primary + '33' : C.primary + '18' }]}>
+                    <Text style={[styles.rankText, { color: C.primary }]}>{i + 1}.</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {o.is_mine && (
+                      <Text style={{ fontSize: FontSize.xs, fontWeight: '800', color: C.primary, marginBottom: 2 }}>
+                        👤 Sizin teklifiniz
+                      </Text>
+                    )}
+                    <Text style={[styles.offerMeta, { color: C.text }]}>
+                      ⭐ {o.shop_rating > 0 ? o.shop_rating.toFixed(1) : '—'}
+                      {o.shop_review_count > 0 ? ` (${o.shop_review_count} yorum)` : ''}
+                    </Text>
+                  </View>
+                  <Text style={[styles.offerPrice, { color: C.primary }]}>
+                    {alreadyOffered || o.is_mine ? `₺${o.price}` : '₺•••'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           {order?.customer_id && (
             <TouchableOpacity
               style={[styles.submitBtn, { backgroundColor: C.primary }]}
@@ -258,6 +379,8 @@ export default function MakeOfferScreen() {
           <TouchableOpacity
             style={[styles.backBtnFull, { backgroundColor: C.border }]}
             onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
           >
             <Text style={[styles.backBtnText, { color: C.text }]}>← Geri Dön</Text>
           </TouchableOpacity>
@@ -283,7 +406,11 @@ export default function MakeOfferScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: C.text }]}>Teklif Ver</Text>
@@ -321,7 +448,11 @@ export default function MakeOfferScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: C.text }]}>Teklif Ver</Text>
@@ -388,6 +519,46 @@ export default function MakeOfferScreen() {
                   </Text>
                 ) : null}
               </View>
+            </View>
+          )}
+
+          {/* Mevcut rakip teklifler */}
+          {existingOffers.length > 0 && (
+            <View style={[styles.offersSection, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.offersTitle, { color: C.text }]}>
+                📊 Bu siparişe verilmiş {existingOffers.length} teklif
+              </Text>
+              <Text style={[styles.offersHint, { color: C.placeholder }]}>
+                Puana göre sıralı. Fiyatlar teklif verdikten sonra görünür olur.
+              </Text>
+              {existingOffers.map((o, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.offerRow,
+                    { borderTopColor: C.border },
+                    o.is_mine && { backgroundColor: C.primary + '10', borderLeftWidth: 3, borderLeftColor: C.primary, paddingLeft: Spacing.sm },
+                  ]}
+                >
+                  <View style={[styles.rankBadge, { backgroundColor: o.is_mine ? C.primary + '33' : C.primary + '18' }]}>
+                    <Text style={[styles.rankText, { color: C.primary }]}>{i + 1}.</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {o.is_mine && (
+                      <Text style={{ fontSize: FontSize.xs, fontWeight: '800', color: C.primary, marginBottom: 2 }}>
+                        👤 Sizin teklifiniz
+                      </Text>
+                    )}
+                    <Text style={[styles.offerMeta, { color: C.text }]}>
+                      ⭐ {o.shop_rating > 0 ? o.shop_rating.toFixed(1) : '—'}
+                      {o.shop_review_count > 0 ? ` (${o.shop_review_count} yorum)` : ''}
+                    </Text>
+                  </View>
+                  <Text style={[styles.offerPrice, { color: C.primary }]}>
+                    {alreadyOffered || o.is_mine ? `₺${o.price}` : '₺•••'}
+                  </Text>
+                </View>
+              ))}
             </View>
           )}
 
@@ -475,12 +646,58 @@ const styles = StyleSheet.create({
   backBtnText: { color: '#FFF', fontWeight: '700', fontSize: FontSize.sm },
   offeredBanner: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   offeredBannerText: { fontSize: FontSize.sm, fontWeight: '700', textAlign: 'center' },
+  closedCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.lg },
+  closedCard: {
+    width: '100%', maxWidth: 340,
+    borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.lg,
+    alignItems: 'center', gap: Spacing.sm,
+  },
+  closedEmoji: { fontSize: 32 },
+  closedTitle: { fontSize: FontSize.md, fontWeight: '700', textAlign: 'center' },
+  closedSubtitle: { fontSize: FontSize.sm, textAlign: 'center', marginBottom: Spacing.sm },
+  closedBackBtn: {
+    paddingHorizontal: Spacing.lg, paddingVertical: 10,
+    borderRadius: Radius.full,
+  },
+  closedBackBtnText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
   content: { padding: Spacing.lg, gap: Spacing.md },
   orderSummary: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.xs },
   summaryLabel: { fontSize: FontSize.xs, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   summaryTitle: { fontSize: FontSize.md, fontWeight: '700' },
   summaryDesc: { fontSize: FontSize.sm, lineHeight: 18 },
   summaryMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.xs },
+  offersSection: {
+    borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,
+    gap: 4, marginTop: Spacing.sm,
+  },
+  offersTitle: { fontSize: FontSize.md, fontWeight: '700' },
+  offersHint: { fontSize: 11, marginBottom: 4 },
+  offerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingVertical: 10, borderTopWidth: 1, marginTop: 4,
+  },
+  rankBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rankText: { fontSize: FontSize.sm, fontWeight: '800' },
+  offerMeta: { fontSize: FontSize.sm, fontWeight: '600' },
+  offerPrice: { fontSize: FontSize.md, fontWeight: '800' },
+  customerCard: {
+    borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,
+    gap: Spacing.md, marginTop: Spacing.sm,
+  },
+  customerHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  customerAvatar: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden' },
+  customerName: { fontSize: FontSize.md, fontWeight: '700' },
+  customerMeta: { fontSize: FontSize.xs, marginTop: 2 },
+  customerStats: { flexDirection: 'row', gap: Spacing.sm },
+  customerStat: {
+    flex: 1, paddingVertical: 8, paddingHorizontal: 4,
+    alignItems: 'center', borderRadius: Radius.md,
+  },
+  customerStatNum: { fontSize: FontSize.lg, fontWeight: '800' },
+  customerStatLbl: { fontSize: 10, marginTop: 2 },
   metaChip: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.sm, fontSize: FontSize.xs },
   shopInfo: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   shopInfoText: { fontSize: FontSize.sm },

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Linking } from 'react-native';
 import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
@@ -6,7 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 
-import { useAuth, navigateFromNotification, supabase } from '@pastacim/shared';
+import { useAuth, navigateFromNotification, supabase, SplashAnimation } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
 
 export { ErrorBoundary } from 'expo-router';
@@ -27,14 +27,28 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     if (fontError) throw fontError;
   }, [fontError]);
 
+  // Native splash'ı hemen kapatma — SplashAnimation görünür olduğunda kapat
   useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync();
+    if (fontsLoaded) {
+      // Bir kare sonra hide et — SplashAnimation render bitsin ki ekran boş kalmasın
+      requestAnimationFrame(() => { SplashScreen.hideAsync().catch(() => {}); });
+    }
   }, [fontsLoaded]);
+
+  if (showSplash) {
+    return (
+      <>
+        <StatusBar style="light" />
+        <SplashAnimation appName="Pastacım" onComplete={() => setShowSplash(false)} />
+      </>
+    );
+  }
 
   if (!fontsLoaded) return null;
 

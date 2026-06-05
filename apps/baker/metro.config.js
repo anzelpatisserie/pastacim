@@ -1,10 +1,19 @@
+const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
-const config = getDefaultConfig(__dirname);
+const projectRoot = __dirname;
+const workspaceRoot = path.resolve(__dirname, '../..');
 
-// Resolve @opentelemetry/* to empty modules.
-// The dynamic import(variable) in @supabase's OTEL code is patched via patch-package
-// (patches/@supabase+supabase-js+2.106.1.patch) but static imports still need resolving.
+const config = getDefaultConfig(projectRoot);
+
+// Monorepo: workspace root'u izle, ama bundle/route kökü her zaman apps/baker
+config.watchFolders = [workspaceRoot];
+config.resolver.nodeModulesPaths = [
+  path.resolve(projectRoot, 'node_modules'),
+  path.resolve(workspaceRoot, 'node_modules'),
+];
+
+// @opentelemetry/* boş modül — Supabase'in OTEL dinamik importu için
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName.startsWith('@opentelemetry/')) {

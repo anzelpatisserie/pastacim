@@ -39,3 +39,18 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Supabase CLI temp
+supabase/.temp/
+
+# Android build artifacts
+android/.gradle/
+android/app/build/
+android/build/
+*.apk
+*.aab

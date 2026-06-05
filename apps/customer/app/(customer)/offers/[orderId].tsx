@@ -4,7 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { supabase, rpcAcceptOffer, rpcRejectOffer, notifyUser, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcAcceptOffer, rpcRejectOffer, notifyUser, getUserPushToken, sendPushNotification, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +48,24 @@ export default function OffersScreen() {
       .order('created_at', { ascending: true });
 
     if (offersRes.data) {
-      setOffers(offersRes.data as Offer[]);
+      // Sıralama: rating yüksekten düşüğe → review_count → düşük fiyat
+      // Reddedilen teklifler en sona düşsün.
+      const sorted = [...(offersRes.data as Offer[])].sort((a, b) => {
+        const aRejected = a.status === 'rejected' ? 1 : 0;
+        const bRejected = b.status === 'rejected' ? 1 : 0;
+        if (aRejected !== bRejected) return aRejected - bRejected;
+
+        const aRating = a.shop?.rating ?? 0;
+        const bRating = b.shop?.rating ?? 0;
+        if (bRating !== aRating) return bRating - aRating;
+
+        const aReviews = a.shop?.review_count ?? 0;
+        const bReviews = b.shop?.review_count ?? 0;
+        if (bReviews !== aReviews) return bReviews - aReviews;
+
+        return (a.price ?? 0) - (b.price ?? 0);
+      });
+      setOffers(sorted);
     }
 
     if (refresh) setIsRefreshing(false);
@@ -83,6 +100,26 @@ export default function OffersScreen() {
               body: `${order?.title ?? 'Siparişiniz'} için teklifiniz kabul edildi.`,
               data: { orderId: orderId as string },
             }).catch(() => {});
+
+            // accept_offer RPC diğer teklifleri DB tarafında otomatik 'rejected'
+            // yapıp in-app bildirimi (notifications tablosu) ekledi. Burada da
+            // reddedilen baker'lara PUSH bildirimi yollayalım — in-app duplicate
+            // olmaması için notifyUser yerine doğrudan sendPushNotification kullan.
+            offers
+              .filter((o) => o.id !== offer.id && o.baker_id !== offer.baker_id && o.status === 'pending')
+              .forEach(async (rejected) => {
+                try {
+                  const token = await getUserPushToken(rejected.baker_id);
+                  if (token) {
+                    await sendPushNotification({
+                      token,
+                      title: '❌ Teklifin Reddedildi',
+                      body: 'Müşteri başka bir pastacının teklifini kabul etti.',
+                      data: { type: 'offer_rejected', orderId: orderId as string },
+                    });
+                  }
+                } catch { /* push hatası akışı engellemesin */ }
+              });
 
             Alert.alert(
               '🎉 Teklif Kabul Edildi!',
@@ -161,7 +198,11 @@ export default function OffersScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       <View style={[styles.header, { borderBottomColor: C.border }]}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          activeOpacity={0.6}
+        >
           <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -191,9 +232,10 @@ export default function OffersScreen() {
         <FlatList
           data={offers}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <OfferCard
               offer={item}
+              rank={index + 1}
               isAccepted={order?.selected_offer_id === item.id}
               isOrderAccepted={order?.status === 'accepted'}
               onAccept={() => handleAccept(item)}
@@ -214,11 +256,24 @@ export default function OffersScreen() {
             <RefreshControl refreshing={isRefreshing} onRefresh={() => fetchData(true)} tintColor={C.primary} />
           }
           ListHeaderComponent={
-            <Text style={[styles.listHeader, { color: C.textSecondary }]}>
-              {offers.filter(o => o.status !== 'rejected').length} teklif
-              {offers.filter(o => o.status === 'rejected').length > 0 &&
-                ` · ${offers.filter(o => o.status === 'rejected').length} reddedildi`}
-            </Text>
+            <>
+              {order?.status === 'accepted' && (
+                <View style={[styles.acceptedBanner, { backgroundColor: C.success + '18', borderColor: C.success + '66' }]}>
+                  <Text style={[styles.acceptedBannerTitle, { color: C.success }]}>
+                    ✅ Bu sipariş için bir teklif kabul ettiniz
+                  </Text>
+                  <Text style={[styles.acceptedBannerSubtitle, { color: C.text }]}>
+                    Diğer teklifler artık aktif değil.
+                  </Text>
+                </View>
+              )}
+              <Text style={[styles.listHeader, { color: C.textSecondary }]}>
+                {offers.filter(o => o.status !== 'rejected').length} teklif
+                {offers.filter(o => o.status === 'rejected').length > 0 &&
+                  ` · ${offers.filter(o => o.status === 'rejected').length} reddedildi`}
+                {' '}· puana göre sıralı
+              </Text>
+            </>
           }
         />
       )}
@@ -227,9 +282,10 @@ export default function OffersScreen() {
 }
 
 function OfferCard({
-  offer, isAccepted, isOrderAccepted, onAccept, onReject, onMessage, onViewProfile, isAccepting, isRejecting, colors: C,
+  offer, rank, isAccepted, isOrderAccepted, onAccept, onReject, onMessage, onViewProfile, isAccepting, isRejecting, colors: C,
 }: {
   offer: Offer;
+  rank: number;
   isAccepted: boolean;
   isOrderAccepted: boolean;
   onAccept: () => void;
@@ -241,6 +297,8 @@ function OfferCard({
   colors: ThemeColors;
 }) {
   const isRejected = offer.status === 'rejected';
+  const rating = offer.shop?.rating ?? 0;
+  const reviewCount = offer.shop?.review_count ?? 0;
 
   return (
     <View style={[
@@ -260,40 +318,38 @@ function OfferCard({
         </View>
       )}
 
-      {/* Dükkan */}
+      {/* Dükkan + sıra + puan */}
       <View style={styles.shopRow}>
-        <View style={[styles.shopAvatar, { backgroundColor: C.primary + '22' }]}>
-          <Text style={styles.shopAvatarEmoji}>🎂</Text>
+        <View style={[styles.rankBadge, { backgroundColor: C.primary + '18', borderColor: C.primary + '44' }]}>
+          <Text style={[styles.rankText, { color: C.primary }]}>{rank}.</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.shopName, { color: C.text }]}>
+          <Text style={[styles.shopName, { color: C.text }]} numberOfLines={1}>
             {offer.shop?.name ?? 'Pastacı'}
           </Text>
-          {offer.baker_profile?.full_name ? (
-            <Text style={[styles.bakerName, { color: C.textSecondary }]}>
-              {offer.baker_profile.full_name}
-            </Text>
-          ) : null}
-        </View>
-        {(offer.shop?.rating ?? 0) > 0 && (
-          <View style={styles.ratingRow}>
-            <Text style={styles.ratingStar}>⭐</Text>
-            <Text style={[styles.ratingText, { color: C.text }]}>
-              {(offer.shop?.rating ?? 0).toFixed(1)}
-            </Text>
+          <View style={styles.metaLine}>
+            {rating > 0 ? (
+              <Text style={[styles.metaLineText, { color: C.textSecondary }]}>
+                ⭐ {rating.toFixed(1)}
+                {reviewCount > 0 ? ` (${reviewCount} yorum)` : ''}
+              </Text>
+            ) : (
+              <Text style={[styles.metaLineText, { color: C.placeholder }]}>
+                Henüz puan yok
+              </Text>
+            )}
+            <Text style={[styles.metaLineDot, { color: C.placeholder }]}>·</Text>
+            <Text style={[styles.metaLinePrice, { color: C.primary }]}>₺{offer.price}</Text>
           </View>
-        )}
+        </View>
       </View>
 
-      {/* Fiyat */}
-      <View style={styles.priceRow}>
-        <Text style={[styles.price, { color: C.primary }]}>₺{offer.price}</Text>
-        {offer.estimated_days ? (
-          <Text style={[styles.days, { color: C.textSecondary }]}>
-            📅 {offer.estimated_days} gün içinde
-          </Text>
-        ) : null}
-      </View>
+      {/* Süre */}
+      {offer.estimated_days ? (
+        <Text style={[styles.days, { color: C.textSecondary }]}>
+          📅 {offer.estimated_days} gün içinde teslim
+        </Text>
+      ) : null}
 
       {/* Mesaj */}
       {offer.message ? (
@@ -375,16 +431,28 @@ const styles = StyleSheet.create({
   statusBanner: { padding: Spacing.sm, borderRadius: Radius.sm, alignItems: 'center' },
   statusBannerText: { fontWeight: '700', fontSize: FontSize.sm },
   shopRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  shopAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  shopAvatarEmoji: { fontSize: 22 },
+  rankBadge: {
+    minWidth: 36, height: 36, borderRadius: Radius.sm,
+    borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  rankText: { fontSize: FontSize.md, fontWeight: '800' },
   shopName: { fontSize: FontSize.md, fontWeight: '700' },
-  bakerName: { fontSize: FontSize.xs },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  ratingStar: { fontSize: 13 },
-  ratingText: { fontSize: FontSize.sm, fontWeight: '600' },
-  priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  price: { fontSize: FontSize.xxl, fontWeight: '800' },
+  metaLine: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 },
+  metaLineText: { fontSize: FontSize.sm, fontWeight: '600' },
+  metaLineDot: { fontSize: FontSize.sm, fontWeight: '700' },
+  metaLinePrice: { fontSize: FontSize.md, fontWeight: '800' },
   days: { fontSize: FontSize.sm },
+  acceptedBanner: {
+    borderWidth: 1.5,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    gap: 4,
+  },
+  acceptedBannerTitle: { fontSize: FontSize.md, fontWeight: '800' },
+  acceptedBannerSubtitle: { fontSize: FontSize.sm },
   message: { fontSize: FontSize.sm, lineHeight: 18, fontStyle: 'italic' },
   btnRow: { flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.xs },
   profileBtn: { paddingHorizontal: Spacing.sm, paddingVertical: 10, borderRadius: Radius.full, borderWidth: 1.5, alignItems: 'center' },

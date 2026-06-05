@@ -6,7 +6,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
   TouchableOpacity, ActivityIndicator, Image, RefreshControl, Linking,
+  LayoutAnimation, Platform, UIManager,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
@@ -14,13 +19,16 @@ import type { Database } from '@pastacim/shared';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
 
-type Shop = Database['public']['Tables']['pastry_shops']['Row'];
+type Shop = Database['public']['Tables']['pastry_shops']['Row'] & {
+  owner?: { avatar_url: string | null; full_name: string | null } | null;
+};
 
 type Review = {
   id: string;
   rating: number;
   comment: string | null;
   created_at: string;
+  is_anonymous: boolean;
   customer: { full_name: string | null } | null;
 };
 
@@ -33,21 +41,27 @@ export default function CustomerBakerProfileScreen() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
   // Müşterinin bu pastacıyla aktif siparişi var mı?
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [pendingOrderCount, setPendingOrderCount] = useState(0);
+
+  const toggleReviews = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setReviewsOpen((v) => !v);
+  };
 
   const loadData = useCallback(async (refresh = false) => {
     if (!shopId) return;
     if (refresh) setIsRefreshing(true);
     else setIsLoading(true);
 
-    // Dükkan bilgisi + yorumlar paralel
+    // Dükkan bilgisi + sahip avatar + yorumlar paralel
     const [shopRes, revRes] = await Promise.all([
-      _db.from('pastry_shops').select('*').eq('id', shopId).single(),
+      _db.from('pastry_shops').select('*, owner:users!user_id(avatar_url, full_name)').eq('id', shopId).single(),
       _db
         .from('reviews')
-        .select('id, rating, comment, created_at, customer:users!customer_id(full_name)')
+        .select('id, rating, comment, created_at, is_anonymous, customer:users!customer_id(full_name)')
         .eq('shop_id', shopId)
         .order('created_at', { ascending: false })
         .limit(20),
@@ -122,7 +136,11 @@ export default function CustomerBakerProfileScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.back, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
         </View>
@@ -137,7 +155,11 @@ export default function CustomerBakerProfileScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.back, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
         </View>
@@ -157,7 +179,11 @@ export default function CustomerBakerProfileScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: C.border }]}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          activeOpacity={0.6}
+        >
           <Text style={[styles.back, { color: C.primary }]}>← Geri</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: C.text }]} numberOfLines={1}>
@@ -177,14 +203,25 @@ export default function CustomerBakerProfileScreen() {
           />
         }
       >
-        {/* Kapak Fotoğrafı */}
-        {shop.cover_image_url ? (
-          <Image source={{ uri: shop.cover_image_url }} style={styles.cover} resizeMode="cover" />
-        ) : (
-          <View style={[styles.coverPlaceholder, { backgroundColor: C.skeleton }]}>
-            <Text style={styles.coverEmoji}>🎂</Text>
+        {/* Kapak Fotoğrafı + Profil Avatar overlay */}
+        <View style={styles.coverWrap}>
+          {shop.cover_image_url ? (
+            <Image source={{ uri: shop.cover_image_url }} style={styles.cover} resizeMode="cover" />
+          ) : (
+            <View style={[styles.coverPlaceholder, { backgroundColor: C.skeleton }]}>
+              <Text style={styles.coverEmoji}>🎂</Text>
+            </View>
+          )}
+          <View style={[styles.avatarOverlay, { backgroundColor: C.card, borderColor: C.card }]}>
+            <View style={[styles.avatarCircle, { backgroundColor: C.primary + '22' }]}>
+              {shop.owner?.avatar_url ? (
+                <Image source={{ uri: shop.owner.avatar_url }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarEmoji}>👨‍🍳</Text>
+              )}
+            </View>
           </View>
-        )}
+        </View>
 
         {/* Temel Bilgiler */}
         <View style={[styles.infoCard, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -273,18 +310,25 @@ export default function CustomerBakerProfileScreen() {
           )}
         </View>
 
-        {/* Yorumlar */}
+        {/* Yorumlar (Collapsible) */}
         {reviews.length > 0 && (
           <View style={[styles.reviewsCard, { backgroundColor: C.card, borderColor: C.border }]}>
-            <Text style={[styles.sectionTitle, { color: C.text }]}>💬 Müşteri Yorumları</Text>
-            {reviews.map((r, idx) => (
+            <TouchableOpacity style={styles.reviewsHeader} onPress={toggleReviews} activeOpacity={0.7}>
+              <Text style={[styles.sectionTitle, { color: C.text }]}>
+                💬 Müşteri Yorumları ({reviews.length})
+              </Text>
+              <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                {reviewsOpen ? '▾' : '▸'}
+              </Text>
+            </TouchableOpacity>
+            {reviewsOpen && reviews.map((r, idx) => (
               <View
                 key={r.id}
                 style={[styles.reviewItem, idx > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}
               >
                 <View style={styles.reviewTop}>
                   <Text style={[styles.reviewName, { color: C.text }]}>
-                    {r.customer?.full_name ?? 'Müşteri'}
+                    {r.is_anonymous ? 'Anonim' : (r.customer?.full_name ?? 'Müşteri')}
                   </Text>
                   <Text style={styles.reviewStars}>
                     {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
@@ -335,9 +379,24 @@ const styles = StyleSheet.create({
   },
   back: { fontSize: FontSize.md, fontWeight: '600' },
   headerTitle: { fontSize: FontSize.md, fontWeight: '700', flex: 1, textAlign: 'center', marginHorizontal: Spacing.sm },
+  coverWrap: { position: 'relative', marginBottom: 36 },
   cover: { width: '100%', height: 220 },
   coverPlaceholder: { width: '100%', height: 180, alignItems: 'center', justifyContent: 'center' },
   coverEmoji: { fontSize: 64 },
+  avatarOverlay: {
+    position: 'absolute', bottom: -36, left: Spacing.md,
+    borderRadius: 44, borderWidth: 4, padding: 0,
+  },
+  avatarCircle: {
+    width: 80, height: 80, borderRadius: 40,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  avatarImage: { width: '100%', height: '100%' },
+  avatarEmoji: { fontSize: 40 },
+  reviewsHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  chevron: { fontSize: 18, fontWeight: '700' },
   emptyTitle: { fontSize: FontSize.lg, fontWeight: '700', textAlign: 'center' },
   infoCard: {
     margin: Spacing.md, borderRadius: Radius.lg, borderWidth: 1,

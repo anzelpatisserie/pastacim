@@ -11,7 +11,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.pastacim.baker",
       "buildNumber": "1",
-      "entitlements": { "aps-environment": "production" },
+      "entitlements": {
+        "aps-environment": "production",
+        "keychain-access-groups": ["$(AppIdentifierPrefix)$(CFBundleIdentifier)"]
+      },
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"],
         "NSLocationWhenInUseUsageDescription": "Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.",

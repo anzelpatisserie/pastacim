@@ -4,8 +4,9 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { supabase, rpcWithdrawOffer, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
+import { useNotifications } from '../../hooks/useNotifications';
 
 type Offer = Database['public']['Tables']['offers']['Row'] & {
   order: (Database['public']['Tables']['orders']['Row'] & {
@@ -23,26 +24,21 @@ const ORDER_STATUS_LABELS: Record<string, { label: string; color: string; emoji:
   cancelled:   { label: 'İptal Edildi',      color: '#FC8181', emoji: '❌' },
 };
 
-const OFFER_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  pending:   { label: '⏳ Yanıt Bekleniyor', color: '#B7791F' },
-  rejected:  { label: '❌ Reddedildi',       color: '#C53030' },
-  withdrawn: { label: '↩️ Geri Çekildi',    color: '#718096' },
-};
-
+// Aktif: kabul edilmiş + henüz tamamlanmamış/iptal edilmemiş
 function isActive(offer: Offer): boolean {
   const os = offer.order?.status;
-  if (offer.status === 'pending') return true;
-  if (offer.status === 'accepted' && os && ['accepted', 'in_progress', 'ready'].includes(os)) return true;
-  return false;
+  if (offer.status !== 'accepted') return false;
+  if (!os) return false;
+  return ['accepted', 'in_progress', 'ready'].includes(os);
 }
 
 export default function BakerMyOrdersScreen() {
   const C = useThemeColors();
   const { user } = useAuth();
+  const { unreadCount } = useNotifications(user?.id);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
   const [progressingId, setProgressingId] = useState<string | null>(null);
 
   const fetchOffers = useCallback(async (refresh = false) => {
@@ -50,22 +46,35 @@ export default function BakerMyOrdersScreen() {
     if (refresh) setIsRefreshing(true);
     else setIsLoading(true);
 
-    const { data } = await supabase
-      .from('offers')
-      .select(`
-        *,
-        order:orders!order_id(
+    try {
+      // Sadece KABUL EDİLMİŞ teklifler — yani üzerinde çalışılan/çalışılmış siparişler
+      const { data, error } = await supabase
+        .from('offers')
+        .select(`
           *,
-          customer:users!customer_id(id, full_name)
-        )
-      `)
-      .eq('baker_id', user.id)
-      .eq('hidden_for_baker', false)
-      .order('created_at', { ascending: false });
+          order:orders!order_id(
+            *,
+            customer:users!customer_id(id, full_name)
+          )
+        `)
+        .eq('baker_id', user.id)
+        .eq('status', 'accepted')
+        .eq('hidden_for_baker', false)
+        .order('created_at', { ascending: false });
 
-    setOffers((data ?? []) as Offer[]);
-    if (refresh) setIsRefreshing(false);
-    else setIsLoading(false);
+      if (error) {
+        Alert.alert('Hata', 'Siparişler yüklenirken bir sorun oluştu.');
+        setOffers([]);
+      } else {
+        setOffers((data ?? []) as Offer[]);
+      }
+    } catch {
+      Alert.alert('Hata', 'Siparişler yüklenemedi.');
+      setOffers([]);
+    } finally {
+      if (refresh) setIsRefreshing(false);
+      else setIsLoading(false);
+    }
   }, [user?.id]);
 
   useEffect(() => {
@@ -75,6 +84,7 @@ export default function BakerMyOrdersScreen() {
 
   useFocusEffect(useCallback(() => { fetchOffers(); }, [fetchOffers]));
 
+  // Realtime: order status değişiklikleri + offers tablosu (yeni kabul/iptal vs.)
   useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
@@ -91,32 +101,13 @@ export default function BakerMyOrdersScreen() {
           );
         });
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'offers', filter: `baker_id=eq.${user.id}` }, () => {
+        // Teklif durum değişiklikleri (örn. pending → accepted) için listeyi tazele
+        fetchOffers(true);
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user?.id]);
-
-  const handleWithdraw = (offer: Offer) => {
-    Alert.alert(
-      '↩️ Teklifi Geri Çek',
-      `"${offer.order?.title ?? 'Bu sipariş'}" siparişindeki teklifinizi geri çekmek istiyor musunuz?`,
-      [
-        { text: 'Vazgeç', style: 'cancel' },
-        {
-          text: 'Geri Çek', style: 'destructive',
-          onPress: async () => {
-            setWithdrawingId(offer.id);
-            const { data, error } = await rpcWithdrawOffer({ p_offer_id: offer.id });
-            setWithdrawingId(null);
-            if (error || (data as { error?: string } | null)?.error) {
-              Alert.alert('Hata', 'Teklif geri çekilemedi.');
-              return;
-            }
-            setOffers((prev) => prev.filter((o) => o.id !== offer.id));
-          },
-        },
-      ]
-    );
-  };
+  }, [user?.id, fetchOffers]);
 
   const handleHide = (offer: Offer) => {
     Alert.alert(
@@ -168,19 +159,22 @@ export default function BakerMyOrdersScreen() {
     }
   };
 
-  const aktif  = offers.filter(isActive);
-  const gecmis = offers.filter((o) => !isActive(o));
+  const aktif      = offers.filter(isActive);
+  // Sadece tamamlanan; iptaller bu listede yer almasın (kabul edilmiş ama customer iptal etti)
+  const tamamlanan = offers.filter((o) => o.status === 'accepted' && o.order?.status === 'completed');
 
   const sections = [
-    ...(aktif.length > 0  ? [{ type: 'header' as const, title: `Aktif Siparişler (${aktif.length})` }, ...aktif.map((o) => ({ type: 'offer' as const, data: o }))] : []),
-    ...(gecmis.length > 0 ? [{ type: 'header' as const, title: `Geçmiş (${gecmis.length})` },         ...gecmis.map((o) => ({ type: 'offer' as const, data: o }))] : []),
+    ...(aktif.length > 0       ? [{ type: 'header' as const, title: `Devam Eden Siparişler (${aktif.length})` }, ...aktif.map((o) => ({ type: 'offer' as const, data: o }))] : []),
+    ...(tamamlanan.length > 0  ? [{ type: 'header' as const, title: `Tamamlanan Siparişler (${tamamlanan.length})` }, ...tamamlanan.map((o) => ({ type: 'offer' as const, data: o }))] : []),
   ];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
-      <View style={[styles.header, { borderBottomColor: C.border }]}>
-        <Text style={[styles.title, { color: C.text }]}>Siparişlerim</Text>
-      </View>
+      <TabHeader
+        title="Siparişlerim"
+        unreadCount={unreadCount}
+        onBellPress={() => router.push('/(baker)/notifications' as never)}
+      />
 
       {isLoading ? (
         <View style={styles.centered}>
@@ -189,9 +183,9 @@ export default function BakerMyOrdersScreen() {
       ) : offers.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.emptyEmoji}>✅</Text>
-          <Text style={[styles.emptyTitle, { color: C.text }]}>Henüz sipariş yok</Text>
+          <Text style={[styles.emptyTitle, { color: C.text }]}>Henüz kabul edilen siparişin yok</Text>
           <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-            Teklif verdiğin siparişler burada görünür
+            Kabul edilen teklifleriniz burada görünecek
           </Text>
           <TouchableOpacity
             style={[styles.goBtn, { backgroundColor: C.primary }]}
@@ -214,9 +208,7 @@ export default function BakerMyOrdersScreen() {
               <OfferOrderCard
                 offer={item.data}
                 colors={C}
-                isWithdrawing={withdrawingId === item.data.id}
                 isProgressing={progressingId === item.data.id}
-                onWithdraw={() => handleWithdraw(item.data)}
                 onHide={() => handleHide(item.data)}
                 onSetStatus={(s) => handleSetStatus(item.data, s)}
               />
@@ -234,23 +226,24 @@ export default function BakerMyOrdersScreen() {
 }
 
 function OfferOrderCard({
-  offer, colors: C, isWithdrawing, isProgressing, onWithdraw, onHide, onSetStatus,
+  offer, colors: C, isProgressing, onHide, onSetStatus,
 }: {
   offer: Offer;
   colors: ThemeColors;
-  isWithdrawing: boolean;
   isProgressing: boolean;
-  onWithdraw: () => void;
   onHide: () => void;
   onSetStatus: (s: OrderStatus) => void;
 }) {
   const isAccepted  = offer.status === 'accepted';
-  const isPending   = offer.status === 'pending';
   const orderStatus = offer.order?.status;
   const active      = isActive(offer);
 
-  const statusLabel    = orderStatus ? ORDER_STATUS_LABELS[orderStatus] : null;
-  const offerStatusLbl = !isAccepted ? (OFFER_STATUS_LABELS[offer.status] ?? null) : null;
+  // Sipariş durumuna göre badge — kabul edilmiş tekliflerde sipariş statüsünü gösterir
+  const singleBadge = (() => {
+    if (orderStatus === 'cancelled') return ORDER_STATUS_LABELS.cancelled;
+    if (isAccepted && orderStatus) return ORDER_STATUS_LABELS[orderStatus];
+    return null;
+  })();
 
   const nextAction: { label: string; status: OrderStatus; color: string } | null = (() => {
     if (!isAccepted) return null;
@@ -265,8 +258,8 @@ function OfferOrderCard({
         styles.card,
         {
           backgroundColor: C.card,
-          borderColor: isAccepted && active ? C.success : isPending ? '#B7791F88' : C.border,
-          borderWidth: (isAccepted && active) || isPending ? 2 : 1,
+          borderColor: isAccepted && active ? C.success : C.border,
+          borderWidth: isAccepted && active ? 2 : 1,
         },
       ]}
       activeOpacity={0.85}
@@ -279,16 +272,11 @@ function OfferOrderCard({
         <Text style={[styles.orderTitle, { color: C.text }]} numberOfLines={1}>
           {offer.order?.title ?? 'Sipariş'}
         </Text>
-        {statusLabel && (
-          <View style={[styles.statusBadge, { backgroundColor: statusLabel.color + '22' }]}>
-            <Text style={[styles.statusText, { color: statusLabel.color }]}>
-              {statusLabel.emoji} {statusLabel.label}
+        {singleBadge && (
+          <View style={[styles.statusBadge, { backgroundColor: singleBadge.color + '22' }]}>
+            <Text style={[styles.statusText, { color: singleBadge.color }]}>
+              {'emoji' in singleBadge && singleBadge.emoji ? `${singleBadge.emoji} ` : ''}{singleBadge.label}
             </Text>
-          </View>
-        )}
-        {offerStatusLbl && (
-          <View style={[styles.statusBadge, { backgroundColor: offerStatusLbl.color + '22' }]}>
-            <Text style={[styles.statusText, { color: offerStatusLbl.color }]}>{offerStatusLbl.label}</Text>
           </View>
         )}
       </View>
@@ -337,19 +325,6 @@ function OfferOrderCard({
             >
               <Text style={styles.msgBtnText}>💬 Müşteriye Mesaj</Text>
             </TouchableOpacity>
-
-            {isPending && (
-              <TouchableOpacity
-                style={[styles.iconBtn, { borderColor: C.error + '88' }]}
-                onPress={onWithdraw}
-                disabled={isWithdrawing}
-              >
-                {isWithdrawing
-                  ? <ActivityIndicator size="small" color={C.error} />
-                  : <Text style={[styles.iconBtnText, { color: C.error }]}>↩️</Text>
-                }
-              </TouchableOpacity>
-            )}
 
             {!active && (
               <TouchableOpacity

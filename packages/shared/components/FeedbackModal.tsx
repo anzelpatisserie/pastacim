@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
   StyleSheet, Alert, ActivityIndicator, Image,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
@@ -124,7 +125,10 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={[styles.sheet, { backgroundColor: C.background }]}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: C.border }]}>
@@ -134,60 +138,66 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
             </TouchableOpacity>
           </View>
 
-          {/* Mesaj */}
-          <Text style={[styles.label, { color: C.textSecondary }]}>Mesajınız</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: C.card, borderColor: C.border, color: C.text }]}
-            placeholder="Uygulama hakkında düşüncelerinizi paylaşın..."
-            placeholderTextColor={C.placeholder}
-            value={message}
-            onChangeText={setMessage}
-            multiline
-            numberOfLines={5}
-            textAlignVertical="top"
-            maxLength={1000}
-          />
-          <Text style={[styles.charCount, { color: C.placeholder }]}>{message.length}/1000</Text>
-
-          {/* Screenshot */}
-          <Text style={[styles.label, { color: C.textSecondary, marginTop: Spacing.sm }]}>
-            Ekran Görüntüsü (isteğe bağlı)
-          </Text>
-
-          {screenshotUri ? (
-            <View style={styles.screenshotWrapper}>
-              <Image source={{ uri: screenshotUri }} style={styles.screenshot} resizeMode="cover" />
-              <TouchableOpacity
-                style={[styles.removeScreenshotBtn, { backgroundColor: C.error }]}
-                onPress={() => setScreenshotUri(null)}
-              >
-                <Text style={styles.removeScreenshotText}>✕ Kaldır</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.screenshotPickBtn, { backgroundColor: C.card, borderColor: C.border }]}
-              onPress={handlePickScreenshot}
-            >
-              <Text style={[styles.screenshotPickText, { color: C.textSecondary }]}>📷 Ekran görüntüsü ekle</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Gönder */}
-          <TouchableOpacity
-            style={[styles.submitBtn, { backgroundColor: C.primary }, isSubmitting && { opacity: 0.7 }]}
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-            activeOpacity={0.85}
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFF" />
+            {/* Mesaj */}
+            <Text style={[styles.label, { color: C.textSecondary }]}>Mesajınız</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: C.card, borderColor: C.border, color: C.text }]}
+              placeholder="Uygulama hakkında düşüncelerinizi paylaşın..."
+              placeholderTextColor={C.placeholder}
+              value={message}
+              onChangeText={setMessage}
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
+              maxLength={1000}
+            />
+            <Text style={[styles.charCount, { color: C.placeholder }]}>{message.length}/1000</Text>
+
+            {/* Screenshot */}
+            <Text style={[styles.label, { color: C.textSecondary, marginTop: Spacing.sm }]}>
+              Ekran Görüntüsü (isteğe bağlı)
+            </Text>
+
+            {screenshotUri ? (
+              <View style={styles.screenshotWrapper}>
+                <Image source={{ uri: screenshotUri }} style={styles.screenshot} resizeMode="cover" />
+                <TouchableOpacity
+                  style={[styles.removeScreenshotBtn, { backgroundColor: C.error }]}
+                  onPress={() => setScreenshotUri(null)}
+                >
+                  <Text style={styles.removeScreenshotText}>✕ Kaldır</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
-              <Text style={styles.submitBtnText}>Gönder</Text>
+              <TouchableOpacity
+                style={[styles.screenshotPickBtn, { backgroundColor: C.card, borderColor: C.border }]}
+                onPress={handlePickScreenshot}
+              >
+                <Text style={[styles.screenshotPickText, { color: C.textSecondary }]}>📷 Ekran görüntüsü ekle</Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+
+            {/* Gönder */}
+            <TouchableOpacity
+              style={[styles.submitBtn, { backgroundColor: C.primary }, isSubmitting && { opacity: 0.7 }]}
+              onPress={handleSubmit}
+              disabled={isSubmitting}
+              activeOpacity={0.85}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.submitBtnText}>Gönder</Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -199,8 +209,11 @@ const styles = StyleSheet.create({
   },
   sheet: {
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: Spacing.lg, paddingBottom: Spacing.xl,
-    maxHeight: '85%',
+    paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg,
+    maxHeight: '90%',
+  },
+  scrollContent: {
+    paddingBottom: Spacing.xl,
   },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

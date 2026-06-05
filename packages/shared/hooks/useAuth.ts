@@ -1,10 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
+import * as SecureStore from 'expo-secure-store';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/database.types';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const EPHEMERAL_SESSION_KEY = 'pastacim_ephemeral_session';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -22,7 +25,7 @@ interface AuthState {
 }
 
 interface AuthActions {
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: string | null }>;
   signUp: (params: SignUpParams) => Promise<{ error: string | null }>;
   signInWithGoogle: (redirectUrl: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -41,7 +44,7 @@ export function useAuth(): AuthState & AuthActions {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadProfile = useCallback(async (userId: string) => {
+  const loadProfile = useCallback(async (userId: string): Promise<boolean> => {
     const { data, error } = await supabase
       .from('users')
       .select('id, email, phone, full_name, avatar_url, is_customer, is_baker, wallet_balance, push_token, role, token_balance, created_at, updated_at')
@@ -50,9 +53,10 @@ export function useAuth(): AuthState & AuthActions {
 
     if (error) {
       console.error('[useAuth] Profil yüklenemedi:', error.message);
-      return;
+      return false;
     }
     setProfile(data);
+    return true;
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -62,21 +66,43 @@ export function useAuth(): AuthState & AuthActions {
   }, [session, loadProfile]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    (async () => {
+      // "Beni Hatırla" kapalıyken giriş yapıldıysa app yeniden açılışta otomatik çıkış yap
+      const ephemeral = await SecureStore.getItemAsync(EPHEMERAL_SESSION_KEY);
+      if (ephemeral === 'true') {
+        await SecureStore.deleteItemAsync(EPHEMERAL_SESSION_KEY);
+        await supabase.auth.signOut();
+        setSession(null);
+        setProfile(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const { data: { session: s } } = await supabase.auth.getSession();
       setSession(s);
       if (s?.user?.id) {
-        loadProfile(s.user.id).finally(() => setIsLoading(false));
-      } else {
-        setIsLoading(false);
+        const ok = await loadProfile(s.user.id);
+        if (!ok) {
+          await supabase.auth.signOut();
+          setSession(null);
+          setProfile(null);
+        }
       }
-    });
+      setIsLoading(false);
+    })();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, s) => {
-        setSession(s);
+        // Profil yüklenene kadar isLoading=true tut ki layout
+        // henüz boş profile göre yanlış ekrana yönlendirme yapmasın
+        // (özellikle Google OAuth sonrası is_baker=false sanıp setup'a atıyordu).
         if (s?.user?.id) {
+          setIsLoading(true);
+          setSession(s);
           await loadProfile(s.user.id);
+          setIsLoading(false);
         } else {
+          setSession(s);
           setProfile(null);
         }
       }
@@ -87,9 +113,18 @@ export function useAuth(): AuthState & AuthActions {
 
   const signIn = useCallback(async (
     email: string,
-    password: string
+    password: string,
+    rememberMe: boolean = true
   ): Promise<{ error: string | null }> => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (!error) {
+      if (rememberMe) {
+        await SecureStore.deleteItemAsync(EPHEMERAL_SESSION_KEY);
+      } else {
+        await SecureStore.setItemAsync(EPHEMERAL_SESSION_KEY, 'true');
+      }
+    }
 
     if (error) {
       if (error.message.includes('Invalid login credentials')) {
@@ -113,7 +148,7 @@ export function useAuth(): AuthState & AuthActions {
     fullName,
     redirectTo,
   }: SignUpParams): Promise<{ error: string | null }> => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -135,6 +170,14 @@ export function useAuth(): AuthState & AuthActions {
       return { error: `Hata: ${error.message}` };
     }
 
+    // E-posta doğrulama zorlaması:
+    // Supabase Auth Settings'te "Confirm email" kapalıysa veya bir şekilde
+    // signUp anında session dönerse, kullanıcıyı zorla çıkış yap.
+    // Sadece e-posta linkine tıklayınca (onAuthStateChange tetikleyerek) login olsun.
+    if (data.session && !data.user?.email_confirmed_at) {
+      await supabase.auth.signOut();
+    }
+
     return { error: null };
   }, []);
 
@@ -143,14 +186,50 @@ export function useAuth(): AuthState & AuthActions {
       provider: 'google',
       options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
     });
-    if (error || !data.url) return { error: 'Google girişi başlatılamadı.' };
+    if (error || !data.url) {
+      console.error('[Google] signInWithOAuth error:', error?.message);
+      return { error: 'Google girişi başlatılamadı: ' + (error?.message ?? 'bilinmeyen') };
+    }
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
     if (result.type === 'success') {
-      const { error: sessionError } = await supabase.auth.exchangeCodeForSession(result.url);
-      if (sessionError) return { error: 'Google oturumu açılamadı.' };
-      return { error: null };
+      // Supabase oturum kodunu URL'den çıkarıp session oluştur
+      // URL formatı: redirectUrl#access_token=...&refresh_token=...  veya  ?code=...
+      const url = result.url;
+      const params = new URL(url);
+      const hashFragment = url.includes('#') ? url.split('#')[1] : '';
+      const hashParams = new URLSearchParams(hashFragment);
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const code = params.searchParams.get('code');
+
+      // 1) Önce token fragment varsa direkt set et
+      if (accessToken && refreshToken) {
+        const { error: setErr } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (setErr) {
+          console.error('[Google] setSession error:', setErr.message);
+          return { error: 'Google oturumu açılamadı: ' + setErr.message };
+        }
+        return { error: null };
+      }
+
+      // 2) Code varsa exchange et
+      if (code) {
+        const { error: sessionError } = await supabase.auth.exchangeCodeForSession(url);
+        if (sessionError) {
+          console.error('[Google] exchangeCodeForSession error:', sessionError.message);
+          return { error: 'Google oturumu açılamadı: ' + sessionError.message };
+        }
+        return { error: null };
+      }
+
+      console.error('[Google] callback URL\'de ne token ne code var:', url);
+      return { error: 'Google yanıtı çözümlenemedi.' };
     }
-    return { error: result.type === 'cancel' ? null : 'Google girişi tamamlanamadı.' };
+    if (result.type === 'cancel' || result.type === 'dismiss') return { error: null };
+    return { error: 'Google girişi tamamlanamadı.' };
   }, []);
 
   const signOut = useCallback(async () => {

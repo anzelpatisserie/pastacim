@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { useFocusEffect } from 'expo-router';
 import { supabase } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,6 +63,13 @@ export function useNotifications(userId?: string) {
       channelRef.current = null;
     };
   }, [userId, fetchUnread]);
+
+  // Sayfa odağa gelince badge'i tazele — realtime kaçırma durumlarına karşı garanti güncelleme
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) fetchUnread(userId);
+    }, [userId, fetchUnread])
+  );
 
   return { unreadCount };
 }

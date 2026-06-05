@@ -2,15 +2,27 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image,
+  KeyboardAvoidingView, Platform, Image, Modal, FlatList,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { rpcPlaceOrder, rpcNearbyBakers, supabase, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION } from '@pastacim/shared';
 
 const SEARCH_RADIUS = 20;
+
+// Hazır şablonlar — Hızlı Başla kategorileri
+const ORDER_TEMPLATES: { emoji: string; title: string; description: string }[] = [
+  { emoji: '🎂', title: 'Doğum günü pastası', description: 'Doğum günü için özel pasta. Tema/karakter, yaş yazısı ve mum tercihlerinizi belirtin.' },
+  { emoji: '💍', title: 'Düğün pastası', description: 'Düğün için çok katlı pasta. Kat sayısı, renk teması ve süsleme tarzını belirtin.' },
+  { emoji: '🍰', title: 'Yaş pasta', description: 'Klasik yaş pasta. Tatlandırıcı/şurup tercihinizi (çikolatalı, vanilyalı, frambuazlı vs.) belirtin.' },
+  { emoji: '🥧', title: 'Tart', description: 'Meyveli veya çikolatalı tart. Tercih ettiğiniz meyve/dolgu ve hamur tipini belirtin.' },
+  { emoji: '🥮', title: 'Baklava', description: 'Geleneksel baklava. Cevizli mi fıstıklı mı, tek tepsi mi porsiyon mu olduğunu belirtin.' },
+  { emoji: '🍪', title: 'Kurabiye', description: 'Özel kurabiye seti. Tarz (badem ezmeli, çikolatalı, kuru üzümlü vs.) ve adet belirtin.' },
+  { emoji: '🧁', title: 'Cupcake', description: 'Cupcake seti. Lezzet ve süsleme tarzını (krema, gofret, çikolata sos vs.) belirtin.' },
+  { emoji: '🍩', title: 'Donut', description: 'Donut seti. Çeşit (klasik, çikolatalı, glazlı, renkli) ve adet belirtin.' },
+  { emoji: '🍮', title: 'Tatlı tabağı', description: 'Özel tatlı çeşnisi (sütlaç, kazandibi, profiterol vs.). Kişi sayısına göre porsiyon belirtin.' },
+];
 
 export default function CreateOrderScreen() {
   const C = useThemeColors();
@@ -236,10 +248,6 @@ export default function CreateOrderScreen() {
     return `${h}:${m}:00`;
   };
 
-  const handleDateChange = (_: DateTimePickerEvent, selected?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios'); // iOS'ta açık kal, Android'de kapat
-    if (selected) setDeliveryDate(selected);
-  };
 
   // ─── Siparişi Gönder ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
@@ -358,7 +366,11 @@ export default function CreateOrderScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.border }]}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            activeOpacity={0.6}
+          >
             <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: C.text }]}>Teklif Al</Text>
@@ -371,6 +383,52 @@ export default function CreateOrderScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Hızlı Başla — hazır şablonlar (her zaman görünür) */}
+          <View style={styles.field}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={[styles.label, { color: C.text }]}>🚀 Hızlı Başla</Text>
+              {(title || description) ? (
+                <TouchableOpacity
+                  onPress={() => { setTitle(''); setDescription(''); }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.labelHint, { color: C.primary, fontWeight: '700' }]}>✕ Temizle</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <Text style={[styles.labelHint, { color: C.placeholder }]}>
+              Bir kategori seç, formu senin için dolduralım
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.templatesRow}
+            >
+              {ORDER_TEMPLATES.map((tpl) => {
+                const isActive = title === tpl.title;
+                return (
+                  <TouchableOpacity
+                    key={tpl.title}
+                    style={[
+                      styles.templateChip,
+                      { backgroundColor: isActive ? C.primary : C.card, borderColor: isActive ? C.primary : C.border },
+                    ]}
+                    onPress={() => {
+                      setTitle(tpl.title);
+                      setDescription(tpl.description);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.templateEmoji}>{tpl.emoji}</Text>
+                    <Text style={[styles.templateText, { color: isActive ? '#FFF' : C.text }]} numberOfLines={1}>
+                      {tpl.title}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
           {/* Başlık */}
           <View style={styles.field}>
             <Text style={[styles.label, { color: C.text }]}>Ne sipariş etmek istiyorsunuz? *</Text>
@@ -532,26 +590,13 @@ export default function CreateOrderScreen() {
               )}
             </TouchableOpacity>
 
-            {showDatePicker && (
-              <DateTimePicker
-                value={deliveryDate ?? new Date()}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                minimumDate={new Date()}
-                locale="tr-TR"
-                onChange={handleDateChange}
-              />
-            )}
-
-            {/* iOS'ta "Tamam" butonu */}
-            {showDatePicker && Platform.OS === 'ios' && (
-              <TouchableOpacity
-                style={[styles.dateConfirmBtn, { backgroundColor: C.primary }]}
-                onPress={() => setShowDatePicker(false)}
-              >
-                <Text style={styles.dateConfirmBtnText}>Tamam</Text>
-              </TouchableOpacity>
-            )}
+            <DatePickerModal
+              visible={showDatePicker}
+              selectedDate={deliveryDate}
+              onSelect={(d) => setDeliveryDate(d)}
+              onDismiss={() => setShowDatePicker(false)}
+              C={C}
+            />
           </View>
 
           {/* ─── Teslim Saati ─────────────────────────────── */}
@@ -580,28 +625,13 @@ export default function CreateOrderScreen() {
               )}
             </TouchableOpacity>
 
-            {showTimePicker && (
-              <DateTimePicker
-                value={deliveryTime ?? new Date()}
-                mode="time"
-                is24Hour
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                locale="tr-TR"
-                onChange={(_: DateTimePickerEvent, selected?: Date) => {
-                  setShowTimePicker(Platform.OS === 'ios');
-                  if (selected) setDeliveryTime(selected);
-                }}
-              />
-            )}
-
-            {showTimePicker && Platform.OS === 'ios' && (
-              <TouchableOpacity
-                style={[styles.dateConfirmBtn, { backgroundColor: C.primary }]}
-                onPress={() => setShowTimePicker(false)}
-              >
-                <Text style={styles.dateConfirmBtnText}>Tamam</Text>
-              </TouchableOpacity>
-            )}
+            <TimePickerModal
+              visible={showTimePicker}
+              selectedTime={deliveryTime}
+              onSelect={(t) => setDeliveryTime(t)}
+              onDismiss={() => setShowTimePicker(false)}
+              C={C}
+            />
           </View>
 
           {/* Gönder */}
@@ -630,6 +660,138 @@ export default function CreateOrderScreen() {
   );
 }
 
+// ─── Tarih Seçici Modal ───────────────────────────────────────────────────────
+function DatePickerModal({
+  visible, selectedDate, onSelect, onDismiss, C,
+}: {
+  visible: boolean;
+  selectedDate: Date | null;
+  onSelect: (d: Date) => void;
+  onDismiss: () => void;
+  C: ReturnType<typeof useThemeColors>;
+}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dates = Array.from({ length: 60 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    return d;
+  });
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
+      <View style={pickerStyles.overlay}>
+        <View style={[pickerStyles.sheet, { backgroundColor: C.card }]}>
+          <Text style={[pickerStyles.title, { color: C.text }]}>Teslim Tarihi Seçin</Text>
+          <FlatList
+            data={dates}
+            keyExtractor={(d) => d.toISOString()}
+            style={pickerStyles.list}
+            renderItem={({ item }) => {
+              const isSelected = selectedDate?.toDateString() === item.toDateString();
+              const isToday = item.toDateString() === new Date().toDateString();
+              return (
+                <TouchableOpacity
+                  style={[pickerStyles.item, isSelected && { backgroundColor: C.primary + '22' }]}
+                  onPress={() => { onSelect(item); onDismiss(); }}
+                >
+                  <Text style={[pickerStyles.itemText, { color: C.text }, isSelected && { color: C.primary, fontWeight: '700' }]}>
+                    {isToday ? 'Bugün' : item.toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  </Text>
+                  {isSelected && <Text style={{ color: C.primary, fontSize: 18 }}>✓</Text>}
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <TouchableOpacity style={[pickerStyles.cancelBtn, { borderTopColor: C.border }]} onPress={onDismiss}>
+            <Text style={[pickerStyles.cancelText, { color: C.textSecondary }]}>İptal</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Saat Seçici Modal ────────────────────────────────────────────────────────
+function TimePickerModal({
+  visible, selectedTime, onSelect, onDismiss, C,
+}: {
+  visible: boolean;
+  selectedTime: Date | null;
+  onSelect: (t: Date) => void;
+  onDismiss: () => void;
+  C: ReturnType<typeof useThemeColors>;
+}) {
+  const slots: Date[] = [];
+  for (let h = 8; h <= 22; h++) {
+    for (const m of [0, 30]) {
+      if (h === 22 && m === 30) continue;
+      const d = new Date();
+      d.setHours(h, m, 0, 0);
+      slots.push(d);
+    }
+  }
+  const fmt = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const selectedFmt = selectedTime ? fmt(selectedTime) : null;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
+      <View style={pickerStyles.overlay}>
+        <View style={[pickerStyles.sheet, { backgroundColor: C.card }]}>
+          <Text style={[pickerStyles.title, { color: C.text }]}>Teslim Saati Seçin</Text>
+          <FlatList
+            data={slots}
+            keyExtractor={(d) => fmt(d)}
+            style={pickerStyles.list}
+            renderItem={({ item }) => {
+              const isSelected = fmt(item) === selectedFmt;
+              return (
+                <TouchableOpacity
+                  style={[pickerStyles.item, isSelected && { backgroundColor: C.primary + '22' }]}
+                  onPress={() => { onSelect(item); onDismiss(); }}
+                >
+                  <Text style={[pickerStyles.itemText, { color: C.text }, isSelected && { color: C.primary, fontWeight: '700' }]}>
+                    {fmt(item)}
+                  </Text>
+                  {isSelected && <Text style={{ color: C.primary, fontSize: 18 }}>✓</Text>}
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <TouchableOpacity style={[pickerStyles.cancelBtn, { borderTopColor: C.border }]} onPress={onDismiss}>
+            <Text style={[pickerStyles.cancelText, { color: C.textSecondary }]}>İptal</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const pickerStyles = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingTop: 16, maxHeight: '70%',
+  },
+  title: {
+    fontSize: FontSize.md, fontWeight: '700',
+    textAlign: 'center', paddingBottom: 12,
+  },
+  list: { flexGrow: 0 },
+  item: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg, paddingVertical: 14,
+  },
+  itemText: { fontSize: FontSize.md },
+  cancelBtn: {
+    borderTopWidth: 1, paddingVertical: 16,
+    alignItems: 'center', marginTop: 4,
+  },
+  cancelText: { fontSize: FontSize.md, fontWeight: '600' },
+});
+
 const PHOTO_SIZE = 88;
 
 const styles = StyleSheet.create({
@@ -644,6 +806,15 @@ const styles = StyleSheet.create({
   field: { gap: Spacing.xs },
   label: { fontSize: FontSize.sm, fontWeight: '600' },
   labelHint: { fontSize: FontSize.xs, fontWeight: '400' },
+  templatesRow: { gap: Spacing.sm, paddingVertical: 4, paddingHorizontal: 2 },
+  templateChip: {
+    borderWidth: 1, borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    minWidth: 120,
+  },
+  templateEmoji: { fontSize: 18 },
+  templateText: { fontSize: FontSize.sm, fontWeight: '700', flexShrink: 1 },
   input: {
     borderWidth: 1, borderRadius: Radius.md,
     paddingHorizontal: Spacing.md, paddingVertical: 12, fontSize: FontSize.md,

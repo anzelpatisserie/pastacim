@@ -11,8 +11,7 @@
   },
   "dependencies": {
     "@pastacim/shared": "*",
-    "@react-native-community/datetimepicker": "9.1.0",
-    "@supabase/supabase-js": "^2.50.0",
+"@supabase/supabase-js": "^2.50.0",
     "expo": "~56.0.0",
     "expo-font": "~56.0.5",
     "expo-image-picker": "~56.0.14",

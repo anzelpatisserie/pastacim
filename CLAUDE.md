@@ -156,20 +156,27 @@ npx supabase gen types typescript --project-id lvrbzhziayegyinkcuka \
 | `feedbacks` | Ekran görüntülü geri bildirimler + storage bucket — **sadece Dashboard'da, schema.sql'de yok** |
 
 ### Başlıca RPC'ler
-| RPC | Amaç | Nerede |
-|---|---|---|
-| `place_order` | Müşteri sipariş oluşturur (`p_is_urgent`, `p_delivery_time` dahil) | Dashboard-only |
-| `submit_offer` | Pastacı cüzdandan ücret düşerek teklif verir (`serving_size × ₺5`) | schema.sql + migration |
-| `accept_offer` / `reject_offer` / `withdraw_offer` | Teklif yaşam döngüsü | Dashboard-only |
-| `cancel_order` / `set_order_status` | Sipariş yönetimi | Dashboard-only |
-| `create_shop` | Dükkan açar, `is_baker = true` yapar | schema.sql |
-| `add_wallet_balance` | Cüzdana TL yükler | schema.sql |
-| `nearby_bakers` / `nearby_orders` | Konum bazlı eşleşme | schema.sql |
-| `get_conversations` | Mesajlaşma listesi | Dashboard-only |
-| `create_notification` | Bildirim oluşturma | schema.sql |
-| `register_push_token` | Kullanıcı push token kaydı | Dashboard-only, types'ta yok |
-| `request_wallet_top_up` | Pastacı cüzdan yükleme talebi | Dashboard-only |
-| `delete_conversation` / `delete_message_for_me` | Mesaj/konuşma silme | Dashboard-only, types'ta yok |
+| RPC | Amaç |
+|---|---|
+| `place_order` | Müşteri sipariş oluşturur (`p_is_urgent`, `p_delivery_time` dahil) |
+| `submit_offer(p_order_id, p_shop_id, p_price, p_message, p_estimated_days)` | Pastacı teklif verir; pending/accepted varsa `mevcut_teklif` hatası, rejected/withdrawn'ı pending'e çevirir |
+| `accept_offer` | Müşteri teklifi kabul eder + diğer pending teklifler otomatik rejected + reddedilen baker'lara DB notification |
+| `reject_offer` / `withdraw_offer` | Teklif yaşam döngüsü |
+| `cancel_order` | Sipariş iptal + pending/accepted teklifleri rejected'e çevirir + baker'lara "⌛ Sipariş İptal Edildi" bildirimi |
+| `set_order_status` | Pastacı in_progress / ready geçişleri |
+| `auto_cancel_overdue_orders` | pg_cron ile her 6 saatte: teslim tarihi > 2 gün geçmiş + pending/offers_received sipariş iptal |
+| `create_shop(...8 opsiyonel alan)` | Dükkan açar (çalışma saatleri, sosyal medya, Google bilgileri opsiyonel), `is_baker=true`, **UNIQUE(user_id)** |
+| `add_wallet_balance` | Cüzdana TL yükler |
+| `nearby_bakers` | Konum bazlı pastacı eşleşmesi |
+| `nearby_orders(lat, lng, radius_km)` | Yakındaki sipariş + müşteri özeti (full_name, avatar, total/completed orders, member_days) + delivery_address |
+| `get_order_offer_summary(p_order_id)` | Bir sipariş için anonim teklif özeti (price + shop rating + review_count + **is_mine**) — sadece baker'lara açık |
+| `get_customer_summary_for_baker(p_order_id)` | Teklif vereceği müşterinin özeti (full_name, avatar, total/completed/cancelled orders, member_days) |
+| `get_conversations` | Mesajlaşma listesi |
+| `create_notification` | Bildirim oluşturma |
+| `register_push_token` | Kullanıcı push token kaydı |
+| `request_wallet_top_up` / `approve_wallet_top_up` | Cüzdan yükleme talebi |
+| `delete_conversation` / `delete_message_for_me` | Mesaj/konuşma silme |
+| `delete_account` | Hesap silme |
 
 > **⚠️ Migration hijyeni bozulmuş:** Yukarıdaki "Dashboard-only" RPC'ler ve tablolar Supabase SQL Editor'den eklenmiş, migration dosyası yazılmamış. Sıfırdan kurulum `schema.sql` ile **mümkün değil**. Acil çözüm: `supabase db dump --schema-only` → `schema.sql`'i güncelle, migration 0002 yaz.
 
@@ -216,7 +223,20 @@ Aynı Supabase hesabı **hem müşteri hem pastacı** olabilir. Rol enum'u yerin
 ### Push Bildirimleri
 - `useNotifications` hook her iki app'te push token'ı `register_push_token` RPC ile kaydeder
 - `notifications.ts`'teki `navigateFromNotification` uygulama açılınca ilgili ekrana yönlendirir
-- **iOS için `aps-environment` entitlement ve `UIBackgroundModes` eksik** — iOS push çalışmaz (bkz. Açık Sorunlar)
+- iOS entitlement (`aps-environment: production`) + `UIBackgroundModes: ["remote-notification"]` ✓ var
+- `keychain-access-groups` entitlement ✓ var (expo-secure-store ve expo-notifications için iOS 26'da zorunlu)
+- **Çalışması için**: Expo dashboard'da APNs Auth Key (p8) eklenmiş olmalı + Apple Developer'da bundle ID'ler için Push capability açık olmalı
+
+### Açılış Animasyonu (SplashAnimation)
+- `packages/shared/components/SplashAnimation.tsx` — her iki app'in root layout'unda kullanılır
+- Kadife pembe arka plan → altın çizgi çizilir → pasta (tabak+gövde+krema) adım adım belirir → mumlar yanar + alev titrer → ✨ pırıltılar → "Pastacım" / "Pastacım Pro" + slogan fade-in → fade-out (~3.5sn)
+- `useRef`-gated `useEffect` ile bir-defa-tetiklenir (re-mount koruması)
+
+### Admin: Geri Bildirim Görüntüleyici
+- `packages/shared/components/FeedbacksAdminScreen.tsx` — sadece `anzelpatisserie@gmail.com` görür
+- Her iki app'te Profile > Hesap Ayarları altında 📬 link
+- Filtre: Tümü / Müşteri / Pastacı; ekran görüntüsü modal
+- RLS: feedbacks SELECT için admin email kontrolü + storage `feedbacks` bucket SELECT izni
 
 ### Geri Bildirim
 - `FeedbackModal` ile ekran görüntüsü + metin gönderimi
@@ -225,19 +245,23 @@ Aynı Supabase hesabı **hem müşteri hem pastacı** olabilir. Rol enum'u yerin
 
 ---
 
-## ⚠️ Açık Sorunlar (Kritik)
+## ⚠️ Açık Sorunlar
 
-1. **iOS push notification çalışmıyor**: `.entitlements` dosyaları boş; `app.json`'a `ios.entitlements: {"aps-environment":"production"}` ve `ios.infoPlist.UIBackgroundModes: ["remote-notification"]` ekle.
-2. **Baker wallet.tsx'te sahte IBAN**: `TR00 0000 0000 0000 0000 0000 00` hardcoded — gerçek banka bilgileriyle değiştirilmeli.
-3. **Google Places API key kodda gömülü**: `apps/baker/app/(baker)/profile.tsx:41` — ENV veya Edge Function'a taşı.
-4. **Privacy Policy URL yok**: App Store ve Play Store zorunlu kılıyor; `pastacim.com/gizlilik` host edilmeli.
-5. **iOS Info.plist izin metinleri İngilizce**: Her iki app'te Türkçeye çevrilmeli (Apple reject riski).
-6. **`schema.sql` production'dan geride**: Migration 0002 yazılmamış; sıfırdan kurulum kırık.
-7. **`dist/` klasörleri git'e committed**: `apps/customer/.gitignore` ve `apps/baker/.gitignore`'a `dist/` ekle.
-8. **Supabase anon key kodda gömülü**: `packages/shared/lib/supabase.ts` — `.env` + `app.json extra`'ya taşı.
-9. **`expo-clipboard` eksik**: `apps/baker/package.json`'a ekle; `react-native`'in core `Clipboard`'u RN 0.85'te kaldırıldı.
-10. **Hesap silme akışı yok**: Apple Guideline 5.1.1(v) gereği App Store submit öncesi eklenmeli.
-11. **"Şifremi unuttum" butonu**: Customer login ekranında var ama `onPress` bağlı değil.
+### ✅ Çözülenler (önceki listeden)
+- ~~iOS push entitlement~~ — `aps-environment: production` + `UIBackgroundModes: remote-notification` + `keychain-access-groups` eklendi
+- ~~Hesap silme akışı~~ — Profile > Hesap Ayarları'nda Hesabımı Sil (delete_account RPC)
+- ~~Şifremi unuttum butonu~~ — `resetPasswordForEmail` ile çalışır, app-spesifik redirect URL
+- ~~Auth e-posta doğrulama bypass~~ — `mailer_autoconfirm: false` Supabase'de + client-side fallback signOut
+
+### Kalan kritik
+1. **Baker IBAN sahte**: `TR00 0000...` hardcoded — gerçek banka bilgisi gerekli
+2. **Google Places API key kodda gömülü**: `profile.tsx` ve `setup.tsx`'te — ENV veya Edge Function'a taşı
+3. **Privacy Policy URL eksik**: App Store + Play Store zorunlu
+4. **iOS Info.plist izin metinleri Türkçe mi?** — kontrol edilmeli
+5. **`schema.sql` production'dan geride** — migration disiplini bozuk; tüm RPC + tablolar Supabase'de canlı, dump alıp schema.sql güncellenmeli
+6. **Supabase anon key kodda gömülü**: `packages/shared/lib/supabase.ts` — `.env`'e taşınmalı
+7. **`expo-clipboard` eksik** (eğer kullanılıyorsa)
+8. **Ödeme entegrasyonu yok**: Stripe / Apple IAP yok — wallet TL yükleme manuel (havale referans kodu)
 
 ---
 

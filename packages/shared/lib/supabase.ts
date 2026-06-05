@@ -85,6 +85,41 @@ export async function rpcSubmitOffer(
   return result as { data: Functions['submit_offer']['Returns'] | null; error: Error | null };
 }
 
+export type OrderOfferSummaryRow = {
+  price: number;
+  shop_rating: number;
+  shop_review_count: number;
+  is_mine: boolean;
+};
+
+export async function rpcGetOrderOfferSummary(
+  orderId: string
+): Promise<{ data: OrderOfferSummaryRow[] | null; error: Error | null }> {
+  const result = await _rpc('get_order_offer_summary', { p_order_id: orderId });
+  return result as { data: OrderOfferSummaryRow[] | null; error: Error | null };
+}
+
+export type CustomerSummary = {
+  full_name: string | null;
+  avatar_url: string | null;
+  total_orders: number;
+  completed_orders: number;
+  cancelled_orders: number;
+  member_since: string;
+  member_days: number;
+};
+
+export async function rpcGetCustomerSummaryForBaker(
+  orderId: string
+): Promise<{ data: CustomerSummary | null; error: Error | null }> {
+  const result = await _rpc('get_customer_summary_for_baker', { p_order_id: orderId });
+  const rows = (result as { data: CustomerSummary[] | null; error: Error | null }).data;
+  return {
+    data: rows && rows.length > 0 ? rows[0] : null,
+    error: (result as { error: Error | null }).error,
+  };
+}
+
 export async function rpcRejectOffer(
   args: Functions['reject_offer']['Args']
 ): Promise<{ data: Functions['reject_offer']['Returns'] | null; error: Error | null }> {

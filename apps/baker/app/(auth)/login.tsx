@@ -10,10 +10,11 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { router } from 'expo-router';
 import { makeRedirectUri } from 'expo-auth-session';
-import { Colors, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { Colors, useThemeColors, Spacing, Radius, FontSize, supabase } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
 
 export default function LoginScreen() {
@@ -22,10 +23,35 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      Alert.alert('E-posta Gerekli', 'Şifre sıfırlama bağlantısı için önce e-posta adresinizi girin.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      Alert.alert('Geçersiz E-posta', 'Lütfen geçerli bir e-posta adresi girin.');
+      return;
+    }
+    setIsResetLoading(true);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: 'pastacim-pro://auth-callback?type=recovery',
+    });
+    setIsResetLoading(false);
+    if (resetError) {
+      Alert.alert('Hata', 'Bağlantı gönderilemedi: ' + resetError.message);
+    } else {
+      Alert.alert('✅ Gönderildi', 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi. Lütfen gelen kutunuzu kontrol edin.');
+    }
+  };
 
   const handleGoogleLogin = async () => {
     setError(null);
@@ -44,7 +70,7 @@ export default function LoginScreen() {
     if (!password) return setError('Şifreyi girin.');
 
     setIsLoading(true);
-    const { error: authError } = await signIn(email.trim().toLowerCase(), password);
+    const { error: authError } = await signIn(email.trim().toLowerCase(), password, rememberMe);
     setIsLoading(false);
 
     if (authError) {
@@ -144,12 +170,29 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {/* Şifremi unuttum */}
-          <TouchableOpacity style={styles.forgotWrapper} onPress={() => Alert.alert('Yakında', 'Bu özellik yakında aktif olacak.')}>
-            <Text style={[styles.forgotText, { color: C.primary }]}>
-              Şifremi unuttum
-            </Text>
-          </TouchableOpacity>
+          {/* Beni Hatırla + Şifremi unuttum */}
+          <View style={styles.optionsRow}>
+            <TouchableOpacity
+              style={styles.rememberRow}
+              onPress={() => setRememberMe((v) => !v)}
+              activeOpacity={0.7}
+            >
+              <Switch
+                value={rememberMe}
+                onValueChange={setRememberMe}
+                trackColor={{ false: C.border, true: C.primary }}
+                thumbColor="#FFF"
+              />
+              <Text style={[styles.rememberText, { color: C.textSecondary }]}>Beni Hatırla</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleForgotPassword} disabled={isResetLoading}>
+              {isResetLoading ? (
+                <ActivityIndicator size="small" color={C.primary} />
+              ) : (
+                <Text style={[styles.forgotText, { color: C.primary }]}>Şifremi unuttum</Text>
+              )}
+            </TouchableOpacity>
+          </View>
 
           {/* Giriş Butonu */}
           <TouchableOpacity
@@ -278,9 +321,13 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: '500',
   },
-  forgotWrapper: {
-    alignSelf: 'flex-end',
+  optionsRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
+  rememberRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  rememberText: { fontSize: FontSize.sm, fontWeight: '600' },
   forgotText: {
     fontSize: FontSize.sm,
     fontWeight: '600',
