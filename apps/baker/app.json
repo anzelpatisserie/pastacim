@@ -82,7 +82,8 @@
         "origin": false
       },
       "supabaseUrl": "https://lvrbzhziayegyinkcuka.supabase.co",
-      "supabaseAnonKey": "sb_publishable_GRPzr4yIvnC54VpN6G7K3A_awa6OyWp"
+      "supabaseAnonKey": "sb_publishable_GRPzr4yIvnC54VpN6G7K3A_awa6OyWp",
+      "googlePlacesApiKey": "AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo"
     },
     "owner": "anzelpatisserie"
   }

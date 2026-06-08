@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
+import Constants from 'expo-constants';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -22,7 +23,7 @@ function buildSocialUrl(handle: string, platform: 'instagram' | 'facebook' | 'ti
   return bases[platform] + h;
 }
 
-const PLACES_API_KEY = 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo';
+const PLACES_API_KEY: string = Constants.expoConfig?.extra?.googlePlacesApiKey ?? '';
 
 function normalize(s: string): string {
   return s

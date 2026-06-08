@@ -12,6 +12,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import Constants from 'expo-constants';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, FeedbackModal, TabHeader } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 import type { Database } from '@pastacim/shared';
@@ -44,7 +45,7 @@ function buildSocialUrl(handle: string, platform: 'instagram' | 'facebook' | 'ti
   return bases[platform] + h;
 }
 
-const PLACES_API_KEY = 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo';
+const PLACES_API_KEY: string = Constants.expoConfig?.extra?.googlePlacesApiKey ?? '';
 
 function normalizeShopName(s: string): string {
   return s
