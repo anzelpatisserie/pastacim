@@ -52,9 +52,7 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>Geri bildirim ekran görüntüsü veya fotoğraf için kamera erişimi gerekir.</string>
-    <key>NSFaceIDUsageDescription</key>
-    <string>Güvenli giriş için Face ID kullanılır.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>

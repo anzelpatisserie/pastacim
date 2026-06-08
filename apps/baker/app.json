@@ -22,8 +22,7 @@
         "NSLocationAlwaysUsageDescription": "Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.",
         "NSCameraUsageDescription": "Geri bildirim ekran görüntüsü veya fotoğraf için kamera erişimi gerekir.",
         "NSPhotoLibraryUsageDescription": "Sipariş veya dükkan görseli seçmek için fotoğraflarınıza erişim gerekir.",
-        "NSFaceIDUsageDescription": "Güvenli giriş için Face ID kullanılır.",
-        "NSMicrophoneUsageDescription": "Uygulama mikrofon kullanmamaktadır; sistem gerekliliği nedeniyle beyan edilmiştir.",
+"NSMicrophoneUsageDescription": "Uygulama mikrofon kullanmamaktadır; sistem gerekliliği nedeniyle beyan edilmiştir.",
         "NSMotionUsageDescription": "Uygulama hareket sensörü kullanmamaktadır; sistem gerekliliği nedeniyle beyan edilmiştir.",
         "LSApplicationQueriesSchemes": ["message", "googlegmail"]
       }
