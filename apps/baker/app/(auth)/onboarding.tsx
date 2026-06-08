@@ -5,6 +5,7 @@ import {
   StyleSheet,
   useColorScheme,
   Dimensions,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -65,7 +66,21 @@ export default function OnboardingScreen() {
 
       {/* ─── Alt Bilgi ───────────────────────────────────────────────── */}
       <Text style={[styles.legal, { color: C.placeholder }]}>
-        Devam ederek Kullanım Koşulları ve{'\n'}Gizlilik Politikası'nı kabul etmiş olursunuz.
+        {'Devam ederek '}
+        <Text
+          style={{ color: C.primary, textDecorationLine: 'underline' }}
+          onPress={() => Linking.openURL('https://anzelpatisserie.github.io/pastacim/terms/')}
+        >
+          Kullanım Koşulları
+        </Text>
+        {' ve\n'}
+        <Text
+          style={{ color: C.primary, textDecorationLine: 'underline' }}
+          onPress={() => Linking.openURL('https://anzelpatisserie.github.io/pastacim/privacy/')}
+        >
+          Gizlilik Politikası
+        </Text>
+        {"'nı kabul etmiş olursunuz."}
       </Text>
     </View>
   );
