@@ -15,6 +15,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "anzelpatisserie@gmail.com",
+        "ascAppId": "BURAYA_APP_STORE_CONNECT_APP_ID",
+        "appleTeamId": "BURAYA_APPLE_TEAM_ID"
+      }
+    }
   }
 }
