@@ -6,6 +6,7 @@ import {
   useColorScheme,
   Dimensions,
   Linking,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -69,14 +70,16 @@ export default function OnboardingScreen() {
         {'Devam ederek '}
         <Text
           style={{ color: C.primary, textDecorationLine: 'underline' }}
-          onPress={() => Linking.openURL('https://anzelpatisserie.github.io/pastacim/terms/')}
+          accessibilityRole="link"
+          onPress={() => Linking.openURL('https://anzelpatisserie.github.io/pastacim/terms/').catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'))}
         >
           Kullanım Koşulları
         </Text>
         {' ve\n'}
         <Text
           style={{ color: C.primary, textDecorationLine: 'underline' }}
-          onPress={() => Linking.openURL('https://anzelpatisserie.github.io/pastacim/privacy/')}
+          accessibilityRole="link"
+          onPress={() => Linking.openURL('https://anzelpatisserie.github.io/pastacim/privacy/').catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'))}
         >
           Gizlilik Politikası
         </Text>
