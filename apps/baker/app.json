@@ -18,8 +18,14 @@
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"],
         "NSLocationWhenInUseUsageDescription": "Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.",
+        "NSLocationAlwaysUsageDescription": "Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.",
         "NSCameraUsageDescription": "Geri bildirim ekran görüntüsü veya fotoğraf için kamera erişimi gerekir.",
-        "NSPhotoLibraryUsageDescription": "Sipariş veya dükkan görseli seçmek için fotoğraflarınıza erişim gerekir."
+        "NSPhotoLibraryUsageDescription": "Sipariş veya dükkan görseli seçmek için fotoğraflarınıza erişim gerekir.",
+        "NSFaceIDUsageDescription": "Güvenli giriş için Face ID kullanılır.",
+        "NSMicrophoneUsageDescription": "Uygulama mikrofon kullanmamaktadır; sistem gerekliliği nedeniyle beyan edilmiştir.",
+        "NSMotionUsageDescription": "Uygulama hareket sensörü kullanmamaktadır; sistem gerekliliği nedeniyle beyan edilmiştir.",
+        "LSApplicationQueriesSchemes": ["message", "googlegmail"]
       }
     },
     "android": {
@@ -27,7 +33,7 @@
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#FFF8F0",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "permissions": [
