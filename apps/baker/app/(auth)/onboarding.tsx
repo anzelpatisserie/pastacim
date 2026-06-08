@@ -71,7 +71,7 @@ export default function OnboardingScreen() {
         <Text
           style={{ color: C.primary, textDecorationLine: 'underline' }}
           accessibilityRole="link"
-          onPress={() => Linking.openURL('https://anzelpatisserie.github.io/pastacim/terms/').catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'))}
+          onPress={() => Linking.openURL('https://lvrbzhziayegyinkcuka.supabase.co/functions/v1/terms').catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'))}
         >
           Kullanım Koşulları
         </Text>
@@ -79,7 +79,7 @@ export default function OnboardingScreen() {
         <Text
           style={{ color: C.primary, textDecorationLine: 'underline' }}
           accessibilityRole="link"
-          onPress={() => Linking.openURL('https://anzelpatisserie.github.io/pastacim/privacy/').catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'))}
+          onPress={() => Linking.openURL('https://lvrbzhziayegyinkcuka.supabase.co/functions/v1/privacy').catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'))}
         >
           Gizlilik Politikası
         </Text>
