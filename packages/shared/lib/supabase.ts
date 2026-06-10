@@ -5,12 +5,14 @@ import Constants from 'expo-constants';
 import type { Database } from '../types/database.types';
 
 // ─── Supabase Bağlantı Bilgileri ─────────────────────────────────────────────
-const SUPABASE_URL =
-  (Constants.expoConfig?.extra?.supabaseUrl as string | undefined) ??
-  'https://lvrbzhziayegyinkcuka.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY =
-  (Constants.expoConfig?.extra?.supabaseAnonKey as string | undefined) ??
-  'sb_publishable_GRPzr4yIvnC54VpN6G7K3A_awa6OyWp';
+const SUPABASE_URL = Constants.expoConfig?.extra?.supabaseUrl as string | undefined;
+const SUPABASE_PUBLISHABLE_KEY = Constants.expoConfig?.extra?.supabaseAnonKey as string | undefined;
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  throw new Error(
+    'Supabase config eksik. app.config.js içinde extra.supabaseUrl ve extra.supabaseAnonKey tanımlı olmalı.'
+  );
+}
 
 // ─── Güvenli Oturum Depolama (iOS Keychain / Android Keystore) ───────────────
 const ExpoSecureStoreAdapter = {
