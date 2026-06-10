@@ -247,21 +247,21 @@ Aynı Supabase hesabı **hem müşteri hem pastacı** olabilir. Rol enum'u yerin
 
 ## ⚠️ Açık Sorunlar
 
-### ✅ Çözülenler (önceki listeden)
+### ✅ Çözülenler (App Store submit öncesi)
 - ~~iOS push entitlement~~ — `aps-environment: production` + `UIBackgroundModes: remote-notification` + `keychain-access-groups` eklendi
 - ~~Hesap silme akışı~~ — Profile > Hesap Ayarları'nda Hesabımı Sil (delete_account RPC)
 - ~~Şifremi unuttum butonu~~ — `resetPasswordForEmail` ile çalışır, app-spesifik redirect URL
 - ~~Auth e-posta doğrulama bypass~~ — `mailer_autoconfirm: false` Supabase'de + client-side fallback signOut
+- ~~Privacy Policy URL / Terms of Use~~ — Edge function olarak deploy edildi
+- ~~iOS Info.plist izin metinleri Türkçe~~ — Tamam
+- ~~Google Places API key hardcode (baker)~~ — `app.json` extra'ya taşındı (commit 01948a5)
+- ~~Supabase URL hardcoded fallback (supabase.ts)~~ — Sadece `Constants.expoConfig.extra`'dan okur, yoksa throw
 
 ### Kalan kritik
 1. **Baker IBAN sahte**: `TR00 0000...` hardcoded — gerçek banka bilgisi gerekli
-2. **Google Places API key kodda gömülü**: `profile.tsx` ve `setup.tsx`'te — ENV veya Edge Function'a taşı
-3. **Privacy Policy URL eksik**: App Store + Play Store zorunlu
-4. **iOS Info.plist izin metinleri Türkçe mi?** — kontrol edilmeli
-5. **`schema.sql` production'dan geride** — migration disiplini bozuk; tüm RPC + tablolar Supabase'de canlı, dump alıp schema.sql güncellenmeli
-6. **Supabase anon key kodda gömülü**: `packages/shared/lib/supabase.ts` — `.env`'e taşınmalı
-7. **`expo-clipboard` eksik** (eğer kullanılıyorsa)
-8. **Ödeme entegrasyonu yok**: Stripe / Apple IAP yok — wallet TL yükleme manuel (havale referans kodu)
+2. **Google Places API key (customer)**: Hâlâ baker'da `app.json` extra'da; customer'da kullanılıyorsa da kontrol edilmeli
+3. **`schema.sql` production'dan geride** — staging kurulumuyla birlikte tazelenecek (plan task 4)
+4. **Ödeme entegrasyonu yok**: Stripe / Apple IAP yok — wallet TL yükleme manuel (havale referans kodu); Apple IAP politikası (3.1.1) review'de takılırsa düşünülmeli
 
 ---
 
@@ -325,20 +325,50 @@ node scripts/broadcast.js
 
 ---
 
-## App Store Hazırlık Durumu (2026-06-02)
+## App Store Durumu (2026-06-10 sabahı submit, review sürecinde)
 
 | Gereksinim | Customer | Baker | Durum |
 |---|---|---|---|
-| iOS push entitlement | ❌ | ❌ | Eksik — kritik |
-| Privacy Policy URL | ❌ | ❌ | Eksik — zorunlu |
-| Info.plist Türkçe izin metni | ❌ | ❌ | İngilizce template |
-| Hesap silme akışı | ❌ | ❌ | Eksik — zorunlu |
-| Screenshot setleri | ❌ | ❌ | Hazırlanmadı |
-| App Store açıklaması TR+EN | ❌ | ❌ | Yazılmadı |
-| EAS submit.production config | ❌ | ❌ | Boş |
-| App icon (1024x1024) | ✅ | ✅ | Var (boyut doğrulanmalı) |
-| Splash screen | ✅ | ✅ | Var |
-| Android adaptive icon | ✅ | ✅ | Var |
-| Bundle ID / Package | ✅ | ✅ | Doğru |
-| FCM google-services.json | ✅ | ✅ | Var |
-| iOS PrivacyInfo.xcprivacy | ✅ | ✅ | Expo template |
+| iOS push entitlement | ✅ | ✅ | `aps-environment: production` + UIBackgroundModes |
+| Privacy Policy URL | ✅ | ✅ | Edge function deployed |
+| Terms of Use URL | ✅ | ✅ | Edge function deployed |
+| Info.plist Türkçe izin metni | ✅ | ✅ | Tamam |
+| Hesap silme akışı | ✅ | ✅ | `delete_account` RPC + Profile UI |
+| Screenshot setleri | ✅ | ✅ | Yüklendi |
+| App Store açıklaması TR | ✅ | ✅ | Yüklendi |
+| EAS submit.production config | ✅ | ✅ | iOS dolduruldu |
+| App icon (1024x1024) | ✅ | ✅ | Tamam |
+| Bundle ID / Package | ✅ | ✅ | Tamam |
+| **Apple review** | ⏳ | ⏳ | İnceleme bekliyor |
+
+---
+
+## Staging Ortamı (2026-06-10 itibarıyla kuruluyor)
+
+Live'a geçildikten sonra yeni feature'lar staging'de test edilip prod'a geçirilir. Detay: `docs/staging-workflow.md`, tasarım: `docs/superpowers/specs/2026-06-10-staging-environment-design.md`.
+
+| | Production | Staging |
+|---|---|---|
+| Supabase projesi | `lvrbzhziayegyinkcuka` | `pastacim-staging` (kuruluyor) |
+| Customer bundle ID | `com.pastacim.customer` | `com.pastacim.customer.staging` |
+| Baker bundle ID | `com.pastacim.baker` | `com.pastacim.baker.staging` |
+| Scheme | `pastacim` / `pastacim-pro` | `pastacim-staging` / `pastacim-pro-staging` |
+| Dağıtım | App Store + Play Store | TestFlight Internal |
+| EAS channel | `production` | `staging` |
+
+**Branch stratejisi:** Trunk-based. `main` her zaman prod-ready. Feature branch → staging'de test → PR → squash merge.
+
+**Komutlar:**
+```bash
+# Staging Supabase'e bağlı lokal dev
+APP_ENV=staging npm run customer
+APP_ENV=staging npm run baker
+
+# Staging build (TestFlight)
+cd apps/customer && eas build --profile preview --platform ios
+cd apps/baker    && eas build --profile preview --platform ios
+
+# OTA push
+eas update --channel staging --message "..."
+eas update --channel production --message "..."
+```
