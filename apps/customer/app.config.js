@@ -43,8 +43,10 @@ module.exports = {
     ios: {
       supportsTablet: false,
       bundleIdentifier: 'com.pastacim.customer' + env.bundleSuffix,
-      buildNumber: '1',
       usesAppleSignIn: true,
+      config: {
+        usesNonExemptEncryption: false,
+      },
       entitlements: {
         'aps-environment': 'production',
         'keychain-access-groups': ['$(AppIdentifierPrefix)$(CFBundleIdentifier)'],
