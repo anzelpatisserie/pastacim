@@ -38,12 +38,14 @@ module.exports = {
     scheme: 'pastacim-pro' + env.schemeSuffix,
     userInterfaceStyle: 'automatic',
     ios: {
-      supportsTablet: true,
+      supportsTablet: false,
       bundleIdentifier: 'com.pastacim.baker' + env.bundleSuffix,
       buildNumber: '1',
+      usesAppleSignIn: true,
       entitlements: {
         'aps-environment': 'production',
         'keychain-access-groups': ['$(AppIdentifierPrefix)$(CFBundleIdentifier)'],
+        'com.apple.developer.applesignin': ['Default'],
       },
       infoPlist: {
         UIBackgroundModes: ['remote-notification'],
@@ -80,6 +82,7 @@ module.exports = {
     plugins: [
       'expo-router',
       'expo-location',
+      'expo-apple-authentication',
       [
         'expo-splash-screen',
         {

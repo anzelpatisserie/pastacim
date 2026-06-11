@@ -13,12 +13,13 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { makeRedirectUri } from 'expo-auth-session';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
 
 export default function RegisterScreen() {
   const C = useThemeColors();
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp, signInWithGoogle, signInWithApple } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -27,16 +28,40 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const handleAppleSignUp = async () => {
+    setError(null);
+    setIsAppleLoading(true);
+    try {
+      const { error: aError } = await signInWithApple();
+      if (aError) setError(aError);
+    } catch (e) {
+      console.warn('[Customer register] Apple flow error:', e);
+    } finally {
+      setIsAppleLoading(false);
+    }
+  };
 
   const handleGoogleSignUp = async () => {
     setError(null);
     setIsGoogleLoading(true);
-    const redirectUrl = makeRedirectUri({ scheme: 'pastacim', path: 'auth/callback' });
-    const { error: gError } = await signInWithGoogle(redirectUrl);
-    setIsGoogleLoading(false);
-    if (gError) setError(gError);
+    try {
+      const redirectUrl = makeRedirectUri({ scheme: 'pastacim', path: 'auth-callback' });
+      const gPromise = signInWithGoogle(redirectUrl);
+      const timeout = new Promise<{ error: string | null }>((_, rej) =>
+        setTimeout(() => rej(new Error('timeout')), 15000)
+      );
+      const { error: gError } = await Promise.race([gPromise, timeout]);
+      if (gError) setError(gError);
+      // Başarılıysa _layout.tsx onAuthStateChange üzerinden /(customer)'a yönlendirir.
+    } catch (e) {
+      console.warn('[Customer register] Google flow error:', e);
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   const validate = (): string | null => {
@@ -83,7 +108,17 @@ export default function RegisterScreen() {
         </Text>
         <TouchableOpacity
           style={[styles.btnPrimary, { backgroundColor: C.primary }]}
-          onPress={() => Linking.openURL('mailto:')}
+          onPress={async () => {
+            const candidates = Platform.OS === 'ios'
+              ? ['message://', 'googlegmail://', 'https://mail.google.com/']
+              : ['googlegmail://', 'https://mail.google.com/'];
+            for (const u of candidates) {
+              try {
+                if (await Linking.canOpenURL(u)) { await Linking.openURL(u); return; }
+              } catch {}
+            }
+            Linking.openURL('https://mail.google.com/');
+          }}
         >
           <Text style={styles.btnPrimaryText}>📬 Posta Kutusunu Aç</Text>
         </TouchableOpacity>
@@ -231,6 +266,27 @@ export default function RegisterScreen() {
           )}
         </TouchableOpacity>
 
+        {/* ─── Apple ile Kayıt (iOS) ─────────────────────────────── */}
+        {Platform.OS === 'ios' && (
+          <View style={styles.appleBtnWrap}>
+            {isAppleLoading ? (
+              <ActivityIndicator color={C.text} style={{ marginTop: Spacing.md }} />
+            ) : (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                buttonStyle={
+                  C.background === '#FFFFFF' || C.background === '#FFF' || C.background === '#fff'
+                    ? AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                    : AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                }
+                cornerRadius={Radius.md}
+                style={styles.appleBtn}
+                onPress={handleAppleSignUp}
+              />
+            )}
+          </View>
+        )}
+
         {/* ─── Alt Link ───────────────────────────────────────────── */}
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: C.textSecondary }]}>
@@ -338,6 +394,8 @@ const styles = StyleSheet.create({
   },
   googleBtnIcon: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
   googleBtnText: { fontSize: FontSize.md, fontWeight: '600' },
+  appleBtnWrap: { marginBottom: Spacing.lg },
+  appleBtn: { width: '100%', height: 50 },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: Spacing.lg },
   footerText: { fontSize: FontSize.md },
   footerLink: { fontSize: FontSize.md, fontWeight: '700' },

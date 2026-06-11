@@ -14,21 +14,36 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { makeRedirectUri } from 'expo-auth-session';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { Colors, useThemeColors, Spacing, Radius, FontSize, supabase } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
 
 export default function LoginScreen() {
   const C = useThemeColors();
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, signInWithApple } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [isResetLoading, setIsResetLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleAppleLogin = async () => {
+    setError(null);
+    setIsAppleLoading(true);
+    try {
+      const { error: aError } = await signInWithApple();
+      if (aError) setError(aError);
+    } catch (e) {
+      console.warn('[Baker login] Apple flow error:', e);
+    } finally {
+      setIsAppleLoading(false);
+    }
+  };
 
   const handleForgotPassword = async () => {
     setError(null);
@@ -42,6 +57,16 @@ export default function LoginScreen() {
       return;
     }
     setIsResetLoading(true);
+    // Google OAuth kullanıcısı kontrolü
+    const { data: provider } = await supabase.rpc('get_user_auth_provider', { p_email: trimmedEmail });
+    if (provider === 'google') {
+      setIsResetLoading(false);
+      Alert.alert(
+        'Google Hesabı',
+        'Bu e-posta adresi Google ile bağlantılıdır. Şifre sıfırlamak yerine "Google ile Giriş Yap" butonunu kullanın.',
+      );
+      return;
+    }
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
       redirectTo: 'pastacim-pro://auth-callback?type=recovery',
     });
@@ -56,10 +81,52 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     setError(null);
     setIsGoogleLoading(true);
-    const redirectUrl = makeRedirectUri({ scheme: 'pastacim-pro', path: 'auth/callback' });
-    const { error: gError } = await signInWithGoogle(redirectUrl);
-    setIsGoogleLoading(false);
-    if (gError) setError(gError);
+
+    // Hiçbir await zinciri sonsuza dek asılı kalmasın — Promise.race ile sınır koy.
+    const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timeout: ${label}`)), ms)),
+      ]);
+
+    try {
+      const redirectUrl = makeRedirectUri({ scheme: 'pastacim-pro', path: 'auth-callback' });
+      const { error: gError } = await withTimeout(signInWithGoogle(redirectUrl), 15000, 'signInWithGoogle');
+      if (gError) {
+        setError(gError);
+        return;
+      }
+
+      const sessRes = await withTimeout(supabase.auth.getSession(), 5000, 'getSession');
+      const s = sessRes.data.session;
+      if (!s?.user?.id) return;
+
+      // useAuth Context değil — _layout.tsx'in profile state'i gecikebilir.
+      // DB'den is_baker'ı doğrudan oku, trigger race ihtimaline karşı kısa retry.
+      let isBakerFromDb = false;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const profRes = await withTimeout(
+            (async () => await supabase.from('users').select('is_baker').eq('id', s.user.id).maybeSingle())(),
+            5000,
+            'fetchIsBaker'
+          );
+          if (!profRes.error && profRes.data) {
+            isBakerFromDb = profRes.data.is_baker === true;
+            break;
+          }
+        } catch {
+          // timeout/network — retry'a düş
+        }
+        if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 800));
+      }
+
+      router.replace(isBakerFromDb ? '/(baker)' : '/(baker)/setup');
+    } catch (e) {
+      console.warn('[Baker login] Google flow error:', e);
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   const handleLogin = async () => {
@@ -237,6 +304,27 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
+        {/* ─── Apple Giriş (iOS) ───────────────────────────────────── */}
+        {Platform.OS === 'ios' && (
+          <View style={styles.appleBtnWrap}>
+            {isAppleLoading ? (
+              <ActivityIndicator color={C.text} style={{ marginTop: Spacing.md }} />
+            ) : (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={
+                  C.background === '#FFFFFF' || C.background === '#FFF' || C.background === '#fff'
+                    ? AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                    : AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                }
+                cornerRadius={Radius.md}
+                style={styles.appleBtn}
+                onPress={handleAppleLogin}
+              />
+            )}
+          </View>
+        )}
+
         {/* ─── Alt Link ────────────────────────────────────────────── */}
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: C.textSecondary }]}>
@@ -377,6 +465,13 @@ const styles = StyleSheet.create({
   googleBtnText: {
     fontSize: FontSize.md,
     fontWeight: '600',
+  },
+  appleBtnWrap: {
+    marginBottom: Spacing.lg,
+  },
+  appleBtn: {
+    width: '100%',
+    height: 50,
   },
   footer: {
     flexDirection: 'row',

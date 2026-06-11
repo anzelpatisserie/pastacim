@@ -13,12 +13,13 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { makeRedirectUri } from 'expo-auth-session';
-import { useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { useThemeColors, ThemeColors, Spacing, Radius, FontSize, supabase } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
 
 export default function RegisterScreen() {
   const C = useThemeColors();
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp, signInWithGoogle, signInWithApple } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -27,16 +28,69 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const handleAppleSignUp = async () => {
+    setError(null);
+    setIsAppleLoading(true);
+    try {
+      const { error: aError } = await signInWithApple();
+      if (aError) setError(aError);
+    } catch (e) {
+      console.warn('[Baker register] Apple flow error:', e);
+    } finally {
+      setIsAppleLoading(false);
+    }
+  };
 
   const handleGoogleSignUp = async () => {
     setError(null);
     setIsGoogleLoading(true);
-    const redirectUrl = makeRedirectUri({ scheme: 'pastacim-pro', path: 'auth/callback' });
-    const { error: gError } = await signInWithGoogle(redirectUrl);
-    setIsGoogleLoading(false);
-    if (gError) setError(gError);
+
+    const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timeout: ${label}`)), ms)),
+      ]);
+
+    try {
+      const redirectUrl = makeRedirectUri({ scheme: 'pastacim-pro', path: 'auth-callback' });
+      const { error: gError } = await withTimeout(signInWithGoogle(redirectUrl), 15000, 'signInWithGoogle');
+      if (gError) {
+        setError(gError);
+        return;
+      }
+
+      const sessRes = await withTimeout(supabase.auth.getSession(), 5000, 'getSession');
+      const s = sessRes.data.session;
+      if (!s?.user?.id) return;
+
+      // DB'den is_baker oku — _layout.tsx instance'ında profile gecikebilir.
+      let isBakerFromDb = false;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const profRes = await withTimeout(
+            (async () => await supabase.from('users').select('is_baker').eq('id', s.user.id).maybeSingle())(),
+            5000,
+            'fetchIsBaker'
+          );
+          if (!profRes.error && profRes.data) {
+            isBakerFromDb = profRes.data.is_baker === true;
+            break;
+          }
+        } catch {
+          // timeout/network — retry'a düş
+        }
+        if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 800));
+      }
+      router.replace(isBakerFromDb ? '/(baker)' : '/(baker)/setup');
+    } catch (e) {
+      console.warn('[Baker register] Google flow error:', e);
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   const validate = (): string | null => {
@@ -83,7 +137,17 @@ export default function RegisterScreen() {
         </Text>
         <TouchableOpacity
           style={[styles.btnPrimary, { backgroundColor: C.primary }]}
-          onPress={() => Linking.openURL('mailto:')}
+          onPress={async () => {
+            const candidates = Platform.OS === 'ios'
+              ? ['message://', 'googlegmail://', 'https://mail.google.com/']
+              : ['googlegmail://', 'https://mail.google.com/'];
+            for (const u of candidates) {
+              try {
+                if (await Linking.canOpenURL(u)) { await Linking.openURL(u); return; }
+              } catch {}
+            }
+            Linking.openURL('https://mail.google.com/');
+          }}
         >
           <Text style={styles.btnPrimaryText}>📬 Posta Kutusunu Aç</Text>
         </TouchableOpacity>
@@ -231,6 +295,27 @@ export default function RegisterScreen() {
           )}
         </TouchableOpacity>
 
+        {/* ─── Apple ile Kayıt (iOS) ─────────────────────────────── */}
+        {Platform.OS === 'ios' && (
+          <View style={styles.appleBtnWrap}>
+            {isAppleLoading ? (
+              <ActivityIndicator color={C.text} style={{ marginTop: Spacing.md }} />
+            ) : (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                buttonStyle={
+                  C.background === '#FFFFFF' || C.background === '#FFF' || C.background === '#fff'
+                    ? AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                    : AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                }
+                cornerRadius={Radius.md}
+                style={styles.appleBtn}
+                onPress={handleAppleSignUp}
+              />
+            )}
+          </View>
+        )}
+
         {/* ─── Alt Link ───────────────────────────────────────────── */}
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: C.textSecondary }]}>
@@ -338,6 +423,8 @@ const styles = StyleSheet.create({
   },
   googleBtnIcon: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
   googleBtnText: { fontSize: FontSize.md, fontWeight: '600' },
+  appleBtnWrap: { marginBottom: Spacing.lg },
+  appleBtn: { width: '100%', height: 50 },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: Spacing.lg },
   footerText: { fontSize: FontSize.md },
   footerLink: { fontSize: FontSize.md, fontWeight: '700' },

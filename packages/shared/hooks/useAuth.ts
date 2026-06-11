@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Platform } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/database.types';
 
@@ -28,6 +30,7 @@ interface AuthActions {
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: string | null }>;
   signUp: (params: SignUpParams) => Promise<{ error: string | null }>;
   signInWithGoogle: (redirectUrl: string) => Promise<{ error: string | null }>;
+  signInWithApple: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -92,15 +95,20 @@ export function useAuth(): AuthState & AuthActions {
     })();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, s) => {
-        // Profil yüklenene kadar isLoading=true tut ki layout
-        // henüz boş profile göre yanlış ekrana yönlendirme yapmasın
-        // (özellikle Google OAuth sonrası is_baker=false sanıp setup'a atıyordu).
+      (_event, s) => {
+        // ÖNEMLİ: Supabase _notifyAllSubscribers tüm handler'ları AWAIT eder.
+        // Burada await yaparsak exchangeCodeForSession/setSession hiç dönmez
+        // → signInWithGoogle hang olur → spinner sonsuza dek döner.
+        // Bu yüzden senkron ol; loadProfile'ı fire-and-forget yap.
         if (s?.user?.id) {
-          setIsLoading(true);
           setSession(s);
-          await loadProfile(s.user.id);
-          setIsLoading(false);
+          void (async () => {
+            let ok = await loadProfile(s.user.id);
+            if (!ok) {
+              await new Promise<void>(r => setTimeout(r, 2000));
+              await loadProfile(s.user.id);
+            }
+          })();
         } else {
           setSession(s);
           setProfile(null);
@@ -182,54 +190,146 @@ export function useAuth(): AuthState & AuthActions {
   }, []);
 
   const signInWithGoogle = useCallback(async (redirectUrl: string): Promise<{ error: string | null }> => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
-    });
-    if (error || !data.url) {
-      console.error('[Google] signInWithOAuth error:', error?.message);
-      return { error: 'Google girişi başlatılamadı: ' + (error?.message ?? 'bilinmeyen') };
-    }
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-    if (result.type === 'success') {
-      // Supabase oturum kodunu URL'den çıkarıp session oluştur
-      // URL formatı: redirectUrl#access_token=...&refresh_token=...  veya  ?code=...
-      const url = result.url;
-      const params = new URL(url);
-      const hashFragment = url.includes('#') ? url.split('#')[1] : '';
-      const hashParams = new URLSearchParams(hashFragment);
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-      const code = params.searchParams.get('code');
+    // Tüm gövdeyi try/catch ile sarmala — herhangi bir beklenmedik hata
+    // çağıranı sonsuz spinner ile bırakmasın.
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
+      });
+      if (error || !data.url) {
+        console.error('[Google] signInWithOAuth error:', error?.message);
+        return { error: 'Google girişi başlatılamadı: ' + (error?.message ?? 'bilinmeyen') };
+      }
 
-      // 1) Önce token fragment varsa direkt set et
-      if (accessToken && refreshToken) {
-        const { error: setErr } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        if (setErr) {
-          console.error('[Google] setSession error:', setErr.message);
-          return { error: 'Google oturumu açılamadı: ' + setErr.message };
-        }
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+      if (result.type === 'cancel' || result.type === 'dismiss') {
         return { error: null };
       }
 
-      // 2) Code varsa exchange et
-      if (code) {
-        const { error: sessionError } = await supabase.auth.exchangeCodeForSession(url);
-        if (sessionError) {
-          console.error('[Google] exchangeCodeForSession error:', sessionError.message);
-          return { error: 'Google oturumu açılamadı: ' + sessionError.message };
+      if (result.type !== 'success') {
+        return { error: 'Google girişi tamamlanamadı.' };
+      }
+
+      // Supabase oturum kodunu URL'den çıkarıp session oluştur
+      // URL formatı: redirectUrl#access_token=...&refresh_token=...  veya  ?code=...
+      // NOT: new URL() bazı RN ortamlarında custom scheme'ler (pastacim-pro://)
+      // için exception fırlatabiliyor — bu yüzden saf string parsing kullanıyoruz.
+      const url = result.url;
+
+      // 1) Hash fragment (implicit / email confirm)
+      const hashIndex = url.indexOf('#');
+      if (hashIndex !== -1) {
+        const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        if (accessToken && refreshToken) {
+          const { error: setErr } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (setErr) {
+            console.error('[Google] setSession error:', setErr.message);
+            return { error: 'Google oturumu açılamadı: ' + setErr.message };
+          }
+          // setSession sonrası onAuthStateChange zaten tetiklendi ve loadProfile
+          // başlattı (fire-and-forget). Burada await etmiyoruz: çağıran kod
+          // hemen geri dönsün, _layout.tsx / handleGoogleLogin profili çekecek.
+          return { error: null };
         }
-        return { error: null };
+      }
+
+      // 2) Query string (PKCE / authorization code)
+      const queryIndex = url.indexOf('?');
+      if (queryIndex !== -1) {
+        // Hash fragment varsa, query'yi hash'ten önce kestiğimizden emin ol
+        const queryEnd = hashIndex !== -1 && hashIndex > queryIndex ? hashIndex : url.length;
+        const query = url.substring(queryIndex + 1, queryEnd);
+        const code = new URLSearchParams(query).get('code');
+        if (code) {
+          // Session zaten oluştuysa (deep-link handler bizden önce davrandıysa) tekrar exchange etme
+          const { data: { session: existing } } = await supabase.auth.getSession();
+          if (existing?.user?.id) {
+            setSession(existing);
+            return { error: null };
+          }
+
+          const { error: sessionError } = await supabase.auth.exchangeCodeForSession(url);
+          if (sessionError) {
+            // PKCE kodu zaten tüketildiyse (deep-link handler ile yarış), bunu hata sayma:
+            // session muhtemelen oluşmuştur.
+            const { data: { session: afterErr } } = await supabase.auth.getSession();
+            if (afterErr?.user?.id) {
+              setSession(afterErr);
+              return { error: null };
+            }
+            console.error('[Google] exchangeCodeForSession error:', sessionError.message);
+            return { error: 'Google oturumu açılamadı: ' + sessionError.message };
+          }
+          // onAuthStateChange zaten session + loadProfile'ı fire-and-forget tetikledi.
+          // Burada bekleyip await etmiyoruz — caller direkt getSession yapacak.
+          return { error: null };
+        }
       }
 
       console.error('[Google] callback URL\'de ne token ne code var:', url);
       return { error: 'Google yanıtı çözümlenemedi.' };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[Google] unexpected error:', msg);
+      // Beklenmedik hata olsa bile session oluşmuş olabilir (deep-link path)
+      try {
+        const { data: { session: s } } = await supabase.auth.getSession();
+        if (s?.user?.id) {
+          setSession(s);
+          return { error: null };
+        }
+      } catch {
+        // ignore
+      }
+      return { error: 'Google girişi sırasında hata oluştu: ' + msg };
     }
-    if (result.type === 'cancel' || result.type === 'dismiss') return { error: null };
-    return { error: 'Google girişi tamamlanamadı.' };
+  }, []);
+
+  const signInWithApple = useCallback(async (): Promise<{ error: string | null }> => {
+    if (Platform.OS !== 'ios') {
+      return { error: 'Apple ile giriş yalnızca iOS cihazlarda kullanılabilir.' };
+    }
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        return { error: 'Apple kimlik tokeni alınamadı.' };
+      }
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+
+      if (error) {
+        console.error('[Apple] signInWithIdToken error:', error.message);
+        return { error: 'Apple oturumu açılamadı: ' + error.message };
+      }
+
+      // onAuthStateChange ile session yakalanacak; çağıran tarafa direkt dön
+      return { error: null };
+    } catch (e) {
+      // Kullanıcı sheet'i iptal ettiyse sessizce dön
+      const code = e && typeof e === 'object' && 'code' in e ? (e as { code: string }).code : null;
+      if (code === 'ERR_REQUEST_CANCELED') {
+        return { error: null };
+      }
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[Apple] unexpected error:', msg);
+      return { error: 'Apple girişi sırasında hata oluştu: ' + msg };
+    }
   }, []);
 
   const signOut = useCallback(async () => {
@@ -252,6 +352,7 @@ export function useAuth(): AuthState & AuthActions {
     signIn,
     signUp,
     signInWithGoogle,
+    signInWithApple,
     signOut,
     refreshProfile,
   };
