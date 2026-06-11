@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 14.0.0"
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -32,16 +33,16 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "anzelpatisserie@gmail.com",
+        "appleId": "ipekcisoner@hotmail.com",
         "ascAppId": "BURAYA_APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "BURAYA_APPLE_TEAM_ID"
+        "appleTeamId": "X9H48XP2W6"
       }
     },
     "preview": {
       "ios": {
-        "appleId": "anzelpatisserie@gmail.com",
+        "appleId": "ipekcisoner@hotmail.com",
         "ascAppId": "BURAYA_CUSTOMER_STAGING_ASC_APP_ID",
-        "appleTeamId": "BURAYA_APPLE_TEAM_ID"
+        "appleTeamId": "X9H48XP2W6"
       }
     }
   }
