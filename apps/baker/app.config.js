@@ -93,7 +93,13 @@ module.exports = {
           backgroundColor: '#8B1A3D',
         },
       ],
-      'expo-secure-store',
+      [
+        'expo-secure-store',
+        {
+          faceIDPermission:
+            'Oturum bilgilerinizi cihazınızda güvenli şekilde saklamak için Face ID kullanılır.',
+        },
+      ],
       [
         'expo-notifications',
         {

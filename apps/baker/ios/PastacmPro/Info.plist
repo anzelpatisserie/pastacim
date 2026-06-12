@@ -55,7 +55,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Geri bildirim ekran görüntüsü veya fotoğraf için kamera erişimi gerekir.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
+	<string>Oturum bilgilerinizi cihazınızda güvenli şekilde saklamak için Face ID kullanılır.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Pastacım yakındaki pastacıları gösterebilmek için konumunuza erişir.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
