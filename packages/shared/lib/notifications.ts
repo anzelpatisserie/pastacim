@@ -122,16 +122,24 @@ export async function notifyUser(params: {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /**
+   * Bildirim akışına (notifications tablosu) yazılsın mı? Varsayılan: true.
+   * Yüksek frekanslı olaylarda (ör. her mesaj) feed'i şişirmemek için
+   * `false` verilir → yalnızca push gönderilir.
+   */
+  inApp?: boolean;
 }): Promise<void> {
   // 1. In-app notification — SECURITY DEFINER RPC kullan
   //    (başka kullanıcıya bildirim insert etmek için RLS bypass gerekiyor)
-  await _db.rpc('create_notification', {
-    p_user_id: params.userId,
-    p_type:    params.type,
-    p_title:   params.title,
-    p_body:    params.body,
-    p_data:    params.data ?? {},
-  });
+  if (params.inApp !== false) {
+    await _db.rpc('create_notification', {
+      p_user_id: params.userId,
+      p_type:    params.type,
+      p_title:   params.title,
+      p_body:    params.body,
+      p_data:    params.data ?? {},
+    });
+  }
 
   // 2. Push notification (async, hata yakala)
   try {

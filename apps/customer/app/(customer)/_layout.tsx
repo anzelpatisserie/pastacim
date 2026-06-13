@@ -31,6 +31,7 @@ export default function CustomerLayout() {
   return (
     <Tabs
       initialRouteName="my-orders"
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: C.primary,

@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList,
-  TouchableOpacity, ActivityIndicator, RefreshControl,
+  TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { router, useFocusEffect } from 'expo-router';
-import { rpcGetConversations, useAuth, useThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
+import { rpcGetConversations, rpcDeleteConversation, useAuth, useThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -29,6 +30,19 @@ export default function BakerMessagesScreen() {
 
   useFocusEffect(useCallback(() => { fetchConvs(); }, [fetchConvs]));
 
+  const handleDelete = useCallback((otherUserId: string) => {
+    Alert.alert('Konuşmayı Sil', 'Bu konuşma ve mesajları sizin için silinsin mi?', [
+      { text: 'Vazgeç', style: 'cancel' },
+      {
+        text: 'Sil', style: 'destructive',
+        onPress: async () => {
+          setConvs((prev) => prev.filter((c) => c.other_user_id !== otherUserId));
+          await rpcDeleteConversation(otherUserId);
+        },
+      },
+    ]);
+  }, []);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       <TabHeader
@@ -51,7 +65,7 @@ export default function BakerMessagesScreen() {
         <FlatList
           data={convs}
           keyExtractor={(item) => item.other_user_id}
-          renderItem={({ item }) => <ConvRow item={item} colors={C} />}
+          renderItem={({ item }) => <ConvRow item={item} colors={C} onDelete={handleDelete} />}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -63,13 +77,25 @@ export default function BakerMessagesScreen() {
   );
 }
 
-function ConvRow({ item, colors: C }: { item: Conversation; colors: ReturnType<typeof useThemeColors> }) {
+function ConvRow({ item, colors: C, onDelete }: { item: Conversation; colors: ReturnType<typeof useThemeColors>; onDelete: (otherUserId: string) => void }) {
   const hasUnread = item.unread_count > 0;
   const timeStr = item.last_message_at
     ? formatTime(item.last_message_at)
     : '';
 
   return (
+    <Swipeable
+      overshootRight={false}
+      renderRightActions={() => (
+        <TouchableOpacity
+          style={[styles.deleteAction, { backgroundColor: C.error }]}
+          onPress={() => onDelete(item.other_user_id)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.deleteActionText}>🗑{'\n'}Sil</Text>
+        </TouchableOpacity>
+      )}
+    >
     <TouchableOpacity
       style={[styles.row, { backgroundColor: C.card, borderColor: C.border }]}
       onPress={() => router.push({
@@ -107,6 +133,7 @@ function ConvRow({ item, colors: C }: { item: Conversation; colors: ReturnType<t
         </View>
       </View>
     </TouchableOpacity>
+    </Swipeable>
   );
 }
 
@@ -143,4 +170,9 @@ const styles = StyleSheet.create({
   lastMsg: { fontSize: FontSize.sm, flex: 1 },
   badge: { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, flexShrink: 0 },
   badgeText: { color: '#FFF', fontSize: 11, fontWeight: '800' },
+  deleteAction: {
+    justifyContent: 'center', alignItems: 'center',
+    width: 84, marginVertical: 1,
+  },
+  deleteActionText: { color: '#FFF', fontSize: FontSize.xs, fontWeight: '800', textAlign: 'center' },
 });

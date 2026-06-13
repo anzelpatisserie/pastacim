@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as Updates from 'expo-updates';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useAuth, navigateFromNotification, supabase, SplashAnimation } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
@@ -143,13 +144,13 @@ function RootLayoutNav() {
   }, [isAuthenticated]);
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(baker)" />
         <Stack.Screen name="messages/[conversationId]" options={{ headerShown: false }} />
       </Stack>
-    </>
+    </GestureHandlerRootView>
   );
 }

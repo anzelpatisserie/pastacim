@@ -30,6 +30,7 @@ export default function BakerLayout() {
 
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: C.primary,

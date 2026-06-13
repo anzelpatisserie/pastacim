@@ -220,6 +220,7 @@ export default function MessagesScreen() {
     notifyUser({
       userId: otherUserId,
       type:  'new_message',
+      inApp: false,
       title: '💬 Yeni Mesaj',
       body:  text.length > 60 ? text.slice(0, 57) + '…' : text,
       data:  { senderId: user.id },
@@ -310,6 +311,7 @@ export default function MessagesScreen() {
       notifyUser({
         userId: otherUserId,
         type:  'new_message',
+        inApp: false,
         title: '📷 Yeni Görsel',
         body:  'Bir resim gönderildi',
         data:  { senderId: user.id },
