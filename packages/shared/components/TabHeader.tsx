@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, GestureResponderEvent } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors, Spacing, Radius, FontSize } from '../lib/constants';
 
 type Props = {
@@ -18,8 +19,18 @@ export default function TabHeader({
   title, subtitle, unreadCount = 0, onBellPress, onAddPress, rightAccessory, leftAccessory,
 }: Props) {
   const C = useThemeColors();
+  const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.container, { borderBottomColor: C.border, backgroundColor: C.background }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          borderBottomColor: C.border,
+          backgroundColor: C.background,
+          paddingTop: insets.top + Spacing.md,
+        },
+      ]}
+    >
       {leftAccessory ? <View style={styles.side}>{leftAccessory}</View> : null}
       <View style={styles.titleArea}>
         <Text style={[styles.title, { color: C.text }]} numberOfLines={1}>{title}</Text>
@@ -61,7 +72,8 @@ export default function TabHeader({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
     borderBottomWidth: 1,
     gap: Spacing.sm,
   },

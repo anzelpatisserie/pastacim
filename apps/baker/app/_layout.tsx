@@ -4,6 +4,7 @@ import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
+import * as Updates from 'expo-updates';
 import { StatusBar } from 'expo-status-bar';
 
 import { useAuth, navigateFromNotification, supabase, SplashAnimation } from '@pastacim/shared';
@@ -39,6 +40,23 @@ export default function RootLayout() {
     }
   }, [fontsLoaded]);
 
+  // Eager OTA: app her açıldığında son güncellemeyi indir ve hemen uygula.
+  // checkAutomatically: ON_LOAD ile aynı sonucu sağlar ama beklemek yerine
+  // hemen reload eder → kullanıcı 2-3 kez kapat/aç yapmak zorunda kalmaz.
+  useEffect(() => {
+    (async () => {
+      try {
+        const check = await Updates.checkForUpdateAsync();
+        if (check.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch {
+        // dev build veya network sorunu — sessiz geç
+      }
+    })();
+  }, []);
+
   if (showSplash) {
     return (
       <>
@@ -53,20 +71,35 @@ export default function RootLayout() {
   return <RootLayoutNav />;
 }
 
-function handleAuthUrl(url: string) {
-  const fragment = url.includes('#') ? url.split('#')[1] : '';
-  if (!fragment) return;
-  const params: Record<string, string> = {};
-  fragment.split('&').forEach((pair) => {
-    const [k, v] = pair.split('=');
-    if (k && v) params[k] = decodeURIComponent(v);
-  });
-  if (params.access_token && params.refresh_token) {
-    supabase.auth.setSession({
-      access_token: params.access_token,
-      refresh_token: params.refresh_token,
+async function handleAuthUrl(url: string) {
+  // Implicit flow: e-posta doğrulama / şifre sıfırlama sonrası
+  // #access_token=...&refresh_token=...
+  if (url.includes('#')) {
+    const [base, fragment] = url.split('#');
+    const params: Record<string, string> = {};
+    fragment.split('&').forEach((pair) => {
+      const [k, v] = pair.split('=');
+      if (k && v) params[k] = decodeURIComponent(v);
     });
+    const isRecovery = base.includes('type=recovery') || params.type === 'recovery';
+    if (params.access_token && params.refresh_token) {
+      try {
+        await supabase.auth.setSession({
+          access_token: params.access_token,
+          refresh_token: params.refresh_token,
+        });
+        if (isRecovery) {
+          router.replace('/(auth)/reset-password' as never);
+        }
+      } catch (e) {
+        console.error('[handleAuthUrl] setSession failed:', e);
+      }
+    }
+    return;
   }
+  // NOT: PKCE (?code=...) deep-link burada işlenmiyor.
+  // signInWithGoogle (useAuth.ts) zaten openAuthSessionAsync sonucunu işliyor;
+  // burada paralel exchange yapmak PKCE kodunu tüketip yarış yaratıyor.
 }
 
 function RootLayoutNav() {
@@ -87,12 +120,8 @@ function RootLayoutNav() {
       return;
     }
 
-    // Profil henüz yüklenmediyse yönlendirme yapma — aksi halde
-    // is_baker varsayılan false ile setup ekranına yanlış yönlendirilir
-    // (özellikle Google OAuth sonrası gözlenen bug).
     if (!profile) return;
 
-    // Users with no shop go to setup; existing bakers go to main tab
     router.replace(isBaker ? '/(baker)' : '/(baker)/setup');
   }, [isLoading, isAuthenticated, isBaker, profile]);
 

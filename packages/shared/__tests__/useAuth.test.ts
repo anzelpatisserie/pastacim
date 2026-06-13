@@ -78,7 +78,10 @@ describe('useAuth', () => {
 
   it('başarılı signUp → hata null döner', async () => {
     const { supabase } = require('../lib/supabase');
-    supabase.auth.signUp.mockResolvedValueOnce({ error: null });
+    supabase.auth.signUp.mockResolvedValueOnce({
+      data: { session: null, user: null },
+      error: null,
+    });
 
     const { result } = renderHook(() => useAuth());
     let response!: { error: string | null };
@@ -97,6 +100,7 @@ describe('useAuth', () => {
   it('kayıtlı email ile signUp → Türkçe hata döner', async () => {
     const { supabase } = require('../lib/supabase');
     supabase.auth.signUp.mockResolvedValueOnce({
+      data: { session: null, user: null },
       error: { message: 'User already registered' },
     });
 

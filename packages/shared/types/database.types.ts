@@ -701,6 +701,10 @@ export type Database = {
           total_orders: number
         }[]
       }
+      get_user_auth_provider: {
+        Args: { p_email: string }
+        Returns: string | null
+      }
       get_order_offer_summary: {
         Args: { p_order_id: string }
         Returns: {

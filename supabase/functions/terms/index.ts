@@ -52,10 +52,7 @@ const html = `<!DOCTYPE html>
     <li>Üçüncü taraf yazılımlarla platformu otomatize etmek</li>
   </ul>
 
-  <h2>6. Ödeme ve Cüzdan</h2>
-  <p>Pastacı cüzdanı yalnızca platform teklif ücretlerini ödemek için kullanılır. Yüklenen bakiyeler iade edilmez; ancak hizmet hatası durumunda destek hattından talep edilebilir.</p>
-
-  <h2>7. Sorumluluk Sınırı</h2>
+  <h2>6. Sorumluluk Sınırı</h2>
   <p>Platform, aracı konumundadır. Müşteri ile pastacı arasındaki ticari anlaşmazlıklarda platform doğrudan taraf değildir; arabuluculuk amacıyla destek verebilir.</p>
 
   <h2>8. Değişiklikler</h2>
@@ -70,7 +67,8 @@ Deno.serve(async (_req: Request) => {
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=86400',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 });

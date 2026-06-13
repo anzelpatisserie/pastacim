@@ -3,5 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "main": "./index.ts",
-  "types": "./index.ts"
+  "types": "./index.ts",
+  "dependencies": {
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-url-polyfill": "^2.0.0"
+  }
 }

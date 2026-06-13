@@ -16,6 +16,7 @@ type FeedbackRow = {
   app_name: string;
   message: string;
   screenshot_url: string | null;
+  screenshot_signed_url?: string | null;
   created_at: string;
   user_id: string | null;
   user: { full_name: string | null; email: string | null } | null;
@@ -37,14 +38,53 @@ export default function FeedbacksAdminScreen() {
 
     let query = _db
       .from('feedbacks')
-      .select('id, app_name, message, screenshot_url, created_at, user_id, user:users!user_id(full_name, email)')
+      .select('id, app_name, message, screenshot_url, created_at, user_id')
       .order('created_at', { ascending: false })
       .limit(100);
 
     if (filter !== 'all') query = query.eq('app_name', filter);
 
-    const { data, error } = await query;
-    if (!error) setItems((data ?? []) as FeedbackRow[]);
+    const { data: fbs, error } = await query;
+    if (error) {
+      console.error('[FeedbacksAdmin] fetch error:', error.message, error);
+      setItems([]);
+    } else {
+      const rows = (fbs ?? []) as Omit<FeedbackRow, 'user'>[];
+      const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean) as string[]));
+      let usersMap = new Map<string, { full_name: string | null; email: string | null }>();
+      if (userIds.length > 0) {
+        const { data: users, error: uErr } = await _db
+          .from('users')
+          .select('id, full_name, email')
+          .in('id', userIds);
+        if (uErr) console.error('[FeedbacksAdmin] users fetch error:', uErr.message);
+        usersMap = new Map(
+          (users ?? []).map((u: { id: string; full_name: string | null; email: string | null }) => [
+            u.id,
+            { full_name: u.full_name, email: u.email },
+          ]),
+        );
+      }
+      const merged: FeedbackRow[] = rows.map((r) => ({
+        ...r,
+        user: r.user_id ? usersMap.get(r.user_id) ?? null : null,
+      }));
+
+      // Private bucket için signed URL oluştur
+      const withSignedUrls = await Promise.all(
+        merged.map(async (r) => {
+          if (!r.screenshot_url) return r;
+          // URL'den storage path'i çıkar: .../feedbacks/{path}
+          const match = r.screenshot_url.match(/\/feedbacks\/(.+)$/);
+          if (!match) return r;
+          const { data } = await supabase.storage
+            .from('feedbacks')
+            .createSignedUrl(match[1], 3600);
+          return { ...r, screenshot_signed_url: data?.signedUrl ?? null };
+        }),
+      );
+      setItems(withSignedUrls);
+    }
 
     setIsLoading(false);
     setIsRefreshing(false);
@@ -177,14 +217,14 @@ function FeedbackCard({
         <Text style={[styles.userEmail, { color: C.textSecondary }]}>{item.user.email}</Text>
       )}
       <Text style={[styles.message, { color: C.text }]}>{item.message}</Text>
-      {item.screenshot_url && (
+      {item.screenshot_signed_url && (
         <TouchableOpacity
-          onPress={() => onPhotoTap(item.screenshot_url!)}
+          onPress={() => onPhotoTap(item.screenshot_signed_url!)}
           activeOpacity={0.85}
           style={styles.screenshotBtn}
         >
           <Image
-            source={{ uri: item.screenshot_url }}
+            source={{ uri: item.screenshot_signed_url }}
             style={styles.screenshot}
             resizeMode="cover"
           />

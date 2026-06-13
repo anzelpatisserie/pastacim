@@ -1,3 +1,5 @@
+/// <reference path="../types/react-native-url-polyfill-auto.d.ts" />
+
 import 'react-native-url-polyfill/auto';
 import * as SecureStore from 'expo-secure-store';
 import { createClient } from '@supabase/supabase-js';

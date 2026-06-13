@@ -82,13 +82,16 @@ async function registerForPush(uid: string) {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#D4526E',
+      sound: 'default',
     });
   }
 
   const { status } = await Notifications.getPermissionsAsync();
   let finalStatus = status;
   if (status !== 'granted') {
-    const { status: s } = await Notifications.requestPermissionsAsync();
+    const { status: s } = await Notifications.requestPermissionsAsync({
+      ios: { allowAlert: true, allowBadge: true, allowSound: true },
+    });
     finalStatus = s;
   }
   if (finalStatus !== 'granted') return;
@@ -117,7 +120,6 @@ async function registerForPush(uid: string) {
     await _db.rpc('register_push_token', { p_token: result.data });
     console.log('[Push] Token kaydedildi:', result.data);
   } catch (err) {
-    // Simülatörde push token alınamaz — normal
     console.warn('[Push] Token alınamadı:', err);
   }
 }

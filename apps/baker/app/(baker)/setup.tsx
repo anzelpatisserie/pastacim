@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   SafeAreaView, ScrollView, ActivityIndicator, Alert,
@@ -92,6 +92,8 @@ const DEFAULT_HOURS: WorkingHours = DAY_KEYS.reduce((acc, d) => {
 export default function BakerSetupScreen() {
   const C = useThemeColors();
   const { refreshProfile } = useAuth();
+  const guardChecked = useRef(false);
+  const [guardLoading, setGuardLoading] = useState(true);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [address, setAddress] = useState('');
@@ -262,6 +264,51 @@ export default function BakerSetupScreen() {
       setIsLoading(false);
     }
   };
+
+  // ─── Defense-in-depth: kullanıcı zaten pastacı ise setup'ı atlat ─────────────
+  // _layout.tsx'in useAuth instance'ı bazen profil yüklenmeden navigation effect'i
+  // tetikleyebiliyor (Context değil, instance bazlı). Burada DB'den eager olarak
+  // kontrol edip pastacıyı doğrudan ana ekrana yönlendiriyoruz.
+  useEffect(() => {
+    if (guardChecked.current) return;
+    guardChecked.current = true;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session: s } } = await supabase.auth.getSession();
+        if (!s?.user?.id) {
+          if (!cancelled) setGuardLoading(false);
+          return;
+        }
+        const { data, error } = await supabase
+          .from('users')
+          .select('is_baker')
+          .eq('id', s.user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        if (!error && data?.is_baker === true) {
+          // Hesap zaten pastacı — useAuth profil state'ini tazele ve ana ekrana git
+          await refreshProfile();
+          router.replace('/(baker)');
+          return;
+        }
+        setGuardLoading(false);
+      } catch {
+        if (!cancelled) setGuardLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [refreshProfile]);
+
+  if (guardLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: C.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={C.primary} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>

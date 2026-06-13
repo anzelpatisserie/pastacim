@@ -124,15 +124,15 @@ export default function SplashAnimation({ appName, onComplete }: Props) {
           {/* Pırıltılar (pasta etrafında) */}
           <Animated.Text style={[styles.sparkle, styles.sparkleTopLeft, {
             opacity: sparkle1,
-            transform: [{ scale: sparkle1 }],
+            transform: [{ scale: sparkle1.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) }],
           }]}>✨</Animated.Text>
           <Animated.Text style={[styles.sparkle, styles.sparkleTopRight, {
             opacity: sparkle2,
-            transform: [{ scale: sparkle2 }],
+            transform: [{ scale: sparkle2.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) }],
           }]}>✨</Animated.Text>
           <Animated.Text style={[styles.sparkle, styles.sparkleBottom, {
             opacity: sparkle3,
-            transform: [{ scale: sparkle3 }],
+            transform: [{ scale: sparkle3.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) }],
           }]}>✨</Animated.Text>
 
           {/* Mumlar (3 adet, pastanın üstünde) */}
@@ -173,7 +173,7 @@ export default function SplashAnimation({ appName, onComplete }: Props) {
           <Animated.View style={[styles.plate, {
             opacity: plate,
             transform: [
-              { scaleX: plate },
+              { scaleX: plate.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) },
               { scaleY: plate.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) },
             ],
           }]} />
@@ -197,7 +197,9 @@ export default function SplashAnimation({ appName, onComplete }: Props) {
           opacity: sloganOpacity,
           transform: [{ translateY: sloganY }],
         }]}>
-          Hayalindeki pastayı{'\n'}yakındaki ustalar yapsın.
+          {appName === 'Pastacım Pro'
+            ? 'Yakınındaki siparişleri al,\nişini büyüt.'
+            : 'Hayalindeki pastayı\nyakındaki ustalar yapsın.'}
         </Animated.Text>
       </View>
     </Animated.View>

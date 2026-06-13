@@ -4,6 +4,7 @@ import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
+import * as Updates from 'expo-updates';
 import { StatusBar } from 'expo-status-bar';
 
 import { useAuth, navigateFromNotification, supabase, SplashAnimation } from '@pastacim/shared';
@@ -41,6 +42,21 @@ export default function RootLayout() {
     }
   }, [fontsLoaded]);
 
+  // Eager OTA: app her açıldığında son güncellemeyi indir ve hemen uygula.
+  useEffect(() => {
+    (async () => {
+      try {
+        const check = await Updates.checkForUpdateAsync();
+        if (check.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch {
+        // dev build veya network sorunu — sessiz geç
+      }
+    })();
+  }, []);
+
   if (showSplash) {
     return (
       <>
@@ -55,26 +71,40 @@ export default function RootLayout() {
   return <RootLayoutNav />;
 }
 
-function handleAuthUrl(url: string) {
-  // Supabase appends session tokens as a URL fragment after email verification
-  const fragment = url.includes('#') ? url.split('#')[1] : '';
-  if (!fragment) return;
-  const pairs = fragment.split('&');
-  const params: Record<string, string> = {};
-  pairs.forEach((pair) => {
-    const [k, v] = pair.split('=');
-    if (k && v) params[k] = decodeURIComponent(v);
-  });
-  if (params.access_token && params.refresh_token) {
-    supabase.auth.setSession({
-      access_token: params.access_token,
-      refresh_token: params.refresh_token,
+async function handleAuthUrl(url: string) {
+  // Implicit flow: e-posta doğrulama / şifre sıfırlama sonrası
+  // #access_token=...&refresh_token=...
+  if (url.includes('#')) {
+    const [base, fragment] = url.split('#');
+    const params: Record<string, string> = {};
+    fragment.split('&').forEach((pair) => {
+      const [k, v] = pair.split('=');
+      if (k && v) params[k] = decodeURIComponent(v);
     });
+    // Şifre sıfırlama tipi kontrolü (query string'den)
+    const isRecovery = base.includes('type=recovery') || params.type === 'recovery';
+    if (params.access_token && params.refresh_token) {
+      try {
+        await supabase.auth.setSession({
+          access_token: params.access_token,
+          refresh_token: params.refresh_token,
+        });
+        if (isRecovery) {
+          router.replace('/(auth)/reset-password');
+        }
+      } catch (e) {
+        console.error('[handleAuthUrl] setSession failed:', e);
+      }
+    }
+    return;
   }
+  // NOT: PKCE (?code=...) deep-link burada işlenmiyor.
+  // signInWithGoogle (useAuth.ts) zaten openAuthSessionAsync sonucunu işliyor;
+  // burada paralel exchange yapmak PKCE kodunu tüketip yarış yaratıyor.
 }
 
 function RootLayoutNav() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, profile } = useAuth();
   const notificationListener = useRef<Notifications.Subscription | null>(null);
 
   useEffect(() => {
@@ -87,8 +117,20 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (isLoading) return;
-    router.replace(isAuthenticated ? '/(customer)' : '/(auth)/onboarding');
-  }, [isLoading, isAuthenticated]);
+
+    if (!isAuthenticated) {
+      router.replace('/(auth)/onboarding');
+      return;
+    }
+
+    // Profil yüklenmeden müşteri tabbar'ına yönlendirme — aksi halde
+    // ekranlar profile-bağımlı veriyi (avatar, isim, sipariş listesi vb.)
+    // ilk render'da bulamadan açılır ve "hesaba tam bağlanmadı" hissi yaratır.
+    // Google OAuth sonrası bu özellikle belirgindir.
+    if (!profile) return;
+
+    router.replace('/(customer)');
+  }, [isLoading, isAuthenticated, profile]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

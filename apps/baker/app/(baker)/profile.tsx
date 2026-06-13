@@ -1067,6 +1067,17 @@ export default function BakerProfileScreen() {
                       <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
                     </TouchableOpacity>
                   )}
+                  {/* Admin: Dashboard — sadece anzelpatisserie@gmail.com */}
+                  {profile?.email === 'anzelpatisserie@gmail.com' && (
+                    <TouchableOpacity
+                      style={[styles.settingRow, { borderTopColor: C.border }]}
+                      onPress={() => router.push('/(baker)/admin-dashboard' as never)}
+                    >
+                      <Text style={styles.settingEmoji}>📊</Text>
+                      <Text style={[styles.settingText, { color: C.text }]}>Admin: Kullanıcı Paneli</Text>
+                      <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>

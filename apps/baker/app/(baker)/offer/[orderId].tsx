@@ -218,11 +218,25 @@ export default function MakeOfferScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.offeredBanner, { backgroundColor: '#48BB7822', borderColor: '#48BB7844' }]}>
-            <Text style={[styles.offeredBannerText, { color: '#276749' }]}>
-              ✅ Bu sipariş için teklifiniz mevcut
-            </Text>
-          </View>
+          {(() => {
+            const status = order?.status ?? 'pending';
+            const map: Record<string, { text: string; bg: string; border: string; fg: string }> = {
+              pending:          { text: '✅ Bu sipariş için teklifiniz mevcut', bg: '#48BB7822', border: '#48BB7844', fg: '#276749' },
+              offers_received:  { text: '✅ Bu sipariş için teklifiniz mevcut', bg: '#48BB7822', border: '#48BB7844', fg: '#276749' },
+              accepted:         { text: '🎉 Teklifiniz kabul edildi',           bg: '#48BB7822', border: '#48BB7844', fg: '#276749' },
+              in_progress:      { text: '🛠️ Sipariş hazırlanıyor',              bg: '#F6AD5522', border: '#F6AD5544', fg: '#9C4221' },
+              ready:            { text: '📦 Sipariş hazır',                     bg: '#4299E122', border: '#4299E144', fg: '#2C5282' },
+              delivered:        { text: '✅ Teslim edildi',                     bg: '#48BB7822', border: '#48BB7844', fg: '#276749' },
+              completed:        { text: '✅ Sipariş tamamlandı',                bg: '#48BB7822', border: '#48BB7844', fg: '#276749' },
+              cancelled:        { text: '❌ Sipariş iptal edildi',              bg: '#E53E3E22', border: '#E53E3E44', fg: '#9B2C2C' },
+            };
+            const s = map[status] ?? map.pending;
+            return (
+              <View style={[styles.offeredBanner, { backgroundColor: s.bg, borderColor: s.border }]}>
+                <Text style={[styles.offeredBannerText, { color: s.fg }]}>{s.text}</Text>
+              </View>
+            );
+          })()}
 
           {order && (
             <View style={[styles.orderSummary, { backgroundColor: C.card, borderColor: C.border }]}>

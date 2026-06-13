@@ -5,8 +5,6 @@ import {
   StyleSheet,
   useColorScheme,
   Dimensions,
-  Linking,
-  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -71,7 +69,7 @@ export default function OnboardingScreen() {
         <Text
           style={{ color: C.primary, textDecorationLine: 'underline' }}
           accessibilityRole="link"
-          onPress={() => Linking.openURL('https://lvrbzhziayegyinkcuka.supabase.co/functions/v1/terms').catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'))}
+          onPress={() => router.push('/(auth)/terms')}
         >
           Kullanım Koşulları
         </Text>
@@ -79,7 +77,7 @@ export default function OnboardingScreen() {
         <Text
           style={{ color: C.primary, textDecorationLine: 'underline' }}
           accessibilityRole="link"
-          onPress={() => Linking.openURL('https://lvrbzhziayegyinkcuka.supabase.co/functions/v1/privacy').catch(() => Alert.alert('Hata', 'Bağlantı açılamadı.'))}
+          onPress={() => router.push('/(auth)/privacy')}
         >
           Gizlilik Politikası
         </Text>
