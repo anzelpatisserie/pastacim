@@ -68,13 +68,21 @@ function nameSimilarity(a: string, b: string): number {
   return denom > 0 ? common / denom : 0;
 }
 
-async function fetchGooglePlaceByName(shopName: string): Promise<{
+async function fetchGooglePlaceByName(
+  shopName: string,
+  lat?: number | null,
+  lng?: number | null,
+): Promise<{
   rating: number | null; reviewCount: number; mapsUrl: string | null;
   matchedName: string | null; similarity: number;
 } | null> {
   try {
+    // Dükkânın konumu varsa aramayı oraya yanlılaştır — aksi halde
+    // ülkedeki başka bir aynı isimli işletme bulunup yanlış adres dönebiliyor.
+    const locationBias =
+      lat != null && lng != null ? `&location=${lat},${lng}&radius=3000` : '';
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(shopName + ' pastane')}&key=${PLACES_API_KEY}`
+      `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(shopName + ' pastane')}${locationBias}&key=${PLACES_API_KEY}`
     );
     const data = await res.json();
     if (data.results && data.results.length > 0) {
@@ -842,7 +850,7 @@ export default function BakerProfileScreen() {
                       return;
                     }
                     setIsFetchingGoogle(true);
-                    const result = await fetchGooglePlaceByName(name.trim());
+                    const result = await fetchGooglePlaceByName(name.trim(), latitude, longitude);
                     setIsFetchingGoogle(false);
                     if (!result) {
                       Alert.alert('Bulunamadı', `"${name.trim()}" için Google'da işletme bulunamadı. Dükkan adının Google Maps'teki adla aynı olduğundan emin olun.`);

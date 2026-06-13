@@ -76,7 +76,7 @@ module.exports = {
       versionCode: 1,
       googleServicesFile: './google-services.json',
       adaptiveIcon: {
-        backgroundColor: '#000000',
+        backgroundColor: '#F0546C',
         foregroundImage: './assets/images/android-icon-foreground.png',
       },
       permissions: [
