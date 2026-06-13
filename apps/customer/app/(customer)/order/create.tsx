@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, Image, Modal, FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';

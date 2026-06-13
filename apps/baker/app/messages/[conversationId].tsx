@@ -9,10 +9,11 @@
  */
 import { useEffect, useState, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, FlatList,
+  View, Text, StyleSheet, FlatList,
   TouchableOpacity, TextInput, ActivityIndicator,
   KeyboardAvoidingView, Platform, Image, Alert, Modal, Pressable, Keyboard,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';

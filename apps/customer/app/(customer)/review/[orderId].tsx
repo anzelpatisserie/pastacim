@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 

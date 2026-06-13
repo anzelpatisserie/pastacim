@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, FlatList,
+  View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase, rpcAcceptOffer, rpcRejectOffer, notifyUser, getUserPushToken, sendPushNotification, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';

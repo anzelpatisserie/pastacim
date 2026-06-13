@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, Image, Modal, Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database, OrderOfferSummaryRow, CustomerSummary } from '@pastacim/shared';
