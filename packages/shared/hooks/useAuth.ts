@@ -60,6 +60,11 @@ export function useAuth(): AuthState & AuthActions {
       return false;
     }
     setProfile(data);
+    // Hoşgeldin e-postası: ilk authenticated yüklemede tetiklenir, sunucu
+    // tarafında (sent_emails) tekilleştirilir — yani kullanıcı başına bir kez.
+    // signUp anında session olmadığından (caller doğrulaması başarısız) burada
+    // yapılıyor.
+    sendAppEmail(userId, 'welcome');
     return true;
   }, []);
 
@@ -187,7 +192,6 @@ export function useAuth(): AuthState & AuthActions {
       await supabase.auth.signOut();
     }
 
-    if (data.user?.id) sendAppEmail(data.user.id, 'welcome');
 
     return { error: null };
   }, []);

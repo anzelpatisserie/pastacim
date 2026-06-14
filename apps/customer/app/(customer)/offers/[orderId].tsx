@@ -101,7 +101,7 @@ export default function OffersScreen() {
               body: `${order?.title ?? 'Siparişiniz'} için teklifiniz kabul edildi.`,
               data: { orderId: orderId as string },
             }).catch(() => {});
-            sendAppEmail(offer.baker_id, 'offer_accepted', { orderTitle: order?.title });
+            sendAppEmail(offer.baker_id, 'offer_accepted', { orderTitle: order?.title, orderId: orderId as string });
 
             // accept_offer RPC diğer teklifleri DB tarafında otomatik 'rejected'
             // yapıp in-app bildirimi (notifications tablosu) ekledi. Burada da
