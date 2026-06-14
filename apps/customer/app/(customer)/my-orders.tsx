@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   cardDesc: { fontSize: FontSize.sm, lineHeight: 18 },
   cardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   metaText: { fontSize: FontSize.xs },
-  actionRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: 2 },
+  actionRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
   cancelBtn: {
     paddingHorizontal: Spacing.md, paddingVertical: 8,
     borderRadius: Radius.full, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
