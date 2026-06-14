@@ -324,14 +324,6 @@ export default function BakerHomeScreen() {
             <Text style={styles.retryBtnText}>Tekrar Dene</Text>
           </TouchableOpacity>
         </View>
-      ) : orders.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyEmoji}>🗺️</Text>
-          <Text style={[styles.emptyTitle, { color: C.text }]}>Bu bölgede talep yok</Text>
-          <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-            Mesafe aralığını artırabilirsin
-          </Text>
-        </View>
       ) : (
         <FlatList
           data={orders.filter((o) => {
@@ -356,14 +348,26 @@ export default function BakerHomeScreen() {
               tintColor={C.primary}
             />
           }
-          ListHeaderComponent={
-            <Text style={[styles.listHeader, { color: C.textSecondary }]}>
-              {orders.filter((o) => {
-                const myOffer = myOfferMap.get(o.id);
-                return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
-              }).length} açık talep
-            </Text>
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>🗺️</Text>
+              <Text style={[styles.emptyTitle, { color: C.text }]}>Bu bölgede talep yok</Text>
+              <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
+                Mesafe aralığını artırabilirsin
+              </Text>
+            </View>
           }
+          ListHeaderComponent={(() => {
+            const count = orders.filter((o) => {
+              const myOffer = myOfferMap.get(o.id);
+              return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
+            }).length;
+            return count > 0 ? (
+              <Text style={[styles.listHeader, { color: C.textSecondary }]}>
+                {count} açık talep
+              </Text>
+            ) : null;
+          })()}
           ListFooterComponent={
             <View>
               {/* Bekleyen Tekliflerim */}
@@ -674,6 +678,7 @@ const styles = StyleSheet.create({
   errorText: { fontSize: FontSize.md, textAlign: 'center' },
   retryBtn: { paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: Radius.full },
   retryBtnText: { color: '#FFF', fontWeight: '700' },
+  emptyState: { alignItems: 'center', paddingVertical: 60, gap: Spacing.md },
   emptyEmoji: { fontSize: 56 },
   emptyTitle: { fontSize: FontSize.lg, fontWeight: '700', textAlign: 'center' },
   emptySubtitle: { fontSize: FontSize.md, textAlign: 'center' },
