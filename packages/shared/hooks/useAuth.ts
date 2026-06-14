@@ -5,6 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../lib/supabase';
+import { sendAppEmail } from '../lib/notifications';
 import type { Database } from '../types/database.types';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -185,6 +186,8 @@ export function useAuth(): AuthState & AuthActions {
     if (data.session && !data.user?.email_confirmed_at) {
       await supabase.auth.signOut();
     }
+
+    if (data.user?.id) sendAppEmail(data.user.id, 'welcome');
 
     return { error: null };
   }, []);

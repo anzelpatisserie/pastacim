@@ -144,3 +144,23 @@ export async function notifyUser(params: {
     // push başarısız olsa da devam et
   }
 }
+
+
+/**
+ * Önemli anlarda kullanıcıya e-posta gönderir (Brevo, send-email edge function).
+ * Alıcının e-postası sunucuda (service role) bakılır; tip-bazlı template.
+ * NOT: Çalışması için Supabase'de BREVO_API_KEY (v3) secret'ı ayarlı olmalı.
+ */
+export async function sendAppEmail(
+  userId: string,
+  type: 'welcome' | 'order_ready' | 'offer_accepted' | 'review_encourage',
+  data?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await supabase.functions.invoke('send-email', {
+      body: { userId, type, data: data ?? {} },
+    });
+  } catch {
+    // e-posta hatası akışı engellemesin
+  }
+}

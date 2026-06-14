@@ -40,6 +40,7 @@ export {
   getUserPushToken,
   sendPushNotification,
   notifyUser,
+  sendAppEmail,
 } from './lib/notifications';
 export type { NotificationRole } from './lib/notifications';
 

@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { supabase, rpcAcceptOffer, rpcRejectOffer, notifyUser, getUserPushToken, sendPushNotification, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcAcceptOffer, rpcRejectOffer, notifyUser, sendAppEmail, getUserPushToken, sendPushNotification, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,6 +101,7 @@ export default function OffersScreen() {
               body: `${order?.title ?? 'Siparişiniz'} için teklifiniz kabul edildi.`,
               data: { orderId: orderId as string },
             }).catch(() => {});
+            sendAppEmail(offer.baker_id, 'offer_accepted', { orderTitle: order?.title });
 
             // accept_offer RPC diğer teklifleri DB tarafında otomatik 'rejected'
             // yapıp in-app bildirimi (notifications tablosu) ekledi. Burada da
