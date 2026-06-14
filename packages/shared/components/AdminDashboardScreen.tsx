@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, RefreshControl, ActivityIndicator,
-  Linking,
+  Linking, Modal, TextInput, Alert, Switch, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -83,6 +83,40 @@ export default function AdminDashboardScreen() {
     Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(name)}&ll=${lat},${lng}`);
   };
 
+  const [editUser, setEditUser] = useState<UserRow | null>(null);
+
+  const refreshUser = (id: string, patch: Partial<UserRow>) =>
+    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+
+  const handleDeleteUser = (u: UserRow) => {
+    Alert.alert('Kullanıcıyı Sil', `${u.full_name ?? u.email} kalıcı olarak silinsin mi? Geri alınamaz.`, [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: 'Sil', style: 'destructive', onPress: async () => {
+        const { error } = await _db.rpc('admin_delete_user', { p_user_id: u.id });
+        if (error) { Alert.alert('Hata', error.message); return; }
+        setUsers((prev) => prev.filter((x) => x.id !== u.id));
+      } },
+    ]);
+  };
+
+  const handleShopActive = async (u: UserRow) => {
+    const next = !(u.shop_is_active ?? false);
+    const { error } = await _db.rpc('admin_set_shop_active', { p_user_id: u.id, p_active: next });
+    if (error) { Alert.alert('Hata', error.message); return; }
+    refreshUser(u.id, { shop_is_active: next });
+  };
+
+  const handleDeleteShop = (u: UserRow) => {
+    Alert.alert('Dükkânı Sil', `${u.shop_name} dükkânı silinsin mi? Pastacı rolü kaldırılır.`, [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: 'Sil', style: 'destructive', onPress: async () => {
+        const { error } = await _db.rpc('admin_delete_shop', { p_user_id: u.id });
+        if (error) { Alert.alert('Hata', error.message); return; }
+        refreshUser(u.id, { is_baker: false, shop_name: null, shop_is_active: null });
+      } },
+    ]);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       {/* Header */}
@@ -149,7 +183,9 @@ export default function AdminDashboardScreen() {
             </>
           }
           renderItem={({ item }) => (
-            <UserCard item={item} C={C} onMapPress={openMaps} />
+            <UserCard item={item} C={C} onMapPress={openMaps}
+              onEdit={setEditUser} onDelete={handleDeleteUser}
+              onShopActive={handleShopActive} onDeleteShop={handleDeleteShop} />
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -159,7 +195,104 @@ export default function AdminDashboardScreen() {
           }
         />
       )}
+
+      <EditUserModal
+        user={editUser}
+        C={C}
+        onClose={() => setEditUser(null)}
+        onSaved={(patch) => { if (editUser) refreshUser(editUser.id, patch); setEditUser(null); }}
+      />
     </SafeAreaView>
+  );
+}
+
+function EditUserModal({
+  user, C, onClose, onSaved,
+}: {
+  user: UserRow | null;
+  C: ReturnType<typeof useThemeColors>;
+  onClose: () => void;
+  onSaved: (patch: Partial<UserRow>) => void;
+}) {
+  const [fullName, setFullName] = useState('');
+  const [isBaker, setIsBaker] = useState(false);
+  const [isCustomer, setIsCustomer] = useState(true);
+  const [wallet, setWallet] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setFullName(user.full_name ?? '');
+      setIsBaker(user.is_baker);
+      setIsCustomer(user.is_customer);
+      setWallet(user.wallet_balance != null ? String(user.wallet_balance) : '');
+    }
+  }, [user]);
+
+  if (!user) return null;
+
+  const save = async () => {
+    setSaving(true);
+    const walletNum = wallet.trim() === '' ? null : Number(wallet.replace(',', '.'));
+    const { error } = await _db.rpc('admin_update_user', {
+      p_user_id: user.id,
+      p_full_name: fullName.trim() || null,
+      p_is_baker: isBaker,
+      p_is_customer: isCustomer,
+      p_wallet_balance: walletNum != null && !Number.isNaN(walletNum) ? walletNum : null,
+    });
+    setSaving(false);
+    if (error) { Alert.alert('Hata', error.message); return; }
+    onSaved({
+      full_name: fullName.trim() || null,
+      is_baker: isBaker,
+      is_customer: isCustomer,
+      ...(walletNum != null && !Number.isNaN(walletNum) ? { wallet_balance: walletNum } : {}),
+    });
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.modalCard, { backgroundColor: C.card }]}>
+          <ScrollView keyboardShouldPersistTaps="handled">
+            <Text style={[styles.modalTitle, { color: C.text }]}>Kullanıcıyı Düzenle</Text>
+            <Text style={[styles.modalEmail, { color: C.textSecondary }]}>{user.email}</Text>
+
+            <Text style={[styles.modalLabel, { color: C.textSecondary }]}>Ad Soyad</Text>
+            <TextInput
+              style={[styles.modalInput, { color: C.text, borderColor: C.border, backgroundColor: C.background }]}
+              value={fullName} onChangeText={setFullName} placeholder="Ad Soyad" placeholderTextColor={C.placeholder}
+            />
+
+            <View style={styles.modalSwitchRow}>
+              <Text style={[styles.modalLabel, { color: C.text }]}>Müşteri</Text>
+              <Switch value={isCustomer} onValueChange={setIsCustomer} />
+            </View>
+            <View style={styles.modalSwitchRow}>
+              <Text style={[styles.modalLabel, { color: C.text }]}>Pastacı</Text>
+              <Switch value={isBaker} onValueChange={setIsBaker} />
+            </View>
+
+            <Text style={[styles.modalLabel, { color: C.textSecondary }]}>Cüzdan (₺)</Text>
+            <TextInput
+              style={[styles.modalInput, { color: C.text, borderColor: C.border, backgroundColor: C.background }]}
+              value={wallet} onChangeText={setWallet} keyboardType="decimal-pad"
+              placeholder="0" placeholderTextColor={C.placeholder}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: C.background }]} onPress={onClose}>
+                <Text style={[styles.modalBtnText, { color: C.textSecondary }]}>Vazgeç</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: C.primary }]} onPress={save} disabled={saving}>
+                {saving ? <ActivityIndicator color="#FFF" /> : <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Kaydet</Text>}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -173,11 +306,15 @@ function StatCard({ label, value, color, C }: { label: string; value: number; co
 }
 
 function UserCard({
-  item, C, onMapPress,
+  item, C, onMapPress, onEdit, onDelete, onShopActive, onDeleteShop,
 }: {
   item: UserRow;
   C: ReturnType<typeof useThemeColors>;
   onMapPress: (lat: number, lng: number, name: string) => void;
+  onEdit: (u: UserRow) => void;
+  onDelete: (u: UserRow) => void;
+  onShopActive: (u: UserRow) => void;
+  onDeleteShop: (u: UserRow) => void;
 }) {
   const joinDate = new Date(item.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -251,6 +388,30 @@ function UserCard({
           )}
         </View>
       )}
+
+      {/* Dükkan admin aksiyonları */}
+      {item.is_baker && item.shop_name && (
+        <View style={styles.adminRow}>
+          <TouchableOpacity style={[styles.adminBtn, { borderColor: C.border }]} onPress={() => onShopActive(item)}>
+            <Text style={[styles.adminBtnText, { color: item.shop_is_active ? '#EF4444' : '#10B981' }]}>
+              {item.shop_is_active ? 'Dükkânı Pasifle' : 'Dükkânı Aktifle'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.adminBtn, { borderColor: '#EF444466' }]} onPress={() => onDeleteShop(item)}>
+            <Text style={[styles.adminBtnText, { color: '#EF4444' }]}>Dükkânı Sil</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Kullanıcı admin aksiyonları */}
+      <View style={styles.adminRow}>
+        <TouchableOpacity style={[styles.adminBtn, { borderColor: C.border }]} onPress={() => onEdit(item)}>
+          <Text style={[styles.adminBtnText, { color: C.primary }]}>✏️ Düzenle</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.adminBtn, { borderColor: '#EF444466' }]} onPress={() => onDelete(item)}>
+          <Text style={[styles.adminBtnText, { color: '#EF4444' }]}>🗑 Sil</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -318,4 +479,20 @@ const styles = StyleSheet.create({
   },
   mapBtnText: { fontSize: FontSize.xs, fontWeight: '600' },
   empty: { padding: Spacing.xxl, alignItems: 'center' },
+  adminRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  adminBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: Radius.sm, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  adminBtnText: { fontSize: FontSize.xs, fontWeight: '700' },
+  modalBackdrop: { flex: 1, backgroundColor: '#0008', justifyContent: 'flex-end' },
+  modalCard: { borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg, padding: Spacing.lg, maxHeight: '85%' },
+  modalTitle: { fontSize: FontSize.lg, fontWeight: '800' },
+  modalEmail: { fontSize: FontSize.sm, marginBottom: Spacing.md },
+  modalLabel: { fontSize: FontSize.sm, fontWeight: '600', marginTop: Spacing.sm, marginBottom: 4 },
+  modalInput: { borderWidth: 1, borderRadius: Radius.sm, paddingHorizontal: Spacing.md, paddingVertical: 10, fontSize: FontSize.md },
+  modalSwitchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.sm },
+  modalActions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.lg },
+  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
+  modalBtnText: { fontSize: FontSize.md, fontWeight: '700' },
 });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, RefreshControl, ActivityIndicator,
-  Image, Modal, Pressable,
+  Image, Modal, Pressable, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -152,6 +152,16 @@ export default function FeedbacksAdminScreen() {
               item={item}
               C={C}
               onPhotoTap={(uri) => setFullscreenPhoto(uri)}
+              onDelete={() => {
+                Alert.alert('Geri Bildirimi Sil', 'Bu geri bildirim silinsin mi?', [
+                  { text: 'Vazgeç', style: 'cancel' },
+                  { text: 'Sil', style: 'destructive', onPress: async () => {
+                    const { error } = await _db.rpc('admin_delete_feedback', { p_feedback_id: item.id });
+                    if (error) { Alert.alert('Hata', error.message); return; }
+                    setItems((prev) => prev.filter((x) => x.id !== item.id));
+                  } },
+                ]);
+              }}
             />
           )}
           refreshControl={
@@ -192,11 +202,12 @@ export default function FeedbacksAdminScreen() {
 }
 
 function FeedbackCard({
-  item, C, onPhotoTap,
+  item, C, onPhotoTap, onDelete,
 }: {
   item: FeedbackRow;
   C: ReturnType<typeof useThemeColors>;
   onPhotoTap: (uri: string) => void;
+  onDelete: () => void;
 }) {
   const date = new Date(item.created_at);
   const dateStr = date.toLocaleDateString('tr-TR', {
@@ -231,6 +242,9 @@ function FeedbackCard({
           />
         </TouchableOpacity>
       )}
+      <TouchableOpacity onPress={onDelete} style={[styles.deleteFb, { borderColor: '#EF444466' }]} activeOpacity={0.8}>
+        <Text style={styles.deleteFbText}>🗑 Geri Bildirimi Sil</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -284,4 +298,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   modalCloseText: { color: '#FFF', fontSize: 22, fontWeight: '700' },
+  deleteFb: { marginTop: Spacing.sm, paddingVertical: 8, borderRadius: Radius.sm, borderWidth: 1, alignItems: 'center' },
+  deleteFbText: { fontSize: FontSize.xs, fontWeight: '700', color: '#EF4444' },
 });
