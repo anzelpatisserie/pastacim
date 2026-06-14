@@ -487,7 +487,11 @@ function RequestCard({
   };
 
   const offerConfig = myOffer ? OFFER_STATUS_CONFIG[myOffer.status] : null;
-  const alreadyOffered = !!myOffer && myOffer.status !== 'rejected';
+  // Yalnızca AKTİF teklif (pending/accepted) "mevcut" sayılır ve butonu kilitler.
+  // rejected VE withdrawn yeniden teklif verilebilir (submit_offer onları
+  // pending'e çevirir) — withdrawn'ı da 'mevcut' sayan eski mantık, teklif
+  // verilebilecek kartı yanlışlıkla kilitliyordu.
+  const alreadyOffered = !!myOffer && (myOffer.status === 'pending' || myOffer.status === 'accepted');
 
   const isUrgent = (() => {
     if (!order.delivery_date) return false;
