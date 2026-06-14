@@ -18,7 +18,6 @@ type UserRow = {
   email: string | null;
   is_customer: boolean;
   is_baker: boolean;
-  wallet_balance: number | null;
   created_at: string;
   order_count: number;
   completed_order_count: number;
@@ -217,7 +216,6 @@ function EditUserModal({
   const [fullName, setFullName] = useState('');
   const [isBaker, setIsBaker] = useState(false);
   const [isCustomer, setIsCustomer] = useState(true);
-  const [wallet, setWallet] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -225,7 +223,6 @@ function EditUserModal({
       setFullName(user.full_name ?? '');
       setIsBaker(user.is_baker);
       setIsCustomer(user.is_customer);
-      setWallet(user.wallet_balance != null ? String(user.wallet_balance) : '');
     }
   }, [user]);
 
@@ -233,13 +230,12 @@ function EditUserModal({
 
   const save = async () => {
     setSaving(true);
-    const walletNum = wallet.trim() === '' ? null : Number(wallet.replace(',', '.'));
     const { error } = await _db.rpc('admin_update_user', {
       p_user_id: user.id,
       p_full_name: fullName.trim() || null,
       p_is_baker: isBaker,
       p_is_customer: isCustomer,
-      p_wallet_balance: walletNum != null && !Number.isNaN(walletNum) ? walletNum : null,
+      p_wallet_balance: null,
     });
     setSaving(false);
     if (error) { Alert.alert('Hata', error.message); return; }
@@ -247,7 +243,6 @@ function EditUserModal({
       full_name: fullName.trim() || null,
       is_baker: isBaker,
       is_customer: isCustomer,
-      ...(walletNum != null && !Number.isNaN(walletNum) ? { wallet_balance: walletNum } : {}),
     });
   };
 
@@ -273,13 +268,6 @@ function EditUserModal({
               <Text style={[styles.modalLabel, { color: C.text }]}>Pastacı</Text>
               <Switch value={isBaker} onValueChange={setIsBaker} />
             </View>
-
-            <Text style={[styles.modalLabel, { color: C.textSecondary }]}>Cüzdan (₺)</Text>
-            <TextInput
-              style={[styles.modalInput, { color: C.text, borderColor: C.border, backgroundColor: C.background }]}
-              value={wallet} onChangeText={setWallet} keyboardType="decimal-pad"
-              placeholder="0" placeholderTextColor={C.placeholder}
-            />
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: C.background }]} onPress={onClose}>
@@ -348,9 +336,6 @@ function UserCard({
         <MiniStat label="Tamamlanan" value={item.completed_order_count} C={C} />
         {item.is_baker && <MiniStat label="Teklif" value={item.offer_count} C={C} />}
         {item.is_baker && <MiniStat label="Kabul" value={item.accepted_offer_count} C={C} />}
-        {item.is_baker && item.wallet_balance != null && (
-          <MiniStat label="Cüzdan" value={`₺${item.wallet_balance}`} C={C} />
-        )}
       </View>
 
       {/* Pastacı dükkan bilgileri */}

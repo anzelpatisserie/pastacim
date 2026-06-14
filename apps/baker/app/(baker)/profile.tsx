@@ -1041,7 +1041,7 @@ export default function BakerProfileScreen() {
                     onPress={() => {
                       Alert.alert(
                         'Hesabı Sil',
-                        'Hesabınız kalıcı olarak silinecek. Dükkan profiliniz, siparişleriniz ve cüzdan bakiyeniz kaybolacak. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?',
+                        'Hesabınız kalıcı olarak silinecek. Dükkan profiliniz ve siparişleriniz kaybolacak. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?',
                         [
                           { text: 'İptal', style: 'cancel' },
                           {
