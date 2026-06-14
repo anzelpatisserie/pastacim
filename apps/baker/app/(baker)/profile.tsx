@@ -629,7 +629,11 @@ export default function BakerProfileScreen() {
                     {(shop.google_review_count ?? 0) > 0 && (
                       <Text style={[styles.googleReviewText, { color: C.textSecondary }]}>({shop.google_review_count} yorum)</Text>
                     )}
-                    {shop.google_maps_url ? (
+                    {(shop.latitude != null && shop.longitude != null) ? (
+                      <TouchableOpacity onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${shop.latitude},${shop.longitude}`)}>
+                        <Text style={[styles.socialLinkBtn, { color: C.primary }]}>Haritada Gör →</Text>
+                      </TouchableOpacity>
+                    ) : shop.google_maps_url ? (
                       <TouchableOpacity onPress={() => Linking.openURL(shop.google_maps_url!)}>
                         <Text style={[styles.socialLinkBtn, { color: C.primary }]}>Haritada Gör →</Text>
                       </TouchableOpacity>

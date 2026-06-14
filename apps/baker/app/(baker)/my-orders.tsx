@@ -118,10 +118,8 @@ export default function BakerMyOrdersScreen() {
         {
           text: 'Kaldır', style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase
-              .from('offers')
-              .update({ hidden_for_baker: true } as never)
-              .eq('id', offer.id);
+            const { error } = await (supabase as any)
+              .rpc('hide_order_for_me', { p_order_id: offer.order?.id });
             if (error) { Alert.alert('Hata', 'Kaldırılamadı.'); return; }
             setOffers((prev) => prev.filter((o) => o.id !== offer.id));
           },

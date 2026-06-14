@@ -47,6 +47,7 @@ export default function CustomerMyOrdersScreen() {
       .from('orders')
       .select('*')
       .eq('customer_id', user.id)
+      .eq('hidden_for_customer', false)
       .order('created_at', { ascending: false });
 
     if (fetchError) {
@@ -89,7 +90,7 @@ export default function CustomerMyOrdersScreen() {
   const handleDelete = (order: Order) => {
     Alert.alert(
       '🗑️ Siparişi Sil',
-      `"${order.title}" siparişini kalıcı olarak silmek istediğinden emin misin?`,
+      `"${order.title}" siparişini listenizden kaldırmak istiyor musunuz? Yalnızca sizin görünümünüzden kaldırılır.`,
       [
         { text: 'Vazgeç', style: 'cancel' },
         {
@@ -98,10 +99,7 @@ export default function CustomerMyOrdersScreen() {
             if (!user?.id) return;
             setDeletingId(order.id);
             const { error } = await _db
-              .from('orders')
-              .delete()
-              .eq('id', order.id)
-              .eq('customer_id', user.id);
+              .rpc('hide_order_for_me', { p_order_id: order.id });
             setDeletingId(null);
             if (error) {
               Alert.alert('Hata', 'Sipariş silinemedi. Lütfen tekrar deneyin.');
