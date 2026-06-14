@@ -89,8 +89,11 @@ async function fetchGooglePlaceByName(
       const place = data.results[0];
       const matchedName = (place.name ?? null) as string | null;
       const sim = matchedName ? nameSimilarity(shopName, matchedName) : 0;
+      // Evrensel Maps URL formatı (api=1): query = isim/etiket, query_place_id =
+      // tam yer. Eski `?q=place_id:` formatı Maps uygulamasında "_id:..." diye
+      // aranıp bozuluyordu.
       const mapsUrl = place.place_id
-        ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(matchedName ?? shopName)}&query_place_id=${place.place_id}`
         : null;
       return {
         rating: place.rating ?? null,
@@ -1137,7 +1140,7 @@ export default function BakerProfileScreen() {
             <TouchableOpacity
               style={[styles.shareCard, { backgroundColor: C.card, borderColor: C.border }]}
               onPress={() => Share.share({
-                message: 'Pastacım Pro ile sipariş al, kolay yönet! 🎂\nhttps://pastacim.app',
+                message: 'Pastacım Pro ile sipariş al, kolay yönet! 🎂\nhttps://apps.apple.com/tr/app/pastac%C4%B1m-pro/id6778462169?l=tr',
                 title: 'Pastacım Pro\'yu Arkadaşlarına Öner',
               })}
               activeOpacity={0.85}

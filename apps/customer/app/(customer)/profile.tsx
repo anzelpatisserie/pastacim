@@ -377,7 +377,7 @@ export default function CustomerProfileScreen() {
         <TouchableOpacity
           style={[styles.shareCard, { backgroundColor: C.card, borderColor: C.border }]}
           onPress={() => Share.share({
-            message: 'Pastacım ile pastacılardan kolayca teklif al! 🎂\nhttps://pastacim.app',
+            message: 'Pastacım ile pastacılardan kolayca teklif al! 🎂\nhttps://apps.apple.com/tr/app/pastac%C4%B1m/id6778031428?l=tr',
             title: 'Pastacım\'ı Arkadaşlarına Öner',
           })}
           activeOpacity={0.85}
