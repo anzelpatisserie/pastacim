@@ -16,56 +16,42 @@ export function navigateFromNotification(
   data: Record<string, unknown>,
   role: NotificationRole,
 ): void {
+  // ÖNEMLİ: role = içinde bulunduğumuz APP (müşteri app / pastacı app),
+  // hesabın is_baker flag'i DEĞİL. Aksi halde dual-rol hesapta (hem müşteri
+  // hem pastacı) çapraz-app rotaya gidilip "rota yok" hatası alınıyordu.
+  const orderId = data?.orderId as string | undefined;
+  const senderId = data?.senderId as string | undefined;
+  const base = role === 'baker' ? '/(baker)' : '/(customer)';
   try {
     switch (type) {
-      case 'new_order': {
-        // Pastacı → teklif ver ekranı
-        const orderId = data?.orderId as string | undefined;
-        if (orderId) router.push(`/(baker)/offer/${orderId}` as never);
+      case 'new_order':
+        // Pastacı → teklif ver ekranı (sipariş kartı)
+        if (role === 'baker' && orderId) router.push(`/(baker)/offer/${orderId}` as never);
+        else router.push(`${base}/my-orders` as never);
         break;
-      }
-      case 'new_offer': {
+      case 'new_offer':
         // Müşteri → gelen teklifler ekranı
-        const orderId = data?.orderId as string | undefined;
-        if (orderId) router.push(`/(customer)/offers/${orderId}` as never);
+        if (role === 'customer' && orderId) router.push(`/(customer)/offers/${orderId}` as never);
+        else router.push(`${base}/my-orders` as never);
         break;
-      }
-      case 'offer_accepted':
-      case 'offer_rejected': {
-        // Pastacı → siparişlerim
-        if (role === 'baker') router.push('/(baker)/my-orders' as never);
-        else router.push('/(customer)/my-orders' as never);
-        break;
-      }
-      case 'offer_withdrawn': {
-        // Müşteri → siparişlerim
-        router.push('/(customer)/my-orders' as never);
-        break;
-      }
-      case 'new_message': {
-        // Mesaj → sohbet ekranı
-        const senderId = data?.senderId as string | undefined;
-        if (senderId) {
-          router.push({ pathname: '/messages/[conversationId]', params: { conversationId: senderId } } as never);
-        }
-        break;
-      }
-      case 'order_cancelled': {
-        if (role === 'baker') router.push('/(baker)/my-orders' as never);
-        else router.push('/(customer)/my-orders' as never);
-        break;
-      }
       case 'order_in_progress':
       case 'order_ready':
-      case 'order_completed': {
-        // Müşteri → siparişlerim (teslim al / yorum yaz)
-        router.push('/(customer)/my-orders' as never);
+        // Müşteri → sipariş kartı (detay)
+        if (role === 'customer' && orderId) router.push(`/(customer)/order/${orderId}` as never);
+        else router.push(`${base}/my-orders` as never);
         break;
-      }
+      case 'new_message':
+        if (senderId) router.push({ pathname: '/messages/[conversationId]', params: { conversationId: senderId } } as never);
+        else router.push(`${base}/messages` as never);
+        break;
       case 'campaign':
-        router.push('/' as never);
+        router.push(base as never);
         break;
+      // offer_accepted / offer_rejected / offer_withdrawn / order_completed /
+      // order_cancelled → mevcut app'in siparişlerim sekmesi (güvenli varsayılan;
+      // asla çapraz-app rotaya gitmez).
       default:
+        router.push(`${base}/my-orders` as never);
         break;
     }
   } catch {

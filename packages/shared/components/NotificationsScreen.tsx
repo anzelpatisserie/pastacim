@@ -96,10 +96,13 @@ function NotifCard({
   );
 }
 
-export default function NotificationsScreen() {
+export default function NotificationsScreen({ appRole }: { appRole?: NotificationRole } = {}) {
   const C = useThemeColors();
   const { user, isBaker } = useAuth();
-  const notifRole: NotificationRole = isBaker ? 'baker' : 'customer';
+  // Rol, içinde bulunduğumuz APP'ten gelmeli (appRole). Dual-rol hesapta
+  // isBaker her iki app'te de true olabildiği için bu fallback yanlış route'a
+  // (çapraz-app) yol açıp hata veriyordu.
+  const notifRole: NotificationRole = appRole ?? (isBaker ? 'baker' : 'customer');
 
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [isLoading, setIsLoading]       = useState(true);

@@ -1,2 +1,5 @@
 import { NotificationsScreen } from '@pastacim/shared';
-export default NotificationsScreen;
+
+export default function CustomerNotifications() {
+  return <NotificationsScreen appRole="customer" />;
+}
