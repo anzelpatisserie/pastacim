@@ -41,6 +41,7 @@ export default function OrderDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isReverting, setIsReverting] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -173,6 +174,53 @@ export default function OrderDetailScreen() {
             }
 
             router.replace({ pathname: '/(customer)/review/[orderId]', params: { orderId: order.id } });
+          },
+        },
+      ]
+    );
+  };
+
+  // Pastacı "teslim ettim" yaptıysa ama müşteri almadıysa: statüyü geri al.
+  const handleRevert = () => {
+    if (!order) return;
+    Alert.alert(
+      '↩️ Teslim Almadım',
+      `"${order.title}" siparişini henüz teslim almadıysan durumu "Teslimata Hazır"a geri alabilirsin. Pastacı bilgilendirilecek.`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Geri Al', style: 'destructive',
+          onPress: async () => {
+            setIsReverting(true);
+            const { error } = await _db
+              .from('orders')
+              .update({ status: 'ready' })
+              .eq('id', order.id)
+              .eq('customer_id', user!.id);
+            setIsReverting(false);
+            if (error) {
+              Alert.alert('Hata', 'Durum geri alınamadı.');
+              return;
+            }
+            setOrder((prev) => prev ? { ...prev, status: 'ready' } : prev);
+            if (order.selected_offer_id) {
+              _db.from('offers')
+                .select('baker_id')
+                .eq('id', order.selected_offer_id)
+                .single()
+                .then(({ data: od }: { data: { baker_id: string } | null }) => {
+                  if (od?.baker_id) {
+                    notifyUser({
+                      userId: od.baker_id,
+                      type: 'order_reverted',
+                      title: '↩️ Sipariş Teslim Alınmadı',
+                      body: `"${order.title}" siparişini müşteri henüz teslim almadığını bildirdi.`,
+                      data: { orderId: order.id },
+                    }).catch(() => {});
+                  }
+                })
+                .catch(() => {});
+            }
           },
         },
       ]
@@ -396,6 +444,20 @@ export default function OrderDetailScreen() {
               {isCancelling
                 ? <ActivityIndicator color={C.error} size="small" />
                 : <Text style={[styles.btnCancelText, { color: C.error }]}>🗑️ Siparişi İptal Et</Text>
+              }
+            </TouchableOpacity>
+          )}
+
+          {/* Teslim Almadım — pastacı completed yaptıysa geri al */}
+          {order.status === 'completed' && (
+            <TouchableOpacity
+              style={[styles.btnCancel, { borderColor: C.error + '88' }]}
+              onPress={handleRevert}
+              disabled={isReverting}
+            >
+              {isReverting
+                ? <ActivityIndicator color={C.error} size="small" />
+                : <Text style={[styles.btnCancelText, { color: C.error }]}>↩️ Teslim Almadım (Geri Al)</Text>
               }
             </TouchableOpacity>
           )}

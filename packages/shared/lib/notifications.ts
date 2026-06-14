@@ -36,6 +36,7 @@ export function navigateFromNotification(
         break;
       case 'order_in_progress':
       case 'order_ready':
+      case 'order_delivered':
         // Müşteri → sipariş kartı (detay)
         if (role === 'customer' && orderId) router.push(`/(customer)/order/${orderId}` as never);
         else router.push(`${base}/my-orders` as never);

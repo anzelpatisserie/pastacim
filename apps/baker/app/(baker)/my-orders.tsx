@@ -156,6 +156,8 @@ export default function BakerMyOrdersScreen() {
       notifyUser({ userId: customerId, type: 'order_in_progress', title: '🍳 Siparişin Hazırlanıyor!', body: `"${offer.order.title}" siparişin hazırlanmaya başlandı.`, data: { orderId: offer.order.id } }).catch(() => {});
     } else if (newStatus === 'ready') {
       notifyUser({ userId: customerId, type: 'order_ready', title: '📦 Siparişin Teslimata Hazır!', body: `"${offer.order.title}" siparişin teslim almaya hazır.`, data: { orderId: offer.order.id } }).catch(() => {});
+    } else if (newStatus === 'completed') {
+      notifyUser({ userId: customerId, type: 'order_delivered', title: '🎂 Siparişin Teslim Edildi', body: `"${offer.order.title}" siparişin teslim edildi olarak işaretlendi. Teslim almadıysan sipariş kartından geri alabilirsin.`, data: { orderId: offer.order.id } }).catch(() => {});
     }
   };
 
@@ -249,6 +251,7 @@ function OfferOrderCard({
     if (!isAccepted) return null;
     if (orderStatus === 'accepted')    return { label: '🍳 Hazırlamaya Başla', status: 'in_progress', color: '#9F7AEA' };
     if (orderStatus === 'in_progress') return { label: '📦 Teslimata Hazır',   status: 'ready',       color: '#4299E1' };
+    if (orderStatus === 'ready')       return { label: '🎂 Teslim Ettim',      status: 'completed',   color: '#68D391' };
     return null;
   })();
 
