@@ -57,6 +57,7 @@ export { default as BackButton } from './components/BackButton';
 export { default as FeedbacksAdminScreen } from './components/FeedbacksAdminScreen';
 export { default as AdminNotificationsScreen } from './components/AdminNotificationsScreen';
 export { default as AdminEmailsScreen } from './components/AdminEmailsScreen';
+export { default as AdminReportsScreen } from './components/AdminReportsScreen';
 export { default as NameEntryModal } from './components/NameEntryModal';
 export { default as ReportModal } from './components/ReportModal';
 export type { ReportTargetType } from './components/ReportModal';

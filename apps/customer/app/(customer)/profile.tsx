@@ -386,6 +386,17 @@ export default function CustomerProfileScreen() {
                   <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
                 </TouchableOpacity>
               )}
+              {/* Admin: Şikayetler — sadece anzelpatisserie@gmail.com */}
+              {profile?.email === 'anzelpatisserie@gmail.com' && (
+                <TouchableOpacity
+                  style={[styles.settingRow, { borderTopColor: C.border }]}
+                  onPress={() => router.push('/(customer)/admin-reports' as never)}
+                >
+                  <Text style={styles.settingEmoji}>🚩</Text>
+                  <Text style={[styles.settingText, { color: C.text }]}>Şikayetler</Text>
+                  <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                </TouchableOpacity>
+              )}
               {/* Admin: Dashboard — sadece anzelpatisserie@gmail.com */}
               {profile?.email === 'anzelpatisserie@gmail.com' && (
                 <TouchableOpacity
