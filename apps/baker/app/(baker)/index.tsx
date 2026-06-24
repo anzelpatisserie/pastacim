@@ -121,14 +121,6 @@ export default function BakerHomeScreen() {
     const uid = user?.id ?? profile?.id;
     if (!uid) return;
 
-    // Setup yeni dükkan oluşturduysa: stale 'none' latch'ini temizle ve taze sorgula.
-    // Bunu sorgudan ÖNCE yaparız; 'unknown' iken <Redirect> tetiklenmez, böylece
-    // create_shop sonrası setup'a geri yönlenme (loop) olmaz.
-    if (shopJustCreatedSignal.value) {
-      shopJustCreatedSignal.value = false;
-      setShopState('unknown');
-    }
-
     const { data: shop, error: shopErr } = await _db
       .from('pastry_shops')
       .select('latitude, longitude')
@@ -137,6 +129,12 @@ export default function BakerHomeScreen() {
 
     // Sorgu hatası (network/RLS askıda) → kararı erteleme; latch'i değiştirme.
     if (shopErr) return;
+
+    // Sinyali SORGUDAN SONRA tüket. create_shop sonrası setup bu sinyali set eder;
+    // render-anındaki guard onu okuyup stale 'none' latch'iyle setup'a geri sıçramayı
+    // engeller (redirect loop fix). Reset'i async effect'te değil, guard'da senkron
+    // okuduğumuz için sorgu 'exists'e dönene kadar redirect bastırılır.
+    shopJustCreatedSignal.value = false;
 
     if (shop === null || shop === undefined) {
       // Dükkan kaydı yok → setup'a yönlendir. Latch: bir kez 'none' olunca kalır.
@@ -323,7 +321,11 @@ export default function BakerHomeScreen() {
   // Karar SADECE shopState latch'ine dayanır (DB'den pastry_shops sorgusu). Bu,
   // useAuth'un profile/isBaker salınımından bağımsızdır; bir kez 'none' kararı
   // verildiğinde stabil kalır ve <Redirect> navigasyonu commit edilir.
-  if (shopState === 'none') {
+  // Dükkan yeni oluşturulduysa (shopJustCreatedSignal) stale 'none' latch'ine rağmen
+  // setup'a YÖNLENDİRME — fetchShopLocation taze sorguyla 'exists'e çevirene kadar
+  // redirect'i bastır. Aksi halde render senkron redirect'i async reset'ten önce
+  // tetikleyip setup'a geri sıçratıyordu (redirect loop).
+  if (shopState === 'none' && !shopJustCreatedSignal.value) {
     return <Redirect href={'/(baker)/setup' as never} />;
   }
 
