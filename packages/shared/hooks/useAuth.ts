@@ -51,7 +51,7 @@ export function useAuth(): AuthState & AuthActions {
   const loadProfile = useCallback(async (userId: string): Promise<boolean> => {
     const { data, error } = await supabase
       .from('users')
-      .select('id, email, phone, full_name, avatar_url, is_customer, is_baker, wallet_balance, push_token, role, token_balance, created_at, updated_at')
+      .select('id, email, phone, full_name, avatar_url, is_customer, is_baker, wallet_balance, push_token, role, token_balance, email_opt_out, email_unsub_token, created_at, updated_at')
       .eq('id', userId)
       .single();
 

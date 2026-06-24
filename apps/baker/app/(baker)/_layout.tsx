@@ -72,6 +72,7 @@ export default function BakerLayout() {
       <Tabs.Screen name="admin-feedbacks" options={{ href: null }} />
       <Tabs.Screen name="admin-dashboard" options={{ href: null }} />
       <Tabs.Screen name="admin-notifications" options={{ href: null }} />
+      <Tabs.Screen name="admin-emails" options={{ href: null }} />
       <Tabs.Screen name="offer/[orderId]" options={{ href: null }} />
       <Tabs.Screen name="setup" options={{ href: null }} />
     </Tabs>

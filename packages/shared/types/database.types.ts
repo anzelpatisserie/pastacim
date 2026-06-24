@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      email_campaigns: {
+        Row: {
+          app_target: string
+          body: string
+          created_at: string
+          created_by: string | null
+          id: string
+          sent_count: number
+          subject: string
+        }
+        Insert: {
+          app_target: string
+          body: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          sent_count?: number
+          subject: string
+        }
+        Update: {
+          app_target?: string
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          sent_count?: number
+          subject?: string
+        }
+        Relationships: []
+      }
+      email_templates: {
+        Row: {
+          body: string
+          description: string | null
+          key: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          description?: string | null
+          key: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          description?: string | null
+          key?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       feedbacks: {
         Row: {
           app_name: string
@@ -631,6 +685,8 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           email: string | null
+          email_opt_out: boolean
+          email_unsub_token: string
           full_name: string | null
           id: string
           is_baker: boolean
@@ -646,6 +702,8 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           email?: string | null
+          email_opt_out?: boolean
+          email_unsub_token?: string
           full_name?: string | null
           id: string
           is_baker?: boolean
@@ -661,6 +719,8 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           email?: string | null
+          email_opt_out?: boolean
+          email_unsub_token?: string
           full_name?: string | null
           id?: string
           is_baker?: boolean
@@ -821,9 +881,17 @@ export type Database = {
           wallet_balance: number
         }[]
       }
+      admin_set_email_opt_out: {
+        Args: { p_opt_out: boolean; p_user_id: string }
+        Returns: Json
+      }
       admin_set_shop_active: {
         Args: { p_active: boolean; p_user_id: string }
         Returns: undefined
+      }
+      admin_update_email_template: {
+        Args: { p_body: string; p_key: string; p_subject: string }
+        Returns: Json
       }
       admin_update_notification_template: {
         Args: { p_body: string; p_key: string; p_title: string }
@@ -905,6 +973,39 @@ export type Database = {
           member_days: number
           member_since: string
           total_orders: number
+        }[]
+      }
+      get_email_campaigns: {
+        Args: never
+        Returns: {
+          app_target: string
+          body: string
+          created_at: string
+          created_by: string | null
+          id: string
+          sent_count: number
+          subject: string
+        }[]
+      }
+      get_email_subscribers: {
+        Args: { p_app: string }
+        Returns: {
+          email: string
+          email_opt_out: boolean
+          full_name: string
+          id: string
+          is_baker: boolean
+          is_customer: boolean
+        }[]
+      }
+      get_email_templates: {
+        Args: never
+        Returns: {
+          body: string
+          description: string | null
+          key: string
+          subject: string
+          updated_at: string
         }[]
       }
       get_notification_campaigns: {

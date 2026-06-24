@@ -14,31 +14,38 @@ const esc = (s: unknown) =>
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-function template(type: string, name: string, data: Record<string, unknown>) {
+// Şablonlar artık DB'de (email_templates) — admin panelden düzenlenebilir.
+// DB'de bulunmazsa aşağıdaki sabitlere düşülür (her zaman bir mail gider).
+const FALLBACK: Record<string, { subject: string; body: string }> = {
+  welcome:          { subject: "Pastacım'a Hoş Geldin! 🎉", body: `<p>Aramıza katıldığın için mutluyuz. Hayalindeki pastayı tarif et, yakındaki ustalardan teklif al!</p>` },
+  order_ready:      { subject: "Siparişin Teslimata Hazır! 📦", body: `<p><b>"{{title}}"</b> siparişin pastacı tarafından hazırlandı ve teslim almaya hazır.</p>` },
+  offer_accepted:   { subject: "Teklifin Kabul Edildi! ✅", body: `<p><b>"{{title}}"</b> siparişi için verdiğin teklif müşteri tarafından kabul edildi. Hadi hazırlamaya başla!</p>` },
+  review_encourage: { subject: "Siparişin Nasıldı? ⭐", body: `<p><b>"{{title}}"</b> siparişin tamamlandı. Pastacıya bir yorum bırakarak diğer müşterilere yardımcı olur musun?</p>` },
+};
+
+// deno-lint-ignore no-explicit-any
+async function buildEmail(admin: any, type: string, name: string, data: Record<string, unknown>) {
   const title = esc(data.orderTitle ?? "siparişin");
   const safeName = esc(name || "değerli kullanıcı");
-  const wrap = (heading: string, body: string) => ({
-    subject: heading,
-    html: `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2D3748">
+  let subject: string | undefined;
+  let inner: string | undefined;
+  try {
+    const { data: row } = await admin.from("email_templates").select("subject, body").eq("key", type).single();
+    if (row) { subject = row.subject; inner = row.body; }
+  } catch { /* DB hatası → fallback */ }
+  subject = subject ?? FALLBACK[type]?.subject;
+  inner = inner ?? FALLBACK[type]?.body;
+  if (!subject || !inner) return null;
+  // Yer tutucular: {{title}} (escape'li kullanıcı verisi), {{name}}
+  inner = inner.replace(/\{\{\s*title\s*\}\}/g, title).replace(/\{\{\s*name\s*\}\}/g, safeName);
+  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2D3748">
       <div style="text-align:center;font-size:30px">🎂</div>
-      <h2 style="color:#8B1A3D">${heading}</h2>
+      <h2 style="color:#8B1A3D">${esc(subject)}</h2>
       <p>Merhaba ${safeName},</p>
-      ${body}
+      ${inner}
       <p style="margin-top:24px;color:#718096;font-size:13px">Pastacım • Hayalindeki pastayı yakındaki ustalar yapsın</p>
-    </div>`,
-  });
-  switch (type) {
-    case "welcome":
-      return wrap("Pastacım'a Hoş Geldin! 🎉", `<p>Aramıza katıldığın için mutluyuz. Hayalindeki pastayı tarif et, yakındaki ustalardan teklif al!</p>`);
-    case "order_ready":
-      return wrap("Siparişin Teslimata Hazır! 📦", `<p><b>"${title}"</b> siparişin pastacı tarafından hazırlandı ve teslim almaya hazır.</p>`);
-    case "offer_accepted":
-      return wrap("Teklifin Kabul Edildi! ✅", `<p><b>"${title}"</b> siparişi için verdiğin teklif müşteri tarafından kabul edildi. Hadi hazırlamaya başla!</p>`);
-    case "review_encourage":
-      return wrap("Siparişin Nasıldı? ⭐", `<p><b>"${title}"</b> siparişin tamamlandı. Pastacıya bir yorum bırakarak diğer müşterilere yardımcı olur musun?</p>`);
-    default:
-      return null;
-  }
+    </div>`;
+  return { subject, html };
 }
 
 function ok() { return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }); }
@@ -99,7 +106,7 @@ Deno.serve(async (req) => {
     const { data: user } = await admin.from("users").select("email, full_name").eq("id", userId).single();
     if (!user?.email) { console.error("send-email: email yok"); await release(); return ok(); }
 
-    const tpl = template(type, user.full_name ?? "", data);
+    const tpl = await buildEmail(admin, type, user.full_name ?? "", data);
     if (!tpl) { await release(); return ok(); }
 
     const res = await fetch(BREVO_URL, {

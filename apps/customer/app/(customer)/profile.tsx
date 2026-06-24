@@ -375,6 +375,17 @@ export default function CustomerProfileScreen() {
                   <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
                 </TouchableOpacity>
               )}
+              {/* Admin: Toplu E-posta — sadece anzelpatisserie@gmail.com */}
+              {profile?.email === 'anzelpatisserie@gmail.com' && (
+                <TouchableOpacity
+                  style={[styles.settingRow, { borderTopColor: C.border }]}
+                  onPress={() => router.push('/(customer)/admin-emails' as never)}
+                >
+                  <Text style={styles.settingEmoji}>📧</Text>
+                  <Text style={[styles.settingText, { color: C.text }]}>Toplu E-posta</Text>
+                  <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                </TouchableOpacity>
+              )}
               {/* Admin: Dashboard — sadece anzelpatisserie@gmail.com */}
               {profile?.email === 'anzelpatisserie@gmail.com' && (
                 <TouchableOpacity
