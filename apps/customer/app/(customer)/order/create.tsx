@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { rpcPlaceOrder, rpcNearbyBakers, supabase, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 
 const SEARCH_RADIUS = 20;
@@ -17,10 +18,8 @@ const SEARCH_RADIUS = 20;
 // çevirmek için kullanılır; cihaz GPS'i yoksa bile doğru konum elde edilir.
 const GOOGLE_API_KEY: string = Constants.expoConfig?.extra?.googlePlacesApiKey ?? '';
 
-// NOT: react-native-maps bu projede kurulu değil (native modül + rebuild gerektirir).
-// Konum, yazılan adresten Google Geocoding ile çözülür ve kullanıcı koordinat onay
-// kartında doğrular / ince ayar yapar. İstanbul varsayılanı asla gönderilmez.
-// (Sürüklenebilir gerçek harita ileride react-native-maps eklenince yapılabilir.)
+// Konum, yazılan adresten Google Geocoding ile çözülür; kullanıcı haritada
+// sürüklenebilir pin ile doğrular/düzeltir. İstanbul varsayılanı asla gönderilmez.
 
 type LatLng = { lat: number; lng: number };
 
@@ -851,9 +850,8 @@ function TimePickerModal({
 }
 
 // ─── Konum Onay Modalı ────────────────────────────────────────────────────────
-// react-native-maps kuruluysa sürüklenebilir/dokunulabilir pin'li harita gösterir;
-// kurulu değilse koordinat + ince ayar (nudge) kartına düşer. Her iki durumda da
-// kullanıcı GERÇEK bir konumu onaylar — İstanbul varsayılanı asla gönderilmez.
+// Sürüklenebilir pin'li gerçek harita (react-native-maps). Kullanıcı GERÇEK bir
+// konumu onaylar — İstanbul varsayılanı asla gönderilmez.
 function LocationConfirmModal({
   visible, point, label, onConfirm, onDismiss, C,
 }: {
@@ -871,42 +869,41 @@ function LocationConfirmModal({
 
   if (!visible || !pin) return null;
 
-  // İnce ayar adımı (yaklaşık ~110m enlemde) — harita yoksa pin'i kaydırmak için
-  const STEP = 0.001;
-  const nudge = (dLat: number, dLng: number) =>
-    setPin((p) => (p ? { lat: p.lat + dLat, lng: p.lng + dLng } : p));
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
       <View style={pickerStyles.overlay}>
         <View style={[pickerStyles.sheet, { backgroundColor: C.card, paddingBottom: Spacing.lg }]}>
           <Text style={[pickerStyles.title, { color: C.text }]}>Konumu Onayla</Text>
           <Text style={[confirmStyles.hint, { color: C.textSecondary }]}>
-            {label} — pin'i konumunuza göre ayarlayıp onaylayın.
+            {label} — pin'i basılı tutup sürükleyerek veya haritaya dokunarak konumunuzu ayarlayın.
           </Text>
 
-          {/* Koordinat kartı + ince ayar tuşları (harita modülü projede yok) */}
-          <View style={[confirmStyles.fallbackCard, { backgroundColor: C.background, borderColor: C.border }]}>
-            <Text style={[confirmStyles.coordText, { color: C.text }]}>
-              📍 {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
-            </Text>
-            <View style={confirmStyles.nudgeGrid}>
-              <TouchableOpacity style={[confirmStyles.nudgeBtn, { borderColor: C.border }]} onPress={() => nudge(STEP, 0)}>
-                <Text style={[confirmStyles.nudgeText, { color: C.primary }]}>▲ Kuzey</Text>
-              </TouchableOpacity>
-              <View style={confirmStyles.nudgeRow}>
-                <TouchableOpacity style={[confirmStyles.nudgeBtn, { borderColor: C.border }]} onPress={() => nudge(0, -STEP)}>
-                  <Text style={[confirmStyles.nudgeText, { color: C.primary }]}>◀ Batı</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[confirmStyles.nudgeBtn, { borderColor: C.border }]} onPress={() => nudge(0, STEP)}>
-                  <Text style={[confirmStyles.nudgeText, { color: C.primary }]}>Doğu ▶</Text>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={[confirmStyles.nudgeBtn, { borderColor: C.border }]} onPress={() => nudge(-STEP, 0)}>
-                <Text style={[confirmStyles.nudgeText, { color: C.primary }]}>▼ Güney</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <MapView
+            // Yeni geocode noktası gelince haritayı yeniden merkezle (key remount)
+            key={point ? `${point.lat},${point.lng}` : 'map'}
+            style={confirmStyles.map}
+            provider={PROVIDER_DEFAULT}
+            initialRegion={{
+              latitude: pin.lat,
+              longitude: pin.lng,
+              latitudeDelta: 0.008,
+              longitudeDelta: 0.008,
+            }}
+            onPress={(e) =>
+              setPin({ lat: e.nativeEvent.coordinate.latitude, lng: e.nativeEvent.coordinate.longitude })
+            }
+          >
+            <Marker
+              draggable
+              coordinate={{ latitude: pin.lat, longitude: pin.lng }}
+              onDragEnd={(e) =>
+                setPin({ lat: e.nativeEvent.coordinate.latitude, lng: e.nativeEvent.coordinate.longitude })
+              }
+            />
+          </MapView>
+          <Text style={[confirmStyles.coordText, { color: C.textSecondary }]}>
+            📍 {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
+          </Text>
 
           <View style={confirmStyles.actions}>
             <TouchableOpacity
