@@ -82,17 +82,25 @@ Deno.serve(async (req) => {
     }
     if (!authorized) { console.error("send-email: unauthorized", type, caller.id); return ok(); }
 
-    // 3) Idempotency / loop guard: aynı (alıcı,tip,sipariş) ikinci kez gönderilmez
+    // 3) Idempotency / loop guard: dedup satırını LOCK olarak ekle (eşzamanlı
+    //    çift gönderimi engeller). ÖNEMLİ: gönderim başarısız olursa bu satırı
+    //    GERİ AL (release) — aksi halde başarısız mail bir daha hiç denenmez.
     const { error: dupErr } = await admin.from("sent_emails")
       .insert({ recipient_id: userId, type, order_id: orderId });
     if (dupErr) { console.error("send-email: dedup/skip", dupErr.code); return ok(); }
 
-    if (!apiKey) { console.error("send-email: BREVO_API_KEY yok"); return ok(); }
+    const release = async () => {
+      let q = admin.from("sent_emails").delete().eq("recipient_id", userId).eq("type", type);
+      q = orderId ? q.eq("order_id", orderId) : q.is("order_id", null);
+      await q;
+    };
+
+    if (!apiKey) { console.error("send-email: BREVO_API_KEY yok"); await release(); return ok(); }
     const { data: user } = await admin.from("users").select("email, full_name").eq("id", userId).single();
-    if (!user?.email) { console.error("send-email: email yok"); return ok(); }
+    if (!user?.email) { console.error("send-email: email yok"); await release(); return ok(); }
 
     const tpl = template(type, user.full_name ?? "", data);
-    if (!tpl) return ok();
+    if (!tpl) { await release(); return ok(); }
 
     const res = await fetch(BREVO_URL, {
       method: "POST",
@@ -104,7 +112,13 @@ Deno.serve(async (req) => {
         htmlContent: tpl.html,
       }),
     });
-    if (!res.ok) console.error("send-email: brevo", res.status, await res.text());
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error("send-email: brevo FAIL", res.status, errBody);
+      await release();  // başarısız → kilidi bırak, sonra tekrar denensin
+      return ok();
+    }
+    console.log("send-email: sent OK", type, userId);
     return ok();
   } catch (e) {
     console.error("send-email: exception", String(e));
