@@ -29,7 +29,7 @@ interface AuthState {
 
 interface AuthActions {
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: string | null }>;
-  signUp: (params: SignUpParams) => Promise<{ error: string | null }>;
+  signUp: (params: SignUpParams) => Promise<{ error: string | null; alreadyExisted?: boolean; signedIn?: boolean }>;
   signInWithGoogle: (redirectUrl: string) => Promise<{ error: string | null }>;
   signInWithApple: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -161,7 +161,7 @@ export function useAuth(): AuthState & AuthActions {
     password,
     fullName,
     redirectTo,
-  }: SignUpParams): Promise<{ error: string | null }> => {
+  }: SignUpParams): Promise<{ error: string | null; alreadyExisted?: boolean; signedIn?: boolean }> => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -173,7 +173,7 @@ export function useAuth(): AuthState & AuthActions {
 
     if (error) {
       if (error.message.includes('already registered') || error.message.includes('User already registered')) {
-        return { error: 'Bu e-posta adresi zaten kullanımda.' };
+        return { error: 'Bu e-posta adresi zaten kullanımda.', alreadyExisted: true };
       }
       if (error.message.includes('Password should be')) {
         return { error: 'Şifre en az 6 karakter olmalıdır.' };
@@ -184,6 +184,34 @@ export function useAuth(): AuthState & AuthActions {
       return { error: `Hata: ${error.message}` };
     }
 
+    // "Akıllı" e-posta doğrulama:
+    // Supabase, zaten kayıtlı bir e-posta için signUp çağrıldığında (enumeration
+    // koruması nedeniyle) hata DÖNMEZ; bunun yerine `identities` dizisi BOŞ olan bir
+    // user döner. Bu, "kullanıcı zaten var" sinyalidir. Bu durumda doğrulama ekranı
+    // gösterme (çünkü e-posta zaten doğrulanmış olabilir ve hiç mail gelmez);
+    // bunun yerine verilen kimlik bilgileriyle doğrudan giriş yapmayı dene.
+    const identities = data.user?.identities;
+    const emailAlreadyExists = !!data.user && Array.isArray(identities) && identities.length === 0;
+
+    if (emailAlreadyExists) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (!signInError) {
+        // Şifre doğru — kullanıcı zaten var, doğrudan içeri al.
+        return { error: null, alreadyExisted: true, signedIn: true };
+      }
+      // Şifre yanlış / e-posta doğrulanmamış → net Türkçe mesaj, login'e yönlendir.
+      if (signInError.message.includes('Email not confirmed')) {
+        return {
+          error: 'Bu e-posta zaten kayıtlı ama henüz doğrulanmamış. Lütfen gelen kutunuzdaki doğrulama bağlantısına tıklayın.',
+          alreadyExisted: true,
+        };
+      }
+      return {
+        error: 'Bu e-posta adresi zaten kayıtlı. Lütfen giriş yapın veya şifrenizi sıfırlayın.',
+        alreadyExisted: true,
+      };
+    }
+
     // E-posta doğrulama zorlaması:
     // Supabase Auth Settings'te "Confirm email" kapalıysa veya bir şekilde
     // signUp anında session dönerse, kullanıcıyı zorla çıkış yap.
@@ -192,8 +220,8 @@ export function useAuth(): AuthState & AuthActions {
       await supabase.auth.signOut();
     }
 
-
-    return { error: null };
+    // Buraya geldiysek: gerçekten yeni, doğrulanmamış bir kayıt → doğrulama ekranı göster.
+    return { error: null, alreadyExisted: false };
   }, []);
 
   const signInWithGoogle = useCallback(async (redirectUrl: string): Promise<{ error: string | null }> => {
@@ -315,7 +343,7 @@ export function useAuth(): AuthState & AuthActions {
         return { error: 'Apple kimlik tokeni alınamadı.' };
       }
 
-      const { error } = await supabase.auth.signInWithIdToken({
+      const { data: signInData, error } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
       });
@@ -323,6 +351,22 @@ export function useAuth(): AuthState & AuthActions {
       if (error) {
         console.error('[Apple] signInWithIdToken error:', error.message);
         return { error: 'Apple oturumu açılamadı: ' + error.message };
+      }
+
+      // Apple yalnızca İLK girişte isim döner ("E-postamı Gizle" seçilirse hiç
+      // dönmeyebilir). Apple bir isim verdiyse users.full_name + auth metadata'ya yaz.
+      // İsim gelmezse _layout.tsx'teki NameEntryModal kapısı kullanıcıya isim girdirir.
+      const given = credential.fullName?.givenName?.trim() ?? '';
+      const family = credential.fullName?.familyName?.trim() ?? '';
+      const appleFullName = `${given} ${family}`.trim();
+      const uid = signInData.user?.id;
+      if (appleFullName && uid) {
+        try {
+          await supabase.from('users').update({ full_name: appleFullName }).eq('id', uid);
+          await supabase.auth.updateUser({ data: { full_name: appleFullName } });
+        } catch (e) {
+          console.warn('[Apple] full_name kaydı başarısız:', e);
+        }
       }
 
       // onAuthStateChange ile session yakalanacak; çağıran tarafa direkt dön

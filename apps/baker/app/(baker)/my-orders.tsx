@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, FlatList,
+  View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { supabase, notifyUser, sendAppEmail, useAuth, useThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
+import { supabase, notifyFromTemplate, sendAppEmail, useAuth, useThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -150,14 +150,46 @@ export default function BakerMyOrdersScreen() {
     ));
 
     const customerId = offer.order.customer_id;
+    const orderTitle = offer.order.title;
+    const orderId = offer.order.id;
     if (newStatus === 'in_progress') {
-      notifyUser({ userId: customerId, type: 'order_in_progress', title: '🍳 Siparişin Hazırlanıyor!', body: `"${offer.order.title}" siparişin hazırlanmaya başlandı.`, data: { orderId: offer.order.id } }).catch(() => {});
+      notifyFromTemplate({
+        userId: customerId,
+        key: 'order_in_progress',
+        vars: { title: orderTitle },
+        fallback: { title: '🍳 Siparişin Hazırlanıyor!', body: `"${orderTitle}" siparişin hazırlanmaya başlandı.` },
+        data: { orderId },
+        targetRole: 'customer',
+      }).catch(() => {});
     } else if (newStatus === 'ready') {
-      notifyUser({ userId: customerId, type: 'order_ready', title: '📦 Siparişin Teslimata Hazır!', body: `"${offer.order.title}" siparişin teslim almaya hazır.`, data: { orderId: offer.order.id } }).catch(() => {});
-      sendAppEmail(customerId, 'order_ready', { orderTitle: offer.order.title, orderId: offer.order.id });
+      notifyFromTemplate({
+        userId: customerId,
+        key: 'order_ready',
+        vars: { title: orderTitle },
+        fallback: { title: '📦 Siparişin Teslimata Hazır!', body: `"${orderTitle}" siparişin teslim almaya hazır.` },
+        data: { orderId },
+        targetRole: 'customer',
+      }).catch(() => {});
+      sendAppEmail(customerId, 'order_ready', { orderTitle, orderId });
     } else if (newStatus === 'completed') {
-      notifyUser({ userId: customerId, type: 'order_delivered', title: '🎂 Siparişin Teslim Edildi', body: `"${offer.order.title}" siparişin teslim edildi olarak işaretlendi. Teslim almadıysan sipariş kartından geri alabilirsin.`, data: { orderId: offer.order.id } }).catch(() => {});
-      sendAppEmail(customerId, 'review_encourage', { orderTitle: offer.order.title, orderId: offer.order.id });
+      // #13: Müşteri zaten yorum yaptıysa "teslim edildi" bildirimini ve yorum
+      // teşvik e-postasını GÖNDERME (yorum yapmış müşteriyi rahatsız etmeyelim).
+      const { data: existingReview } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('order_id', orderId)
+        .maybeSingle();
+      if (!existingReview) {
+        notifyFromTemplate({
+          userId: customerId,
+          key: 'order_delivered',
+          vars: { title: orderTitle },
+          fallback: { title: '🎂 Siparişin Teslim Edildi', body: `"${orderTitle}" siparişin teslim edildi olarak işaretlendi. Teslim almadıysan sipariş kartından geri alabilirsin.` },
+          data: { orderId },
+          targetRole: 'customer',
+        }).catch(() => {});
+        sendAppEmail(customerId, 'review_encourage', { orderTitle, orderId });
+      }
     }
   };
 
@@ -171,7 +203,7 @@ export default function BakerMyOrdersScreen() {
   ];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+    <View style={[styles.container, { backgroundColor: C.background }]}>
       <TabHeader
         title="Siparişlerim"
         unreadCount={unreadCount}
@@ -223,7 +255,7 @@ export default function BakerMyOrdersScreen() {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

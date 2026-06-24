@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, Image, Switch, Share, Linking,
   Modal, LayoutAnimation, UIManager,
@@ -11,7 +11,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Constants from 'expo-constants';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, FeedbackModal, TabHeader } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -139,6 +139,7 @@ export default function BakerProfileScreen() {
   const C = useThemeColors();
   const { profile, signOut, refreshProfile } = useAuth();
   const { unreadCount } = useNotifications(profile?.id);
+  const { openFeedback } = useLocalSearchParams<{ openFeedback?: string }>();
 
   const [shop, setShop] = useState<Shop | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -331,6 +332,11 @@ export default function BakerProfileScreen() {
 
   useEffect(() => { loadShop(); }, [loadShop]);
 
+  // feedback_request bildiriminden gelindiyse (?openFeedback=1) modalı aç.
+  useEffect(() => {
+    if (openFeedback === '1') setShowFeedback(true);
+  }, [openFeedback]);
+
   const getLocation = async () => {
     setIsLocating(true);
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -489,16 +495,16 @@ export default function BakerProfileScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+      <View style={[styles.container, { backgroundColor: C.background }]}>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={C.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+    <View style={[styles.container, { backgroundColor: C.background }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <TabHeader
           title="Profilim"
@@ -863,17 +869,17 @@ export default function BakerProfileScreen() {
                       Alert.alert('Bulunamadı', `"${name.trim()}" için Google'da işletme bulunamadı. Dükkan adının Google Maps'teki adla aynı olduğundan emin olun.`);
                       return;
                     }
+                    if (result.similarity < 0.5) {
+                      Alert.alert(
+                        '❌ Eşleşme Bulunamadı',
+                        `"${name.trim()}" adına ait Google işletme profili bulunamadı.\n\nGoogle'da dönen en yakın sonuç: "${result.matchedName ?? '—'}"\n\nGoogle Haritalar'da işletmenizi kayıt etmeden bu bilgileri otomatik getiremezsiniz.`
+                      );
+                      return;
+                    }
                     if (result.rating != null) setGoogleRating(String(result.rating));
                     if (result.reviewCount > 0) setGoogleReviewCount(String(result.reviewCount));
                     if (result.mapsUrl) setGoogleMapsUrl(result.mapsUrl);
-                    if (result.similarity < 0.5 && result.matchedName) {
-                      Alert.alert(
-                        '⚠️ Tam Eşleşme Bulunamadı',
-                        `Google'dan dönen: "${result.matchedName}"\nSizin yazdığınız: "${name.trim()}"\n\nBilgiler dolduruldu ama yanlış işletme olabilir. Lütfen kontrol edip kaydetmeden önce gerekirse temizleyin.`
-                      );
-                    } else {
-                      Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum${result.matchedName ? `\n(${result.matchedName})` : ''}`);
-                    }
+                    Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum${result.matchedName ? `\n(${result.matchedName})` : ''}`);
                   }}
                 >
                   {isFetchingGoogle
@@ -1082,6 +1088,17 @@ export default function BakerProfileScreen() {
                       <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
                     </TouchableOpacity>
                   )}
+                  {/* Admin: Bildirim Gönder — sadece anzelpatisserie@gmail.com */}
+                  {profile?.email === 'anzelpatisserie@gmail.com' && (
+                    <TouchableOpacity
+                      style={[styles.settingRow, { borderTopColor: C.border }]}
+                      onPress={() => router.push('/(baker)/admin-notifications' as never)}
+                    >
+                      <Text style={styles.settingEmoji}>📢</Text>
+                      <Text style={[styles.settingText, { color: C.text }]}>Bildirim Gönder</Text>
+                      <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                    </TouchableOpacity>
+                  )}
                   {/* Admin: Dashboard — sadece anzelpatisserie@gmail.com */}
                   {profile?.email === 'anzelpatisserie@gmail.com' && (
                     <TouchableOpacity
@@ -1181,7 +1198,7 @@ export default function BakerProfileScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 

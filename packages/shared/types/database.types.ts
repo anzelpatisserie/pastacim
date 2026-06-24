@@ -99,6 +99,69 @@ export type Database = {
           },
         ]
       }
+      notification_campaigns: {
+        Row: {
+          app_target: string
+          body: string
+          created_at: string
+          created_by: string | null
+          data: Json
+          id: string
+          notif_type: string
+          sent_count: number
+          title: string
+        }
+        Insert: {
+          app_target: string
+          body: string
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          notif_type?: string
+          sent_count?: number
+          title: string
+        }
+        Update: {
+          app_target?: string
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          notif_type?: string
+          sent_count?: number
+          title?: string
+        }
+        Relationships: []
+      }
+      notification_templates: {
+        Row: {
+          body: string
+          description: string | null
+          key: string
+          target_role: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          description?: string | null
+          key: string
+          target_role?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          description?: string | null
+          key?: string
+          target_role?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           body: string | null
@@ -106,6 +169,7 @@ export type Database = {
           data: Json | null
           id: string
           is_read: boolean | null
+          target_role: string | null
           title: string
           type: string
           user_id: string
@@ -116,6 +180,7 @@ export type Database = {
           data?: Json | null
           id?: string
           is_read?: boolean | null
+          target_role?: string | null
           title: string
           type: string
           user_id: string
@@ -126,6 +191,7 @@ export type Database = {
           data?: Json | null
           id?: string
           is_read?: boolean | null
+          target_role?: string | null
           title?: string
           type?: string
           user_id?: string
@@ -218,6 +284,7 @@ export type Database = {
           delivery_time: string | null
           delivery_type: Database["public"]["Enums"]["delivery_type"]
           description: string | null
+          hidden_for_customer: boolean
           id: string
           is_urgent: boolean
           latitude: number | null
@@ -243,6 +310,7 @@ export type Database = {
           delivery_time?: string | null
           delivery_type?: Database["public"]["Enums"]["delivery_type"]
           description?: string | null
+          hidden_for_customer?: boolean
           id?: string
           is_urgent?: boolean
           latitude?: number | null
@@ -268,6 +336,7 @@ export type Database = {
           delivery_time?: string | null
           delivery_type?: Database["public"]["Enums"]["delivery_type"]
           description?: string | null
+          hidden_for_customer?: boolean
           id?: string
           is_urgent?: boolean
           latitude?: number | null
@@ -381,11 +450,47 @@ export type Database = {
           {
             foreignKeyName: "pastry_shops_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
+      }
+      reports: {
+        Row: {
+          app_name: string
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          status: string
+          target_id: string | null
+          target_type: string
+        }
+        Insert: {
+          app_name?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+          status?: string
+          target_id?: string | null
+          target_type: string
+        }
+        Update: {
+          app_name?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+          status?: string
+          target_id?: string | null
+          target_type?: string
+        }
+        Relationships: []
       }
       reviews: {
         Row: {
@@ -451,6 +556,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sent_emails: {
+        Row: {
+          id: string
+          order_id: string | null
+          recipient_id: string
+          sent_at: string
+          type: string
+        }
+        Insert: {
+          id?: string
+          order_id?: string | null
+          recipient_id: string
+          sent_at?: string
+          type: string
+        }
+        Update: {
+          id?: string
+          order_id?: string | null
+          recipient_id?: string
+          sent_at?: string
+          type?: string
+        }
+        Relationships: []
       }
       token_transactions: {
         Row: {
@@ -634,8 +763,84 @@ export type Database = {
     }
     Functions: {
       accept_offer: { Args: { p_offer_id: string }; Returns: Json }
-      add_wallet_balance: { Args: { p_amount: number }; Returns: Json }
+      add_wallet_balance: {
+        Args: { p_amount: number }
+        Returns: Json
+      }
+      admin_broadcast: {
+        Args: {
+          p_app: string
+          p_body: string
+          p_data?: Json
+          p_title: string
+          p_type?: string
+        }
+        Returns: Json
+      }
+      admin_delete_feedback: {
+        Args: { p_feedback_id: string }
+        Returns: undefined
+      }
+      admin_delete_order: { Args: { p_order_id: string }; Returns: undefined }
+      admin_delete_shop: { Args: { p_user_id: string }; Returns: undefined }
+      admin_delete_user: { Args: { p_user_id: string }; Returns: undefined }
+      admin_get_stats: {
+        Args: never
+        Returns: {
+          accepted_offers: number
+          completed_orders: number
+          pending_orders: number
+          total_bakers: number
+          total_customers: number
+          total_offers: number
+          total_orders: number
+          total_revenue: number
+          total_users: number
+        }[]
+      }
+      admin_get_users_summary: {
+        Args: never
+        Returns: {
+          accepted_offer_count: number
+          completed_order_count: number
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_baker: boolean
+          is_customer: boolean
+          offer_count: number
+          order_count: number
+          shop_address: string
+          shop_is_active: boolean
+          shop_lat: number
+          shop_lng: number
+          shop_name: string
+          shop_rating: number
+          shop_review_count: number
+          wallet_balance: number
+        }[]
+      }
+      admin_set_shop_active: {
+        Args: { p_active: boolean; p_user_id: string }
+        Returns: undefined
+      }
+      admin_update_notification_template: {
+        Args: { p_body: string; p_key: string; p_title: string }
+        Returns: Json
+      }
+      admin_update_user: {
+        Args: {
+          p_full_name?: string
+          p_is_baker?: boolean
+          p_is_customer?: boolean
+          p_user_id: string
+          p_wallet_balance?: number
+        }
+        Returns: undefined
+      }
       approve_wallet_top_up: { Args: { p_request_id: string }; Returns: Json }
+      auto_cancel_overdue_orders: { Args: never; Returns: number }
       baker_has_offer_for_order: {
         Args: { p_order_id: string }
         Returns: boolean
@@ -645,6 +850,7 @@ export type Database = {
         Args: {
           p_body?: string
           p_data?: Json
+          p_target_role?: string
           p_title: string
           p_type: string
           p_user_id: string
@@ -669,7 +875,7 @@ export type Database = {
         }
         Returns: Json
       }
-      delete_account: { Args: Record<PropertyKey, never>; Returns: undefined }
+      delete_account: { Args: never; Returns: undefined }
       delete_conversation: {
         Args: { p_other_user_id: string }
         Returns: undefined
@@ -678,9 +884,9 @@ export type Database = {
         Args: { p_message_id: string }
         Returns: undefined
       }
-      earth: { Args: Record<PropertyKey, never>; Returns: number }
+      earth: { Args: never; Returns: number }
       get_conversations: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           last_message: string
           last_message_at: string
@@ -692,18 +898,39 @@ export type Database = {
       get_customer_summary_for_baker: {
         Args: { p_order_id: string }
         Returns: {
-          avatar_url: string | null
+          avatar_url: string
           cancelled_orders: number
           completed_orders: number
-          full_name: string | null
+          full_name: string
           member_days: number
           member_since: string
           total_orders: number
         }[]
       }
-      get_user_auth_provider: {
-        Args: { p_email: string }
-        Returns: string | null
+      get_notification_campaigns: {
+        Args: never
+        Returns: {
+          app_target: string
+          body: string
+          created_at: string
+          created_by: string | null
+          data: Json
+          id: string
+          notif_type: string
+          sent_count: number
+          title: string
+        }[]
+      }
+      get_notification_templates: {
+        Args: never
+        Returns: {
+          body: string
+          description: string | null
+          key: string
+          target_role: string | null
+          title: string
+          updated_at: string
+        }[]
       }
       get_order_offer_summary: {
         Args: { p_order_id: string }
@@ -714,6 +941,9 @@ export type Database = {
           shop_review_count: number
         }[]
       }
+      get_user_auth_provider: { Args: { p_email: string }; Returns: string }
+      hide_order_for_me: { Args: { p_order_id: string }; Returns: undefined }
+      is_admin: { Args: never; Returns: boolean }
       nearby_bakers: {
         Args: { lat: number; lng: number; radius_km?: number }
         Returns: {
@@ -733,54 +963,76 @@ export type Database = {
         Args: { lat: number; lng: number; radius_km: number }
         Returns: {
           created_at: string
-          customer_avatar_url: string | null
+          customer_avatar_url: string
           customer_completed_orders: number
-          customer_full_name: string | null
+          customer_full_name: string
           customer_id: string
           customer_member_days: number
           customer_total_orders: number
-          delivery_address: string | null
-          delivery_date: string | null
-          delivery_time: string | null
+          delivery_address: string
+          delivery_date: string
+          delivery_time: string
           delivery_type: string
-          description: string | null
+          description: string
           distance_km: number
           id: string
           is_urgent: boolean
           photos: Json
-          serving_size: number | null
+          serving_size: number
           status: string
           title: string
         }[]
       }
-      place_order: {
-        Args: {
-          p_delivery_address?: string
-          p_delivery_date?: string
-          p_delivery_latitude?: number
-          p_delivery_longitude?: number
-          p_delivery_time?: string
-          p_delivery_type?: string
-          p_description?: string
-          p_is_urgent?: boolean
-          p_latitude?: number
-          p_longitude?: number
-          p_search_radius_km?: number
-          p_serving_size?: number
-          p_title: string
-        }
-        Returns: Json
-      }
+      place_order:
+        | {
+            Args: {
+              p_delivery_address?: string
+              p_delivery_date?: string
+              p_delivery_latitude?: number
+              p_delivery_longitude?: number
+              p_delivery_type?: string
+              p_description?: string
+              p_latitude?: number
+              p_longitude?: number
+              p_search_radius_km?: number
+              p_serving_size?: number
+              p_title: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_delivery_address?: string
+              p_delivery_date?: string
+              p_delivery_latitude?: number
+              p_delivery_longitude?: number
+              p_delivery_time?: string
+              p_delivery_type?: string
+              p_description?: string
+              p_is_urgent?: boolean
+              p_latitude?: number
+              p_longitude?: number
+              p_search_radius_km?: number
+              p_serving_size?: number
+              p_title: string
+            }
+            Returns: Json
+          }
       register_push_token: { Args: { p_token: string }; Returns: undefined }
       reject_offer: { Args: { p_offer_id: string }; Returns: Json }
       request_wallet_top_up: {
         Args: { p_amount: number; p_note?: string }
         Returns: Json
       }
-      set_order_status: {
-        Args: { p_order_id: string; p_status: Database["public"]["Enums"]["order_status"] }
-        Returns: Json
-      }
+      set_order_status:
+        | {
+            Args: {
+              p_order_id: string
+              p_status: Database["public"]["Enums"]["order_status"]
+            }
+            Returns: Json
+          }
+        | { Args: { p_order_id: string; p_status: string }; Returns: Json }
       submit_offer: {
         Args: {
           p_estimated_days?: number

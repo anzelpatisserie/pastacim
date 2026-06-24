@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyFromTemplate, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database, OrderOfferSummaryRow, CustomerSummary } from '@pastacim/shared';
 
 type Order = Database['public']['Tables']['orders']['Row'];
@@ -28,6 +28,7 @@ export default function MakeOfferScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alreadyOffered, setAlreadyOffered] = useState(false);
+  const [myOfferMessage, setMyOfferMessage] = useState<string | null>(null);
   const [orderClosed, setOrderClosed] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
   const [existingOffers, setExistingOffers] = useState<OrderOfferSummaryRow[]>([]);
@@ -58,13 +59,16 @@ export default function MakeOfferScreen() {
     // rejected/withdrawn ise tekrar teklif verebilir
     const offerRes = await _db
       .from('offers')
-      .select('id, status')
+      .select('id, status, message')
       .eq('order_id', orderId)
       .eq('baker_id', userId)
       .in('status', ['pending', 'accepted'])
       .limit(1);
     const myActiveOffer = offerRes.data && offerRes.data.length > 0 ? offerRes.data[0] : null;
-    if (myActiveOffer) setAlreadyOffered(true);
+    if (myActiveOffer) {
+      setAlreadyOffered(true);
+      setMyOfferMessage((myActiveOffer.message as string | null) ?? null);
+    }
 
     // Sipariş kapalı sayılır:
     // - status pending/offers_received DEĞİL VE
@@ -141,14 +145,46 @@ export default function MakeOfferScreen() {
       return;
     }
 
-    // Müşteriye bildirim gönder
+    const trimmedMessage = message.trim();
+
+    // Teklif mesajını müşteriye sohbet mesajı olarak da gönder (offer/[orderId]'de
+    // yazılan metin daha önce müşteriye ulaşmıyordu). Yeniden teklifte (rejected →
+    // pending) çift kayıt olmaması için aynı içeriğin zaten var olup olmadığını kontrol et.
+    if (trimmedMessage && order?.customer_id) {
+      try {
+        const { data: existing } = await _db
+          .from('messages')
+          .select('id')
+          .eq('order_id', orderId)
+          .eq('sender_id', user.id)
+          .eq('receiver_id', order.customer_id)
+          .eq('content', trimmedMessage)
+          .limit(1);
+        if (!existing || existing.length === 0) {
+          await _db.from('messages').insert({
+            order_id:    orderId,
+            sender_id:   user.id,
+            receiver_id: order.customer_id,
+            content:     trimmedMessage,
+          });
+        }
+      } catch {
+        // mesaj eklenemese bile teklif akışı devam etsin
+      }
+    }
+
+    // Müşteriye bildirim gönder (admin-düzenlenebilir şablon)
     if (order?.customer_id) {
-      notifyUser({
+      notifyFromTemplate({
         userId: order.customer_id,
-        type: 'new_offer',
-        title: '🎉 Yeni Teklif Aldınız!',
-        body: `${shop.name} siparişinize ₺${parseFloat(price)} teklif verdi.`,
+        key: 'new_offer',
+        vars: { shop: shop.name, price: parseFloat(price) },
+        fallback: {
+          title: '🎉 Yeni Teklif Aldınız!',
+          body: `${shop.name} siparişinize ₺${parseFloat(price)} teklif verdi.`,
+        },
         data: { orderId: orderId as string },
+        targetRole: 'customer',
       }).catch(() => {});
     }
 
@@ -371,6 +407,11 @@ export default function MakeOfferScreen() {
                       ⭐ {o.shop_rating > 0 ? o.shop_rating.toFixed(1) : '—'}
                       {o.shop_review_count > 0 ? ` (${o.shop_review_count} yorum)` : ''}
                     </Text>
+                    {o.is_mine && myOfferMessage ? (
+                      <Text style={[styles.offerOwnMessage, { color: C.textSecondary }]}>
+                        💬 {myOfferMessage}
+                      </Text>
+                    ) : null}
                   </View>
                   <Text style={[styles.offerPrice, { color: C.primary }]}>
                     {alreadyOffered || o.is_mine ? `₺${o.price}` : '₺•••'}
@@ -697,6 +738,7 @@ const styles = StyleSheet.create({
   },
   rankText: { fontSize: FontSize.sm, fontWeight: '800' },
   offerMeta: { fontSize: FontSize.sm, fontWeight: '600' },
+  offerOwnMessage: { fontSize: FontSize.xs, marginTop: 3, lineHeight: 16, fontStyle: 'italic' },
   offerPrice: { fontSize: FontSize.md, fontWeight: '800' },
   customerCard: {
     borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md,

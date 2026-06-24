@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   ScrollView, Alert, ActivityIndicator, Share, Image,
   LayoutAnimation, Platform, UIManager, Modal, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, FeedbackModal, TabHeader } from '@pastacim/shared';
 import { useNotifications } from '@/hooks/useNotifications';
 
@@ -26,6 +26,7 @@ export default function CustomerProfileScreen() {
   const C = useThemeColors();
   const { profile, signOut, refreshProfile } = useAuth();
   const { unreadCount } = useNotifications(profile?.id);
+  const { openFeedback } = useLocalSearchParams<{ openFeedback?: string }>();
 
   const [stats, setStats] = useState<OrderStats>({ total: 0, active: 0, completed: 0 });
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +57,11 @@ export default function CustomerProfileScreen() {
   }, [profile?.id]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
+
+  // feedback_request bildiriminden gelindiyse (?openFeedback=1) modalı aç.
+  useEffect(() => {
+    if (openFeedback === '1') setShowFeedback(true);
+  }, [openFeedback]);
 
   const toggleSettings = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -198,7 +204,7 @@ export default function CustomerProfileScreen() {
   const avatarUrl = profile?.avatar_url ?? null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+    <View style={[styles.container, { backgroundColor: C.background }]}>
       <TabHeader
         title="Profilim"
         unreadCount={unreadCount}
@@ -358,6 +364,17 @@ export default function CustomerProfileScreen() {
                   <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
                 </TouchableOpacity>
               )}
+              {/* Admin: Bildirim Gönder — sadece anzelpatisserie@gmail.com */}
+              {profile?.email === 'anzelpatisserie@gmail.com' && (
+                <TouchableOpacity
+                  style={[styles.settingRow, { borderTopColor: C.border }]}
+                  onPress={() => router.push('/(customer)/admin-notifications' as never)}
+                >
+                  <Text style={styles.settingEmoji}>📢</Text>
+                  <Text style={[styles.settingText, { color: C.text }]}>Bildirim Gönder</Text>
+                  <Text style={[styles.settingArrow, { color: C.placeholder }]}>›</Text>
+                </TouchableOpacity>
+              )}
               {/* Admin: Dashboard — sadece anzelpatisserie@gmail.com */}
               {profile?.email === 'anzelpatisserie@gmail.com' && (
                 <TouchableOpacity
@@ -451,7 +468,7 @@ export default function CustomerProfileScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

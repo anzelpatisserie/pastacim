@@ -110,7 +110,7 @@ export default function RegisterScreen() {
     if (validationError) return setError(validationError);
 
     setIsLoading(true);
-    const { error: authError } = await signUp({
+    const { error: authError, alreadyExisted, signedIn } = await signUp({
       email: email.trim().toLowerCase(),
       password,
       fullName: fullName.trim(),
@@ -118,11 +118,22 @@ export default function RegisterScreen() {
     });
     setIsLoading(false);
 
+    // E-posta zaten kayıtlı ve şifre doğruysa: kullanıcı içeri alındı,
+    // _layout.tsx onAuthStateChange üzerinden yönlendirir.
+    if (signedIn) return;
+
     if (authError) {
       setError(authError);
-    } else {
-      setSuccess(true);
+      // E-posta zaten kayıtlıysa (şifre yanlış) doğrulama ekranı gösterme,
+      // kullanıcıyı giriş ekranına yönlendir.
+      if (alreadyExisted) {
+        setTimeout(() => router.replace('/(auth)/login'), 1500);
+      }
+      return;
     }
+
+    // Yalnızca gerçekten yeni, doğrulanmamış kayıtta doğrulama ekranını göster.
+    setSuccess(true);
   };
 
   // ─── Başarı Ekranı ─────────────────────────────────────────────────────────
@@ -280,17 +291,17 @@ export default function RegisterScreen() {
 
         {/* ─── Google ile Kayıt ──────────────────────────────────── */}
         <TouchableOpacity
-          style={[styles.googleBtn, { borderColor: C.border, backgroundColor: C.card }]}
+          style={styles.googleBtn}
           onPress={handleGoogleSignUp}
           disabled={isGoogleLoading}
           activeOpacity={0.85}
         >
           {isGoogleLoading ? (
-            <ActivityIndicator color={C.text} />
+            <ActivityIndicator color="#1F1F1F" />
           ) : (
             <>
               <Text style={styles.googleBtnIcon}>G</Text>
-              <Text style={[styles.googleBtnText, { color: C.text }]}>Google ile Hesap Oluştur</Text>
+              <Text style={styles.googleBtnText}>Google ile Hesap Oluştur</Text>
             </>
           )}
         </TouchableOpacity>
@@ -419,10 +430,13 @@ const styles = StyleSheet.create({
   dividerText: { fontSize: FontSize.sm },
   googleBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
-    borderWidth: 1.5, borderRadius: Radius.full, paddingVertical: 14,
+    backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#DADCE0',
+    borderRadius: Radius.full, paddingVertical: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18, shadowRadius: 8, elevation: 4,
   },
-  googleBtnIcon: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
-  googleBtnText: { fontSize: FontSize.md, fontWeight: '600' },
+  googleBtnIcon: { fontSize: 20, fontWeight: '800', color: '#4285F4' },
+  googleBtnText: { fontSize: FontSize.lg, fontWeight: '700', color: '#1F1F1F' },
   appleBtnWrap: { marginBottom: Spacing.lg },
   appleBtn: { width: '100%', height: 50 },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: Spacing.lg },

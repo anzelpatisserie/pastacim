@@ -40,6 +40,7 @@ export {
   getUserPushToken,
   sendPushNotification,
   notifyUser,
+  notifyFromTemplate,
   sendAppEmail,
 } from './lib/notifications';
 export type { NotificationRole } from './lib/notifications';
@@ -54,6 +55,10 @@ export { default as SplashAnimation } from './components/SplashAnimation';
 export { default as TabHeader } from './components/TabHeader';
 export { default as BackButton } from './components/BackButton';
 export { default as FeedbacksAdminScreen } from './components/FeedbacksAdminScreen';
+export { default as AdminNotificationsScreen } from './components/AdminNotificationsScreen';
+export { default as NameEntryModal } from './components/NameEntryModal';
+export { default as ReportModal } from './components/ReportModal';
+export type { ReportTargetType } from './components/ReportModal';
 
 // Types
 export type { Database, Json } from './types/database.types';

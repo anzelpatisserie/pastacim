@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, FlatList,
+  View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -44,7 +44,7 @@ export default function BakerMessagesScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+    <View style={[styles.container, { backgroundColor: C.background }]}>
       <TabHeader
         title="Mesajlar"
         unreadCount={unreadCount}
@@ -73,7 +73,7 @@ export default function BakerMessagesScreen() {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

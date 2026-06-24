@@ -8,9 +8,42 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { rpcPlaceOrder, rpcNearbyBakers, supabase, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION } from '@pastacim/shared';
+import Constants from 'expo-constants';
+import { rpcPlaceOrder, rpcNearbyBakers, supabase, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 
 const SEARCH_RADIUS = 20;
+
+// Google Geocoding API anahtarı (app.config.js → extra). Adresi GERÇEK koordinata
+// çevirmek için kullanılır; cihaz GPS'i yoksa bile doğru konum elde edilir.
+const GOOGLE_API_KEY: string = Constants.expoConfig?.extra?.googlePlacesApiKey ?? '';
+
+// NOT: react-native-maps bu projede kurulu değil (native modül + rebuild gerektirir).
+// Konum, yazılan adresten Google Geocoding ile çözülür ve kullanıcı koordinat onay
+// kartında doğrular / ince ayar yapar. İstanbul varsayılanı asla gönderilmez.
+// (Sürüklenebilir gerçek harita ileride react-native-maps eklenince yapılabilir.)
+
+type LatLng = { lat: number; lng: number };
+
+/** Adresi Google Geocoding API ile koordinata çevirir. Hata/boş sonuçta null. */
+async function geocodeWithGoogle(address: string): Promise<{ point: LatLng; formatted: string } | null> {
+  if (!GOOGLE_API_KEY) return null;
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&region=tr&language=tr&key=${GOOGLE_API_KEY}`
+    );
+    const data = await res.json();
+    if (data.status === 'OK' && data.results?.length > 0) {
+      const r = data.results[0];
+      return {
+        point: { lat: r.geometry.location.lat, lng: r.geometry.location.lng },
+        formatted: r.formatted_address ?? address,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // Hazır şablonlar — Hızlı Başla kategorileri
 const ORDER_TEMPLATES: { emoji: string; title: string; description: string }[] = [
@@ -38,30 +71,21 @@ export default function CreateOrderScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [deliveryTime, setDeliveryTime] = useState<Date | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  // Onaylanmış konum. Yalnızca kullanıcı haritada/onay kartında onayladıktan
+  // sonra dolar — ASLA İstanbul gibi varsayılan bir değere düşmez.
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
 
+  // Konum onay modalı — geocode/GPS sonrası pin'i onayla/ayarla
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [pendingPoint, setPendingPoint] = useState<LatLng | null>(null);
+  const [pendingLabel, setPendingLabel] = useState<string>('');
+
   // Görseller
   const [photos, setPhotos] = useState<string[]>([]); // local URI'lar
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        try {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          setUserLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-        } catch {
-          setUserLocation({ lat: DEFAULT_LOCATION.latitude, lng: DEFAULT_LOCATION.longitude });
-        }
-      } else {
-        setUserLocation({ lat: DEFAULT_LOCATION.latitude, lng: DEFAULT_LOCATION.longitude });
-      }
-    })();
-  }, []);
 
   // ─── Görsel Seç ──────────────────────────────────────────────────────────────
   const handlePickImage = async () => {
@@ -159,7 +183,9 @@ export default function CreateOrderScreen() {
     return urls;
   };
 
-  // ─── Adresi Koordinata Çevir ──────────────────────────────────────────────────
+  // ─── Adresi Koordinata Çevir (Google → Expo fallback) ─────────────────────────
+  // Sonuç doğrudan kaydedilmez; kullanıcının haritada/onay kartında onaylaması için
+  // modal açar. Böylece yanlış geocode'lar sipariş konumu olarak gitmez.
   const handleGeocodeAddress = async () => {
     if (!deliveryAddress.trim()) {
       Alert.alert('Adres Girin', 'Lütfen önce teslimat adresini yazın.');
@@ -167,14 +193,21 @@ export default function CreateOrderScreen() {
     }
     setIsLocating(true);
     try {
-      const results = await Location.geocodeAsync(deliveryAddress.trim());
-      if (!results || results.length === 0) {
-        Alert.alert('Adres Bulunamadı', 'Girilen adres koordinatlara çevrilemedi. Daha detaylı bir adres deneyin (şehir, ilçe, mahalle gibi).');
+      const addr = deliveryAddress.trim();
+      // 1. Google Geocoding (daha isabetli)
+      const g = await geocodeWithGoogle(addr);
+      if (g) {
+        openConfirm(g.point, `📍 "${addr}"`);
         return;
       }
-      const { latitude, longitude } = results[0];
-      setUserLocation({ lat: latitude, lng: longitude });
-      setLocationLabel(`📍 "${deliveryAddress.trim()}" adresi konuma çevrildi`);
+      // 2. Google başarısızsa Expo geocoding'e düş
+      const results = await Location.geocodeAsync(addr);
+      if (results && results.length > 0) {
+        const { latitude, longitude } = results[0];
+        openConfirm({ lat: latitude, lng: longitude }, `📍 "${addr}"`);
+        return;
+      }
+      Alert.alert('Adres Bulunamadı', 'Girilen adres koordinatlara çevrilemedi. Daha detaylı bir adres deneyin (şehir, ilçe, mahalle gibi).');
     } catch {
       Alert.alert('Hata', 'Adres çevrilemedi. Mevcut konumu kullanın veya daha detaylı adres girin.');
     } finally {
@@ -183,6 +216,7 @@ export default function CreateOrderScreen() {
   };
 
   // ─── Mevcut Konum ─────────────────────────────────────────────────────────────
+  // GPS'i bir SEÇENEK olarak korur ama yine aynı onay modalından geçirir.
   const handleUseCurrentLocation = async () => {
     setIsLocating(true);
     try {
@@ -193,8 +227,8 @@ export default function CreateOrderScreen() {
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude, longitude } = loc.coords;
-      setUserLocation({ lat: latitude, lng: longitude });
 
+      // Adres alanını GPS'ten doldurmaya çalış (opsiyonel, hata akışı engellemesin)
       try {
         const results = await Location.reverseGeocodeAsync({ latitude, longitude });
         const place = results[0];
@@ -205,25 +239,31 @@ export default function CreateOrderScreen() {
             place.district ?? place.subregion ?? place.name,
             place.city ?? place.region,
           ].filter((p): p is string => !!p && p.trim().length > 0);
-
           const addr = parts.join(' ');
-          if (addr.trim()) {
-            setDeliveryAddress(addr.trim());
-            setLocationLabel('📍 Mevcut konum kullanılıyor');
-            Alert.alert('📍 Konum Eklendi', `Adres dolduruldu:\n${addr.trim()}`);
-          } else {
-            setLocationLabel('📍 Mevcut konum kullanılıyor');
-            Alert.alert('📍 Konum Kaydedildi', 'Koordinatınız alındı. Adres alanını manuel doldurun.');
-          }
+          if (addr.trim()) setDeliveryAddress(addr.trim());
         }
-      } catch {
-        Alert.alert('📍 Konum Kaydedildi', 'Koordinatınız alındı. Adres alanını manuel doldurun.');
-      }
+      } catch { /* reverse geocode opsiyonel */ }
+
+      openConfirm({ lat: latitude, lng: longitude }, '📍 Mevcut konumunuz');
     } catch {
       Alert.alert('Konum Alınamadı', 'GPS sinyali bulunamadı.');
     } finally {
       setIsLocating(false);
     }
+  };
+
+  // ─── Konum Onay Modalı ────────────────────────────────────────────────────────
+  const openConfirm = (point: LatLng, label: string) => {
+    setPendingPoint(point);
+    setPendingLabel(label);
+    setConfirmVisible(true);
+  };
+
+  // Modal'da kullanıcı pin'i onayladığında çağrılır
+  const handleConfirmLocation = (point: LatLng) => {
+    setUserLocation(point);
+    setLocationLabel(`${pendingLabel} · konum onaylandı`);
+    setConfirmVisible(false);
   };
 
   // Date → "YYYY-MM-DD" (Supabase için)
@@ -261,6 +301,14 @@ export default function CreateOrderScreen() {
       return;
     }
 
+    // Konum zorunlu — yanlış (İstanbul) eşleşmeyi önlemek için ASLA varsayılana düşme
+    if (!userLocation) {
+      Alert.alert(
+        'Konum Gerekli',
+        'Doğru pastacılarla eşleşmeniz için konumunuz gerekli. Lütfen adresinizi yazıp "Adresi Doğrula" ya da "Mevcut Konum" ile konumunuzu onaylayın.'
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -274,8 +322,10 @@ export default function CreateOrderScreen() {
         p_delivery_date: deliveryDate ? toISODate(deliveryDate) : undefined,
         p_delivery_time: deliveryTime ? toTimeString(deliveryTime) : undefined,
         p_is_urgent: false,
-        p_latitude: userLocation?.lat ?? DEFAULT_LOCATION.latitude,
-        p_longitude: userLocation?.lng ?? DEFAULT_LOCATION.longitude,
+        p_latitude: userLocation.lat,
+        p_longitude: userLocation.lng,
+        p_delivery_latitude: userLocation.lat,
+        p_delivery_longitude: userLocation.lng,
         p_search_radius_km: SEARCH_RADIUS,
       });
 
@@ -318,8 +368,8 @@ export default function CreateOrderScreen() {
 
       // Yakındaki pastacılara bildirim gönder (arka planda, sessizce)
       if (orderId) {
-        const lat = userLocation?.lat ?? DEFAULT_LOCATION.latitude;
-        const lng = userLocation?.lng ?? DEFAULT_LOCATION.longitude;
+        const lat = userLocation.lat;
+        const lng = userLocation.lng;
         rpcNearbyBakers({ lat, lng, radius_km: SEARCH_RADIUS }).then(({ data: bakers }) => {
           if (!bakers || bakers.length === 0) return;
           const body = [
@@ -333,6 +383,7 @@ export default function CreateOrderScreen() {
               title:  '📋 Yeni Sipariş Talebi',
               body,
               data:   { orderId },
+              targetRole: 'baker',
             }).catch(() => {});
           });
         }).catch(() => {});
@@ -347,6 +398,7 @@ export default function CreateOrderScreen() {
       setDeliveryDate(null);
       setDeliveryTime(null);
       setPhotos([]);
+      setUserLocation(null);
       setLocationLabel(null);
 
       Alert.alert(
@@ -361,6 +413,9 @@ export default function CreateOrderScreen() {
   };
 
   const isLoading = isSubmitting || uploadingPhotos;
+
+  // Başlığı bir şablonla eşleşen aktif şablon (varsa açıklamaya ipucu sağlar)
+  const activeTemplate = ORDER_TEMPLATES.find((t) => t.title === title) ?? null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
@@ -415,8 +470,9 @@ export default function CreateOrderScreen() {
                       { backgroundColor: isActive ? C.primary : C.card, borderColor: isActive ? C.primary : C.border },
                     ]}
                     onPress={() => {
+                      // Sadece başlığı doldur; açıklama boş kalsın, şablon metni
+                      // aşağıda placeholder (soluk ipucu) olarak gösterilir.
                       setTitle(tpl.title);
-                      setDescription(tpl.description);
                     }}
                     activeOpacity={0.7}
                   >
@@ -443,12 +499,12 @@ export default function CreateOrderScreen() {
             />
           </View>
 
-          {/* Açıklama */}
+          {/* Açıklama — aktif şablon seçiliyse onun metni placeholder (ipucu) olur */}
           <View style={styles.field}>
             <Text style={[styles.label, { color: C.text }]}>Detaylar</Text>
             <TextInput
               style={[styles.inputMulti, { backgroundColor: C.card, borderColor: C.border, color: C.text }]}
-              placeholder="Tasarım, renk, malzeme tercihleri, özel notlar..."
+              placeholder={activeTemplate?.description ?? 'Tasarım, renk, malzeme tercihleri, özel notlar...'}
               placeholderTextColor={C.placeholder}
               value={description}
               onChangeText={setDescription}
@@ -564,11 +620,25 @@ export default function CreateOrderScreen() {
                   <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>📍 Mevcut Konum</Text>
                 </TouchableOpacity>
               </View>
-              {locationLabel && (
+              {locationLabel ? (
                 <Text style={{ fontSize: FontSize.xs, color: C.success, marginTop: 2 }}>{locationLabel}</Text>
+              ) : (
+                <Text style={{ fontSize: FontSize.xs, color: C.textSecondary, marginTop: 2 }}>
+                  Doğru pastacılarla eşleşmeniz için konumunuzu onaylayın.
+                </Text>
               )}
             </View>
           )}
+
+          {/* Konum Onay Modalı (harita + pin) */}
+          <LocationConfirmModal
+            visible={confirmVisible}
+            point={pendingPoint}
+            label={pendingLabel}
+            onConfirm={handleConfirmLocation}
+            onDismiss={() => setConfirmVisible(false)}
+            C={C}
+          />
 
           {/* Tarih */}
           <View style={styles.field}>
@@ -629,6 +699,7 @@ export default function CreateOrderScreen() {
             <TimePickerModal
               visible={showTimePicker}
               selectedTime={deliveryTime}
+              selectedDate={deliveryDate}
               onSelect={(t) => setDeliveryTime(t)}
               onDismiss={() => setShowTimePicker(false)}
               C={C}
@@ -714,20 +785,27 @@ function DatePickerModal({
 
 // ─── Saat Seçici Modal ────────────────────────────────────────────────────────
 function TimePickerModal({
-  visible, selectedTime, onSelect, onDismiss, C,
+  visible, selectedTime, selectedDate, onSelect, onDismiss, C,
 }: {
   visible: boolean;
   selectedTime: Date | null;
+  selectedDate: Date | null;
   onSelect: (t: Date) => void;
   onDismiss: () => void;
   C: ReturnType<typeof useThemeColors>;
 }) {
+  const now = new Date();
+  // Seçili teslim tarihi bugün mü? Bugünse geçmiş saat dilimlerini gizle.
+  const isToday = !!selectedDate && selectedDate.toDateString() === now.toDateString();
+
   const slots: Date[] = [];
   for (let h = 8; h <= 22; h++) {
     for (const m of [0, 30]) {
       if (h === 22 && m === 30) continue;
       const d = new Date();
       d.setHours(h, m, 0, 0);
+      // Bugünse şu andan önceki dilimleri atla
+      if (isToday && d.getTime() <= now.getTime()) continue;
       slots.push(d);
     }
   }
@@ -757,6 +835,11 @@ function TimePickerModal({
                 </TouchableOpacity>
               );
             }}
+            ListEmptyComponent={
+              <Text style={[pickerStyles.itemText, { color: C.textSecondary, textAlign: 'center', padding: Spacing.lg }]}>
+                Bugün için uygun saat kalmadı. Lütfen ileri bir tarih seçin.
+              </Text>
+            }
           />
           <TouchableOpacity style={[pickerStyles.cancelBtn, { borderTopColor: C.border }]} onPress={onDismiss}>
             <Text style={[pickerStyles.cancelText, { color: C.textSecondary }]}>İptal</Text>
@@ -766,6 +849,103 @@ function TimePickerModal({
     </Modal>
   );
 }
+
+// ─── Konum Onay Modalı ────────────────────────────────────────────────────────
+// react-native-maps kuruluysa sürüklenebilir/dokunulabilir pin'li harita gösterir;
+// kurulu değilse koordinat + ince ayar (nudge) kartına düşer. Her iki durumda da
+// kullanıcı GERÇEK bir konumu onaylar — İstanbul varsayılanı asla gönderilmez.
+function LocationConfirmModal({
+  visible, point, label, onConfirm, onDismiss, C,
+}: {
+  visible: boolean;
+  point: LatLng | null;
+  label: string;
+  onConfirm: (p: LatLng) => void;
+  onDismiss: () => void;
+  C: ReturnType<typeof useThemeColors>;
+}) {
+  const [pin, setPin] = useState<LatLng | null>(point);
+
+  // Modal her açıldığında / yeni nokta geldiğinde pin'i senkronize et
+  useEffect(() => { setPin(point); }, [point, visible]);
+
+  if (!visible || !pin) return null;
+
+  // İnce ayar adımı (yaklaşık ~110m enlemde) — harita yoksa pin'i kaydırmak için
+  const STEP = 0.001;
+  const nudge = (dLat: number, dLng: number) =>
+    setPin((p) => (p ? { lat: p.lat + dLat, lng: p.lng + dLng } : p));
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
+      <View style={pickerStyles.overlay}>
+        <View style={[pickerStyles.sheet, { backgroundColor: C.card, paddingBottom: Spacing.lg }]}>
+          <Text style={[pickerStyles.title, { color: C.text }]}>Konumu Onayla</Text>
+          <Text style={[confirmStyles.hint, { color: C.textSecondary }]}>
+            {label} — pin'i konumunuza göre ayarlayıp onaylayın.
+          </Text>
+
+          {/* Koordinat kartı + ince ayar tuşları (harita modülü projede yok) */}
+          <View style={[confirmStyles.fallbackCard, { backgroundColor: C.background, borderColor: C.border }]}>
+            <Text style={[confirmStyles.coordText, { color: C.text }]}>
+              📍 {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
+            </Text>
+            <View style={confirmStyles.nudgeGrid}>
+              <TouchableOpacity style={[confirmStyles.nudgeBtn, { borderColor: C.border }]} onPress={() => nudge(STEP, 0)}>
+                <Text style={[confirmStyles.nudgeText, { color: C.primary }]}>▲ Kuzey</Text>
+              </TouchableOpacity>
+              <View style={confirmStyles.nudgeRow}>
+                <TouchableOpacity style={[confirmStyles.nudgeBtn, { borderColor: C.border }]} onPress={() => nudge(0, -STEP)}>
+                  <Text style={[confirmStyles.nudgeText, { color: C.primary }]}>◀ Batı</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[confirmStyles.nudgeBtn, { borderColor: C.border }]} onPress={() => nudge(0, STEP)}>
+                  <Text style={[confirmStyles.nudgeText, { color: C.primary }]}>Doğu ▶</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={[confirmStyles.nudgeBtn, { borderColor: C.border }]} onPress={() => nudge(-STEP, 0)}>
+                <Text style={[confirmStyles.nudgeText, { color: C.primary }]}>▼ Güney</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={confirmStyles.actions}>
+            <TouchableOpacity
+              style={[confirmStyles.cancelBtn, { borderColor: C.border }]}
+              onPress={onDismiss}
+            >
+              <Text style={[confirmStyles.cancelText, { color: C.textSecondary }]}>İptal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[confirmStyles.confirmBtn, { backgroundColor: C.primary }]}
+              onPress={() => onConfirm(pin)}
+            >
+              <Text style={confirmStyles.confirmText}>✓ Bu Konumu Onayla</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const confirmStyles = StyleSheet.create({
+  hint: { fontSize: FontSize.sm, textAlign: 'center', paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm },
+  map: { height: 260, marginHorizontal: Spacing.lg, borderRadius: Radius.md },
+  fallbackCard: {
+    marginHorizontal: Spacing.lg, borderWidth: 1, borderRadius: Radius.md,
+    padding: Spacing.md, gap: Spacing.sm, alignItems: 'center',
+  },
+  coordText: { fontSize: FontSize.md, fontWeight: '700' },
+  nudgeGrid: { alignItems: 'center', gap: Spacing.sm },
+  nudgeRow: { flexDirection: 'row', gap: Spacing.xl },
+  nudgeBtn: { borderWidth: 1.5, borderRadius: Radius.full, paddingHorizontal: Spacing.md, paddingVertical: 8, minWidth: 88, alignItems: 'center' },
+  nudgeText: { fontSize: FontSize.sm, fontWeight: '700' },
+  actions: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg, marginTop: Spacing.md },
+  cancelBtn: { flex: 1, borderWidth: 1.5, borderRadius: Radius.full, paddingVertical: 14, alignItems: 'center' },
+  cancelText: { fontSize: FontSize.md, fontWeight: '600' },
+  confirmBtn: { flex: 2, borderRadius: Radius.full, paddingVertical: 14, alignItems: 'center' },
+  confirmText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '700' },
+});
 
 const pickerStyles = StyleSheet.create({
   overlay: {

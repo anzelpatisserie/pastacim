@@ -2,6 +2,7 @@
  * Expo Push Notification yardımcısı.
  * Alıcının push_token'ı Supabase'den okunur, Expo Push API'ye gönderilir.
  */
+import { Linking, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from './supabase';
 
@@ -47,6 +48,23 @@ export function navigateFromNotification(
         break;
       case 'campaign':
         router.push(base as never);
+        break;
+      case 'app_update': {
+        // Sürüm güncelleme bildirimi → mağaza sayfasını aç.
+        // Admin panel data.url gönderirse onu kullan; yoksa platforma göre
+        // mağaza arama linkine düş.
+        // Admin panel app_update bildirimi gönderirken mağaza linkini data.url
+        // olarak ekler (iOS App Store / Android Play Store). URL yoksa platform
+        // mağaza aramasına düş.
+        const url = (data?.url as string | undefined)
+          ?? (Platform.OS === 'android' ? 'market://search?q=Pastacım' : undefined);
+        if (url) Linking.openURL(url).catch(() => router.push(base as never));
+        else router.push(base as never);
+        break;
+      }
+      case 'feedback_request':
+        // Geri bildirim teşviki → profildeki geri bildirim modalını aç.
+        router.push(`${base}/profile?openFeedback=1` as never);
         break;
       // offer_accepted / offer_rejected / offer_withdrawn / order_completed /
       // order_cancelled → mevcut app'in siparişlerim sekmesi (güvenli varsayılan;
@@ -115,16 +133,23 @@ export async function notifyUser(params: {
    * `false` verilir → yalnızca push gönderilir.
    */
   inApp?: boolean;
+  /**
+   * Bildirim hangi app'in akışında görünmeli? 'customer' / 'baker' / undefined
+   * (her ikisi). Dual-rol hesapta (hem müşteri hem pastacı) bildirimin yanlış
+   * app'te görünmesini engeller. Ör. 'new_order' → 'baker'.
+   */
+  targetRole?: NotificationRole;
 }): Promise<void> {
   // 1. In-app notification — SECURITY DEFINER RPC kullan
   //    (başka kullanıcıya bildirim insert etmek için RLS bypass gerekiyor)
   if (params.inApp !== false) {
     await _db.rpc('create_notification', {
-      p_user_id: params.userId,
-      p_type:    params.type,
-      p_title:   params.title,
-      p_body:    params.body,
-      p_data:    params.data ?? {},
+      p_user_id:     params.userId,
+      p_type:        params.type,
+      p_title:       params.title,
+      p_body:        params.body,
+      p_data:        params.data ?? {},
+      p_target_role: params.targetRole ?? null,
     });
   }
 
@@ -143,6 +168,70 @@ export async function notifyUser(params: {
   } catch {
     // push başarısız olsa da devam et
   }
+}
+
+// ─── Düzenlenebilir bildirim şablonları (admin panelden yönetilir) ───────────
+
+type NotificationTemplate = {
+  key: string;
+  title: string;
+  body: string;
+  target_role: NotificationRole | null;
+};
+
+let _templateCache: Record<string, NotificationTemplate> | null = null;
+
+/** Şablonları DB'den (RPC) çek + cache'le. Admin düzenlerse app yeniden açılınca tazelenir. */
+async function loadTemplates(): Promise<Record<string, NotificationTemplate>> {
+  if (_templateCache) return _templateCache;
+  try {
+    const { data } = await _db.rpc('get_notification_templates');
+    const map: Record<string, NotificationTemplate> = {};
+    for (const t of (data ?? []) as NotificationTemplate[]) map[t.key] = t;
+    _templateCache = map;
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+/** {{anahtar}} yer tutucularını değişkenlerle doldur. */
+function interpolate(tpl: string, vars: Record<string, string | number>): string {
+  return tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k) =>
+    vars[k] !== undefined ? String(vars[k]) : '');
+}
+
+/**
+ * Şablon-tabanlı bildirim gönder. Admin metni düzenlediyse o metin kullanılır;
+ * şablon bulunamazsa `fallback`'e düşer (her zaman bildirim gider).
+ *
+ * @param key       notification_templates.key (= bildirim type'ı olarak da kullanılır)
+ * @param vars      şablondaki {{title}} {{shop}} {{price}} gibi yer tutucular
+ * @param fallback  şablon yoksa kullanılacak sabit title/body
+ * @param data      navigateFromNotification için payload (orderId vb.)
+ */
+export async function notifyFromTemplate(params: {
+  userId: string;
+  key: string;
+  vars?: Record<string, string | number>;
+  fallback: { title: string; body: string };
+  data?: Record<string, unknown>;
+  targetRole?: NotificationRole;
+}): Promise<void> {
+  const templates = await loadTemplates();
+  const tpl = templates[params.key];
+  const vars = params.vars ?? {};
+  const title = tpl ? interpolate(tpl.title, vars) : params.fallback.title;
+  const body  = tpl ? interpolate(tpl.body,  vars) : params.fallback.body;
+  const targetRole = params.targetRole ?? tpl?.target_role ?? undefined;
+  await notifyUser({
+    userId: params.userId,
+    type:   params.key,
+    title,
+    body,
+    data:   params.data,
+    targetRole,
+  });
 }
 
 

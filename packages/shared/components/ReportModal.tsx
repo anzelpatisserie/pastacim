@@ -1,0 +1,219 @@
+// Şikayet / rapor modalı — sipariş / kullanıcı / dükkan / mesaj şikayeti.
+// reports tablosuna insert eder (RLS: reporter_id = auth.uid()).
+import { useState } from 'react';
+import {
+  Modal, View, Text, TextInput, TouchableOpacity,
+  StyleSheet, Alert, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView,
+} from 'react-native';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
+import { useThemeColors, Spacing, Radius, FontSize } from '../lib/constants';
+
+export type ReportTargetType = 'order' | 'user' | 'shop' | 'message';
+
+const REASONS: string[] = [
+  'Uygunsuz içerik',
+  'Dolandırıcılık şüphesi',
+  'Spam / taciz',
+  'Diğer',
+];
+
+const TARGET_LABELS: Record<ReportTargetType, string> = {
+  order: 'Sipariş',
+  user: 'Kullanıcı',
+  shop: 'Dükkan',
+  message: 'Mesaj',
+};
+
+interface ReportModalProps {
+  visible: boolean;
+  onClose: () => void;
+  targetType: ReportTargetType;
+  targetId?: string;
+  appName: string;
+}
+
+export default function ReportModal({
+  visible, onClose, targetType, targetId, appName,
+}: ReportModalProps) {
+  const C = useThemeColors();
+  const { user } = useAuth();
+
+  const [reason, setReason] = useState<string | null>(null);
+  const [details, setDetails] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const _db: any = supabase;
+
+  const reset = () => {
+    setReason(null);
+    setDetails('');
+  };
+
+  const handleClose = () => {
+    reset();
+    onClose();
+  };
+
+  const handleSubmit = async () => {
+    if (!reason) {
+      Alert.alert('Eksik Bilgi', 'Lütfen bir şikayet nedeni seçin.');
+      return;
+    }
+    if (!user?.id) {
+      Alert.alert('Hata', 'Şikayet göndermek için giriş yapmış olmalısınız.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { error } = await _db.from('reports').insert({
+        reporter_id: user.id,
+        target_type: targetType,
+        target_id: targetId ?? null,
+        reason,
+        details: details.trim() || null,
+        app_name: appName,
+      });
+      if (error) throw new Error(error.message);
+
+      Alert.alert(
+        'Şikayetiniz Alındı',
+        'Bildiriminiz için teşekkürler. En kısa sürede inceleyeceğiz.',
+      );
+      reset();
+      onClose();
+    } catch {
+      Alert.alert('Hata', 'Şikayet gönderilemedi. Lütfen tekrar deneyin.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={handleClose}
+    >
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={[styles.sheet, { backgroundColor: C.background }]}>
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: C.border }]}>
+            <Text style={[styles.title, { color: C.text }]}>
+              ⚠️ {TARGET_LABELS[targetType]} Şikayet Et
+            </Text>
+            <TouchableOpacity onPress={handleClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={[styles.closeBtn, { color: C.textSecondary }]}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Neden */}
+            <Text style={[styles.label, { color: C.textSecondary }]}>Şikayet Nedeni</Text>
+            <View style={styles.reasonList}>
+              {REASONS.map((r) => {
+                const selected = reason === r;
+                return (
+                  <TouchableOpacity
+                    key={r}
+                    style={[
+                      styles.reasonChip,
+                      {
+                        backgroundColor: selected ? C.primary : C.card,
+                        borderColor: selected ? C.primary : C.border,
+                      },
+                    ]}
+                    onPress={() => setReason(r)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.reasonText, { color: selected ? '#FFF' : C.text }]}>
+                      {r}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Açıklama */}
+            <Text style={[styles.label, { color: C.textSecondary, marginTop: Spacing.md }]}>
+              Açıklama (isteğe bağlı)
+            </Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: C.card, borderColor: C.border, color: C.text }]}
+              placeholder="Durumu kısaca anlatın..."
+              placeholderTextColor={C.placeholder}
+              value={details}
+              onChangeText={setDetails}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              maxLength={500}
+            />
+            <Text style={[styles.charCount, { color: C.placeholder }]}>{details.length}/500</Text>
+
+            {/* Gönder */}
+            <TouchableOpacity
+              style={[styles.submitBtn, { backgroundColor: C.primary }, isSubmitting && { opacity: 0.7 }]}
+              onPress={handleSubmit}
+              disabled={isSubmitting}
+              activeOpacity={0.85}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.submitBtnText}>Şikayeti Gönder</Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg,
+    maxHeight: '90%',
+  },
+  scrollContent: { paddingBottom: Spacing.xl },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingBottom: Spacing.md, marginBottom: Spacing.md, borderBottomWidth: 1,
+  },
+  title: { fontSize: FontSize.lg, fontWeight: '800', flex: 1 },
+  closeBtn: { fontSize: 20, fontWeight: '700' },
+  label: { fontSize: FontSize.sm, fontWeight: '600', marginBottom: Spacing.sm },
+  reasonList: { gap: Spacing.sm },
+  reasonChip: {
+    borderWidth: 1, borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md, paddingVertical: 12,
+  },
+  reasonText: { fontSize: FontSize.sm, fontWeight: '600' },
+  input: {
+    borderWidth: 1, borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    fontSize: FontSize.md, minHeight: 100,
+  },
+  charCount: { fontSize: FontSize.xs, textAlign: 'right', marginTop: 2 },
+  submitBtn: {
+    paddingVertical: 16, borderRadius: Radius.full, alignItems: 'center', marginTop: Spacing.lg,
+  },
+  submitBtnText: { color: '#FFF', fontSize: FontSize.md, fontWeight: '700' },
+});

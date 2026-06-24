@@ -289,17 +289,17 @@ export default function LoginScreen() {
 
         {/* ─── Google Giriş ────────────────────────────────────────── */}
         <TouchableOpacity
-          style={[styles.googleBtn, { borderColor: C.border, backgroundColor: C.card }]}
+          style={styles.googleBtn}
           onPress={handleGoogleLogin}
           disabled={isGoogleLoading}
           activeOpacity={0.85}
         >
           {isGoogleLoading ? (
-            <ActivityIndicator color={C.text} />
+            <ActivityIndicator color="#1F1F1F" />
           ) : (
             <>
               <Text style={styles.googleBtnIcon}>G</Text>
-              <Text style={[styles.googleBtnText, { color: C.text }]}>Google ile Giriş Yap</Text>
+              <Text style={styles.googleBtnText}>Google ile Giriş Yap</Text>
             </>
           )}
         </TouchableOpacity>
@@ -452,19 +452,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
+    borderColor: '#DADCE0',
     borderRadius: Radius.full,
-    paddingVertical: 14,
+    paddingVertical: 16,
     marginBottom: Spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
   googleBtnIcon: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#4285F4',
   },
   googleBtnText: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+    color: '#1F1F1F',
   },
   appleBtnWrap: {
     marginBottom: Spacing.lg,

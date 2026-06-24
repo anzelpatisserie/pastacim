@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, FlatList,
+  View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -175,7 +175,7 @@ export default function CustomerMyOrdersScreen() {
   useFocusEffect(useCallback(() => { fetchOrders(); }, [fetchOrders]));
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+    <View style={[styles.container, { backgroundColor: C.background }]}>
       <TabHeader
         title="Siparişlerim"
         unreadCount={unreadCount}
@@ -302,7 +302,7 @@ export default function CustomerMyOrdersScreen() {
           );
         })()
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -116,14 +116,18 @@ export default function NotificationsScreen({ appRole }: { appRole?: Notificatio
     const { data } = await _db
       .from('notifications')
       .select('*')
+      // Yalnızca bu app'e ait (target_role) + ortak (null) bildirimler gösterilir.
+      // Dual-rol hesapta müşteri app'inde pastacı bildirimlerinin (ve tersi)
+      // görünmesini engeller.
       .eq('user_id', user.id)
+      .or(`target_role.is.null,target_role.eq.${notifRole}`)
       .order('created_at', { ascending: false })
       .limit(50);
 
     setNotifications((data ?? []) as NotificationRow[]);
     setIsLoading(false);
     setIsRefreshing(false);
-  }, [user?.id]);
+  }, [user?.id, notifRole]);
 
   // Her tab odaklanışında yenile
   useFocusEffect(useCallback(() => { fetch(); }, [fetch]));

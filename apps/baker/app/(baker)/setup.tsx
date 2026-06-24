@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert,
@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { shopJustCreatedSignal } from './index';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function buildSocialUrl(handle: string, platform: 'instagram' | 'facebook' | 'tiktok' | 'youtube'): string | null {
@@ -62,7 +63,7 @@ async function fetchGooglePlaceByName(shopName: string): Promise<{
       const matchedName = (place.name ?? null) as string | null;
       const sim = matchedName ? similarity(shopName, matchedName) : 0;
       const mapsUrl = place.place_id
-        ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(matchedName ?? shopName)}&query_place_id=${place.place_id}`
         : null;
       return {
         rating: place.rating ?? null,
@@ -93,8 +94,6 @@ const DEFAULT_HOURS: WorkingHours = DAY_KEYS.reduce((acc, d) => {
 export default function BakerSetupScreen() {
   const C = useThemeColors();
   const { refreshProfile } = useAuth();
-  const guardChecked = useRef(false);
-  const [guardLoading, setGuardLoading] = useState(true);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [address, setAddress] = useState('');
@@ -196,18 +195,17 @@ export default function BakerSetupScreen() {
       Alert.alert('Bulunamadı', `"${name.trim()}" için Google'da işletme bulunamadı. Dükkan adının Google Maps'teki adla aynı olduğundan emin olun.`);
       return;
     }
+    if (result.similarity < 0.5) {
+      Alert.alert(
+        '❌ Eşleşme Bulunamadı',
+        `"${name.trim()}" adına ait Google işletme profili bulunamadı.\n\nGoogle'da dönen en yakın sonuç: "${result.matchedName ?? '—'}"\n\nGoogle Haritalar'da işletmenizi kayıt etmeden bu bilgileri otomatik getiremezsiniz.`
+      );
+      return;
+    }
     if (result.rating != null) setGoogleRating(String(result.rating));
     if (result.reviewCount > 0) setGoogleReviewCount(String(result.reviewCount));
     if (result.mapsUrl) setGoogleMapsUrl(result.mapsUrl);
-
-    if (result.similarity < 0.5 && result.matchedName) {
-      Alert.alert(
-        '⚠️ Tam Eşleşme Bulunamadı',
-        `Google'dan dönen: "${result.matchedName}"\nSizin yazdığınız: "${name.trim()}"\n\nBilgiler dolduruldu ama yanlış işletme olabilir. Lütfen kontrol edin.`
-      );
-    } else {
-      Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum${result.matchedName ? `\n(${result.matchedName})` : ''}`);
-    }
+    Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum${result.matchedName ? `\n(${result.matchedName})` : ''}`);
   };
 
   const handleCreate = async () => {
@@ -246,6 +244,8 @@ export default function BakerSetupScreen() {
       const rpcErrMsg = (data as { error?: string } | null)?.error;
       if (rpcErrMsg === 'mevcut_dukkan') {
         await refreshProfile();
+        // index'e: dükkan artık var, stale 'none' latch'ini sıfırla ve yeniden sorgula.
+        shopJustCreatedSignal.value = true;
         router.replace('/(baker)');
         return;
       }
@@ -255,6 +255,9 @@ export default function BakerSetupScreen() {
       }
 
       await refreshProfile();
+      // index'e: dükkan oluşturuldu, redirect latch'ini sıfırla ve 'exists'e geçecek
+      // taze sorgu yap (aksi halde stale 'none' setup'a geri yönlendirir).
+      shopJustCreatedSignal.value = true;
       Alert.alert('🎉 Dükkan Oluşturuldu', 'Artık taleplere teklif verebilirsiniz!', [
         { text: 'Tamam', onPress: () => router.replace('/(baker)') },
       ]);
@@ -266,50 +269,12 @@ export default function BakerSetupScreen() {
     }
   };
 
-  // ─── Defense-in-depth: kullanıcı zaten pastacı ise setup'ı atlat ─────────────
-  // _layout.tsx'in useAuth instance'ı bazen profil yüklenmeden navigation effect'i
-  // tetikleyebiliyor (Context değil, instance bazlı). Burada DB'den eager olarak
-  // kontrol edip pastacıyı doğrudan ana ekrana yönlendiriyoruz.
-  useEffect(() => {
-    if (guardChecked.current) return;
-    guardChecked.current = true;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { session: s } } = await supabase.auth.getSession();
-        if (!s?.user?.id) {
-          if (!cancelled) setGuardLoading(false);
-          return;
-        }
-        const { data, error } = await supabase
-          .from('users')
-          .select('is_baker')
-          .eq('id', s.user.id)
-          .maybeSingle();
-        if (cancelled) return;
-        if (!error && data?.is_baker === true) {
-          // Hesap zaten pastacı — useAuth profil state'ini tazele ve ana ekrana git
-          await refreshProfile();
-          router.replace('/(baker)');
-          return;
-        }
-        setGuardLoading(false);
-      } catch {
-        if (!cancelled) setGuardLoading(false);
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [refreshProfile]);
-
-  if (guardLoading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: C.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </SafeAreaView>
-    );
-  }
+  // NOT: Eskiden burada bir "guard" effect'i vardı (getSession + is_baker sorgusu)
+  // — _layout.tsx'in kırılgan redirect'ine karşı defans amaçlıydı. Artık setup'a
+  // yönlendirme kararını YALNIZCA (baker)/index veriyor (DB'deki pastry_shops
+  // sorgusuna dayalı, stabil latch). setup'a yalnızca dükkanı olmayan kullanıcı
+  // gelir; defansif kontrol gereksizdi ve sorgusu askıda kaldığında spinner'da
+  // takılarak yeni bir başarısızlık noktası yaratıyordu. Kaldırıldı.
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>

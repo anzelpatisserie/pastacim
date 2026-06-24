@@ -8,7 +8,7 @@ import * as Updates from 'expo-updates';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { useAuth, navigateFromNotification, supabase, SplashAnimation } from '@pastacim/shared';
+import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
 
 export { ErrorBoundary } from 'expo-router';
@@ -105,8 +105,13 @@ async function handleAuthUrl(url: string) {
 }
 
 function RootLayoutNav() {
-  const { isLoading, isAuthenticated, profile } = useAuth();
+  const { isLoading, isAuthenticated, profile, refreshProfile } = useAuth();
   const notificationListener = useRef<Notifications.Subscription | null>(null);
+
+  // İsim kapısı: Apple "E-postamı Gizle" ile giriş yapan kullanıcılarda full_name
+  // boş kalabilir. Bu durumda isim girilene kadar NameEntryModal'i göster.
+  const needsName =
+    isAuthenticated && !!profile && !(profile.full_name && profile.full_name.trim());
 
   useEffect(() => {
     // Handle deep link opened while app is running
@@ -158,6 +163,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(customer)" />
         <Stack.Screen name="messages/[conversationId]" options={{ headerShown: false }} />
       </Stack>
+      <NameEntryModal visible={needsName} onDone={refreshProfile} />
     </GestureHandlerRootView>
   );
 }

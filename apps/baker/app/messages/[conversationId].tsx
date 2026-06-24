@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +43,7 @@ export default function MessagesScreen() {
   const [isSending, setIsSending] = useState(false);
   const [sendOrderId, setSendOrderId] = useState<string | null>(initialOrderId ?? null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [showReport, setShowReport] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const mountedRef = useRef(true);
 
@@ -405,13 +406,22 @@ export default function MessagesScreen() {
               {otherUserName || 'Kullanıcı'}
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.deleteConvBtn}
-            onPress={deleteConversation}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={[styles.deleteConvIcon, { color: C.error }]}>🗑️</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.deleteConvBtn}
+              onPress={() => setShowReport(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.deleteConvIcon}>⚠️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteConvBtn}
+              onPress={deleteConversation}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[styles.deleteConvIcon, { color: C.error }]}>🗑️</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Mesajlar */}
@@ -588,6 +598,15 @@ export default function MessagesScreen() {
           </TouchableOpacity>
         </Pressable>
       </Modal>
+
+      {/* Şikayet Et */}
+      <ReportModal
+        visible={showReport}
+        onClose={() => setShowReport(false)}
+        targetType="user"
+        targetId={otherUserId}
+        appName="baker"
+      />
     </SafeAreaView>
   );
 }
@@ -612,6 +631,7 @@ const styles = StyleSheet.create({
   orderDividerText: { fontSize: 11, paddingHorizontal: Spacing.xs, fontWeight: '600' },
   msgRow: { flexDirection: 'row', marginBottom: Spacing.xs, alignItems: 'flex-end' },
   msgRowMe: { justifyContent: 'flex-end' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   deleteConvBtn: { padding: 4 },
   deleteConvIcon: { fontSize: 20 },
   deleteMsgBtn: { marginRight: 4, marginBottom: 2, opacity: 0.45 },

@@ -2,14 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
+
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, Redirect } from 'expo-router';
 import * as Location from 'expo-location';
 import { Alert } from 'react-native';
 import { supabase, rpcNearbyOrders, rpcWithdrawOffer, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, TabHeader } from '@pastacim/shared';
@@ -18,6 +18,13 @@ import { useNotifications } from '../../hooks/useNotifications';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
+
+// Setup ekranı yeni dükkan oluşturduğunda bu bayrağı set'ler. useAuth bir Context
+// olmadığı için ekranlar arası senkron sinyal taşımanın güvenilir yolu module-level
+// bir mutable bayrak. index ekranı odaklandığında bu bayrağı görürse 'none' latch'ini
+// SIFIRLAYIP yeniden sorgular — böylece create_shop sonrası setup'a geri yönlendirme
+// (redirect loop) yaşanmaz. Bkz. setup.tsx handleCreate.
+export const shopJustCreatedSignal = { value: false };
 
 type NearbyOrder = Database['public']['Functions']['nearby_orders']['Returns'][number];
 
@@ -71,6 +78,17 @@ export default function BakerHomeScreen() {
   const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
   const [shopLocation, setShopLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  // Dükkan kaydı yoksa setup'a declarative redirect (Android'de imperative
+  // router.replace tab initial route ile yarışıp takılıyordu).
+  // ÖNEMLİ: useAuth bir React Context DEĞİL — her useAuth() çağrısı bağımsız bir
+  // state instance'ı. Bu yüzden `profile`/`isBaker` true↔false↔true salınıyor
+  // (onAuthStateChange token refresh → loadProfile → setProfile). Bu salınım
+  // <Redirect>'i sürekli mount/unmount edip navigasyonu commit edilemez yapıyordu.
+  // Çözüm: kararı SADECE DB sorgusuna (`shopState`) dayandır, useAuth salınımını
+  // yok say. shopState bir kez 'none'/'exists' olduğunda LATCH'lenir (geri dönmez),
+  // böylece redirect kararı stabil kalır ve navigasyon commit edilir.
+  type ShopState = 'unknown' | 'exists' | 'none';
+  const [shopState, setShopState] = useState<ShopState>('unknown');
 
   const handleWithdraw = (offerId: string, title: string) => {
     Alert.alert(
@@ -97,39 +115,73 @@ export default function BakerHomeScreen() {
   };
 
   // ─── Konum: önce dükkan koordinatı, yoksa cihaz GPS ───────────────────────
-  useEffect(() => {
-    if (!profile?.id) return;
-    (async () => {
-      // Dükkan koordinatı — en güvenilir kaynak
-      const { data: shop } = await _db
-        .from('pastry_shops')
-        .select('latitude, longitude')
-        .eq('user_id', profile.id)
-        .single();
+  // Dükkan kontrolünü user.id'den yap (profile salınımına dayanıklı). user.id
+  // session'dan gelir ve token refresh'te sabit kalır; profile gibi null'a düşmez.
+  const fetchShopLocation = useCallback(async () => {
+    const uid = user?.id ?? profile?.id;
+    if (!uid) return;
 
-      if (shop?.latitude && shop?.longitude) {
-        setShopLocation({ lat: shop.latitude, lng: shop.longitude });
-        return;
-      }
+    // Setup yeni dükkan oluşturduysa: stale 'none' latch'ini temizle ve taze sorgula.
+    // Bunu sorgudan ÖNCE yaparız; 'unknown' iken <Redirect> tetiklenmez, böylece
+    // create_shop sonrası setup'a geri yönlenme (loop) olmaz.
+    if (shopJustCreatedSignal.value) {
+      shopJustCreatedSignal.value = false;
+      setShopState('unknown');
+    }
 
-      // Dükkan koordinatı yoksa cihaz GPS
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setShopLocation({ lat: DEFAULT_LOCATION.latitude, lng: DEFAULT_LOCATION.longitude });
-        return;
-      }
-      try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setShopLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-      } catch {
-        setShopLocation({ lat: DEFAULT_LOCATION.latitude, lng: DEFAULT_LOCATION.longitude });
-      }
-    })();
-  }, [profile?.id]);
+    const { data: shop, error: shopErr } = await _db
+      .from('pastry_shops')
+      .select('latitude, longitude')
+      .eq('user_id', uid)
+      .maybeSingle();
+
+    // Sorgu hatası (network/RLS askıda) → kararı erteleme; latch'i değiştirme.
+    if (shopErr) return;
+
+    if (shop === null || shop === undefined) {
+      // Dükkan kaydı yok → setup'a yönlendir. Latch: bir kez 'none' olunca kalır.
+      setShopState('none');
+      return;
+    }
+
+    // Dükkan var → talepler ekranı. Latch: 'exists' kararı stabil.
+    setShopState('exists');
+
+    if (shop?.latitude && shop?.longitude) {
+      setShopLocation({ lat: shop.latitude, lng: shop.longitude });
+      return;
+    }
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setShopLocation({ lat: DEFAULT_LOCATION.latitude, lng: DEFAULT_LOCATION.longitude });
+      return;
+    }
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setShopLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+    } catch {
+      setShopLocation({ lat: DEFAULT_LOCATION.latitude, lng: DEFAULT_LOCATION.longitude });
+    }
+  }, [user?.id, profile?.id]);
+
+  // user/profile hazır olunca konum + dükkan kontrolü
+  useEffect(() => { fetchShopLocation(); }, [fetchShopLocation]);
+  // tab'a dönünce (adres/dükkan değişikliği sonrası) yeniden kontrol et.
+  // NOT: shopState'i burada SIFIRLAMIYORUZ — latch stabil kalmalı. Dükkan yeni
+  // oluşturulduğunda setup router.replace('/(baker)') ile geri döner; bu sorgu
+  // 'exists' döndürür ve latch güncellenir.
+  useFocusEffect(useCallback(() => {
+    fetchShopLocation();
+  }, [fetchShopLocation]));
 
   // ─── Yakındaki Talepleri + Kendi Tekliflerimi Getir ───────────────────────
   const fetchOrders = useCallback(async (refresh = false) => {
-    if (!shopLocation) return;
+    if (!shopLocation) {
+      // Dükkan konumu henüz gelmedi; loading'i kapat ki ekran takılı kalmasın
+      if (!refresh) setIsLoading(false);
+      return;
+    }
     if (refresh) setIsRefreshing(true);
     else setIsLoading(true);
     setError(null);
@@ -149,7 +201,7 @@ export default function BakerHomeScreen() {
       const newOrders = data ?? [];
       setOrders(newOrders);
 
-      // Kendi tekliflerimi + teklif istatistiklerini getir
+      // Kendi tekliflerimi (yakındaki siparişlere) + teklif istatistiklerini getir
       if (newOrders.length > 0 && user?.id) {
         const orderIds = newOrders.map((o) => o.id);
         // Kendi tekliflerim (yakındaki siparişlere)
@@ -198,29 +250,6 @@ export default function BakerHomeScreen() {
         setMyOfferMap(new Map());
         setOfferStatsMap(new Map());
       }
-
-      // Bekleyen + reddedilen + geri çekilen tekliflerimi getir (sipariş özetiyle)
-      if (user?.id) {
-        const { data: allMyOffers } = await _db
-          .from('offers')
-          .select(`
-            id, order_id, price, status, created_at,
-            order:orders!order_id (
-              id, title, serving_size, delivery_date, status,
-              customer:users!customer_id ( full_name, created_at )
-            )
-          `)
-          .eq('baker_id', user.id)
-          .in('status', ['pending', 'rejected', 'withdrawn'])
-          .order('created_at', { ascending: false }) as { data: MyOfferWithOrder[] | null };
-
-        const all = allMyOffers ?? [];
-        setPendingOffers(all.filter((o) => o.status === 'pending'));
-        setInactiveOffers(all.filter((o) => o.status === 'rejected' || o.status === 'withdrawn'));
-      } else {
-        setPendingOffers([]);
-        setInactiveOffers([]);
-      }
     } catch {
       setError('Talepler yüklenirken bir sorun oluştu.');
     } finally {
@@ -234,6 +263,41 @@ export default function BakerHomeScreen() {
   // Tab'a odaklanınca teklif durumunu güncelle
   useFocusEffect(useCallback(() => { fetchOrders(); }, [fetchOrders]));
 
+  // ─── Kendi Tekliflerim (bekleyen / reddedilen / geri çekilen) ─────────────
+  // ÖNEMLİ: Bu sorgu baker'ın KENDİ tekliflerini çeker — yarıçaptan ve dükkan
+  // konumundan TAMAMEN BAĞIMSIZDIR. Eskiden fetchOrders içinde, nearby_orders
+  // RPC'sine ve `!shopLocation` early-return guard'ına bağlıydı; bu yüzden ilk
+  // yüklemede (özellikle user?.id henüz hazır değilken / shopLocation gelmeden)
+  // boş kalıyor, yalnızca radius değişince (Globe) tekrar çalışıyordu. Artık
+  // sadece user?.id'ye bağlı kendi effect'inde yaşıyor → her zaman görünür.
+  const fetchMyOffers = useCallback(async () => {
+    if (!user?.id) {
+      setPendingOffers([]);
+      setInactiveOffers([]);
+      return;
+    }
+    const { data: allMyOffers } = await _db
+      .from('offers')
+      .select(`
+        id, order_id, price, status, created_at,
+        order:orders!order_id (
+          id, title, serving_size, delivery_date, status,
+          customer:users!customer_id ( full_name, created_at )
+        )
+      `)
+      .eq('baker_id', user.id)
+      .eq('hidden_for_baker', false)
+      .in('status', ['pending', 'rejected', 'withdrawn'])
+      .order('created_at', { ascending: false }) as { data: MyOfferWithOrder[] | null };
+
+    const all = allMyOffers ?? [];
+    setPendingOffers(all.filter((o) => o.status === 'pending'));
+    setInactiveOffers(all.filter((o) => o.status === 'rejected' || o.status === 'withdrawn'));
+  }, [user?.id]);
+
+  useEffect(() => { fetchMyOffers(); }, [fetchMyOffers]);
+  useFocusEffect(useCallback(() => { fetchMyOffers(); }, [fetchMyOffers]));
+
   // Realtime: kendi tekliflerim ve siparişler değişince listeyi tazele.
   // NOT: DELETE event'lerinin baker_id filtresiyle düşmesi REPLICA IDENTITY FULL
   // gerektirir; bu yüzden offers tablosunu filtresiz dinleyip refetch ediyoruz.
@@ -244,19 +308,27 @@ export default function BakerHomeScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'offers' },
-        () => { fetchOrders(true); }
+        () => { fetchOrders(true); fetchMyOffers(); }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
-        () => { fetchOrders(true); }
+        () => { fetchOrders(true); fetchMyOffers(); }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user?.id, fetchOrders]);
+  }, [user?.id, fetchOrders, fetchMyOffers]);
+
+  // Dükkan profili yoksa kurulum ekranına yönlendir (declarative — Android'de güvenilir).
+  // Karar SADECE shopState latch'ine dayanır (DB'den pastry_shops sorgusu). Bu,
+  // useAuth'un profile/isBaker salınımından bağımsızdır; bir kez 'none' kararı
+  // verildiğinde stabil kalır ve <Redirect> navigasyonu commit edilir.
+  if (shopState === 'none') {
+    return <Redirect href={'/(baker)/setup' as never} />;
+  }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
+    <View style={[styles.container, { backgroundColor: C.background }]}>
       <TabHeader
         title={`Hoş geldin, ${profile?.full_name?.split(' ')[0] ?? 'Pastacı'}`}
         subtitle="Talepleri inceleyip teklif verin"
@@ -307,169 +379,200 @@ export default function BakerHomeScreen() {
         </View>
       </View>
 
-      {/* İçerik */}
-      {isLoading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={C.primary} />
-          <Text style={[styles.loadingText, { color: C.textSecondary }]}>Talepler aranıyor…</Text>
-        </View>
-      ) : error ? (
-        <View style={styles.centered}>
-          <Text style={styles.errorEmoji}>😢</Text>
-          <Text style={[styles.errorText, { color: C.text }]}>{error}</Text>
-          <TouchableOpacity
-            style={[styles.retryBtn, { backgroundColor: C.primary }]}
-            onPress={() => fetchOrders()}
-          >
-            <Text style={styles.retryBtnText}>Tekrar Dene</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={orders.filter((o) => {
-            const myOffer = myOfferMap.get(o.id);
-            return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
-          })}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <RequestCard
-              order={item}
-              colors={C}
-              myOffer={myOfferMap.get(item.id)}
-              offerStats={offerStatsMap.get(item.id)}
-            />
-          )}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={() => fetchOrders(true)}
-              tintColor={C.primary}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>🗺️</Text>
-              <Text style={[styles.emptyTitle, { color: C.text }]}>Bu bölgede talep yok</Text>
-              <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-                Mesafe aralığını artırabilirsin
+      {/* İçerik — Kendi tekliflerim (bekleyen/inaktif) yarıçaptan ve
+          orders yükleme durumundan BAĞIMSIZ olarak HER ZAMAN gösterilir.
+          Yalnızca "Açık Talepler" bölümü loading/error/empty durumuna tabidir. */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => { fetchOrders(true); fetchMyOffers(); }}
+            tintColor={C.primary}
+          />
+        }
+      >
+        {/* Bekleyen Tekliflerim */}
+          {pendingOffers.length > 0 && (
+            <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.sectionTitle, { color: C.text }]}>
+                📤 Bekleyen Tekliflerim ({pendingOffers.length})
               </Text>
-            </View>
-          }
-          ListHeaderComponent={(() => {
-            const count = orders.filter((o) => {
-              const myOffer = myOfferMap.get(o.id);
-              return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
-            }).length;
-            return count > 0 ? (
-              <Text style={[styles.listHeader, { color: C.textSecondary }]}>
-                {count} açık talep
+              <Text style={[styles.sectionHint, { color: C.placeholder }]}>
+                Müşteri kararını bekliyor
               </Text>
-            ) : null;
-          })()}
-          ListFooterComponent={
-            <View>
-              {/* Bekleyen Tekliflerim */}
-              {pendingOffers.length > 0 && (
-                <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
-                  <Text style={[styles.sectionTitle, { color: C.text }]}>
-                    📤 Bekleyen Tekliflerim ({pendingOffers.length})
-                  </Text>
-                  <Text style={[styles.sectionHint, { color: C.placeholder }]}>
-                    Müşteri kararını bekliyor
-                  </Text>
-                  {pendingOffers.map((p) => {
-                    const memberDays = p.order?.customer?.created_at
-                      ? Math.max(0, Math.floor((Date.now() - new Date(p.order.customer.created_at).getTime()) / (1000 * 60 * 60 * 24)))
-                      : null;
-                    const memberStr = memberDays == null
-                      ? ''
-                      : memberDays < 30
-                        ? `${memberDays}g üye`
-                        : memberDays < 365
-                          ? `${Math.floor(memberDays / 30)}ay üye`
-                          : `${Math.floor(memberDays / 365)}y üye`;
-                    return (
-                    <View key={p.id} style={[styles.miniCard, { borderTopColor: C.border }]}>
-                      <TouchableOpacity
-                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}
-                        onPress={() => p.order && router.push({
-                          pathname: '/(baker)/offer/[orderId]',
-                          params: { orderId: p.order.id },
-                        })}
-                        activeOpacity={0.7}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.miniTitle, { color: C.text }]} numberOfLines={1}>
-                            {p.order?.title ?? 'Sipariş'}
-                          </Text>
-                          {p.order?.customer?.full_name ? (
-                            <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
-                              👤 {p.order.customer.full_name}
-                              {memberStr ? ` · ${memberStr}` : ''}
-                            </Text>
-                          ) : null}
-                          <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
-                            ⏳ Bekleniyor
-                            {p.order?.serving_size ? ` · 👥 ${p.order.serving_size} kişilik` : ''}
-                          </Text>
-                        </View>
-                        <Text style={[styles.miniPrice, { color: C.primary }]}>₺{p.price}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.withdrawBtn, { borderColor: C.error + '88' }]}
-                        onPress={() => handleWithdraw(p.id, p.order?.title ?? 'Bu sipariş')}
-                        disabled={withdrawingId === p.id}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        {withdrawingId === p.id ? (
-                          <ActivityIndicator size="small" color={C.error} />
-                        ) : (
-                          <Text style={[styles.withdrawBtnText, { color: C.error }]}>↩️ Geri Çek</Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                    );
-                  })}
-                </View>
-              )}
-
-              {/* Siparişe Dönmeyen Tekliflerim (Collapse) */}
-              {inactiveOffers.length > 0 && (
-                <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
-                  <TouchableOpacity
-                    style={styles.sectionHeaderRow}
-                    onPress={() => setInactiveExpanded((v) => !v)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.sectionTitle, { color: C.text }]}>
-                      📁 Siparişe Dönmeyen Tekliflerim ({inactiveOffers.length})
-                    </Text>
-                    <Text style={[styles.chevron, { color: C.textSecondary }]}>
-                      {inactiveExpanded ? '▾' : '▸'}
-                    </Text>
-                  </TouchableOpacity>
-                  {inactiveExpanded && inactiveOffers.map((p) => (
-                    <View key={p.id} style={[styles.miniCard, { borderTopColor: C.border }]}>
+              {pendingOffers.map((p) => {
+                const memberDays = p.order?.customer?.created_at
+                  ? Math.max(0, Math.floor((Date.now() - new Date(p.order.customer.created_at).getTime()) / (1000 * 60 * 60 * 24)))
+                  : null;
+                const memberStr = memberDays == null
+                  ? ''
+                  : memberDays < 30
+                    ? `${memberDays}g üye`
+                    : memberDays < 365
+                      ? `${Math.floor(memberDays / 30)}ay üye`
+                      : `${Math.floor(memberDays / 365)}y üye`;
+                return (
+                  <View key={p.id} style={[styles.miniCard, { borderTopColor: C.border }]}>
+                    <TouchableOpacity
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}
+                      onPress={() => p.order && router.push({
+                        pathname: '/(baker)/offer/[orderId]',
+                        params: { orderId: p.order.id },
+                      })}
+                      activeOpacity={0.7}
+                    >
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.miniTitle, { color: C.text }]} numberOfLines={1}>
                           {p.order?.title ?? 'Sipariş'}
                         </Text>
+                        {p.order?.customer?.full_name ? (
+                          <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
+                            👤 {p.order.customer.full_name}
+                            {memberStr ? ` · ${memberStr}` : ''}
+                          </Text>
+                        ) : null}
                         <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
-                          {p.status === 'rejected' ? '❌ Müşteri başka teklif kabul etti' : '↩️ Geri çekildi'}
+                          ⏳ Bekleniyor
+                          {p.order?.serving_size ? ` · 👥 ${p.order.serving_size} kişilik` : ''}
                         </Text>
                       </View>
-                      <Text style={[styles.miniPriceMuted, { color: C.placeholder }]}>₺{p.price}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
+                      <Text style={[styles.miniPrice, { color: C.primary }]}>₺{p.price}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.withdrawBtn, { borderColor: C.error + '88' }]}
+                      onPress={() => handleWithdraw(p.id, p.order?.title ?? 'Bu sipariş')}
+                      disabled={withdrawingId === p.id}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {withdrawingId === p.id ? (
+                        <ActivityIndicator size="small" color={C.error} />
+                      ) : (
+                        <Text style={[styles.withdrawBtnText, { color: C.error }]}>↩️ Geri Çek</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
             </View>
-          }
-        />
-      )}
-    </SafeAreaView>
+          )}
+
+          {/* Siparişe Dönmeyen Tekliflerim (Collapse) */}
+          {inactiveOffers.length > 0 && (
+            <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
+              <TouchableOpacity
+                style={styles.sectionHeaderRow}
+                onPress={() => setInactiveExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sectionTitle, { color: C.text }]}>
+                  📁 Siparişe Dönmeyen Tekliflerim ({inactiveOffers.length})
+                </Text>
+                <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                  {inactiveExpanded ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {inactiveExpanded && inactiveOffers.map((p) => {
+                const orderDeleted = !p.order;
+                const orderCancelled = p.order?.status === 'cancelled';
+                const statusLabel = p.status === 'withdrawn'
+                  ? '↩️ Geri çekildi'
+                  : orderDeleted
+                    ? '🗑️ Sipariş silindi'
+                    : orderCancelled
+                      ? '↩️ Müşteri siparişten vazgeçti'
+                      : '❌ Müşteri başka teklif kabul etti';
+                const servingSize = p.order?.serving_size;
+                const deliveryDate = p.order?.delivery_date
+                  ? new Date(p.order.delivery_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
+                  : null;
+                return (
+                  <View key={p.id} style={[styles.miniCard, { borderTopColor: C.border }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.miniTitle, { color: C.text }]} numberOfLines={1}>
+                        {p.order?.title ?? 'Sipariş'}
+                      </Text>
+                      <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
+                        {statusLabel}
+                      </Text>
+                      {(servingSize || deliveryDate) && (
+                        <Text style={[styles.miniMeta, { color: C.placeholder }]} numberOfLines={1}>
+                          {[servingSize ? `👥 ${servingSize} kişi` : null, deliveryDate ? `📅 ${deliveryDate}` : null].filter(Boolean).join('  ')}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Text style={[styles.miniPriceMuted, { color: C.placeholder }]}>₺{p.price}</Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setInactiveOffers((prev) => prev.filter((o) => o.id !== p.id));
+                          _db.from('offers').update({ hidden_for_baker: true }).eq('id', p.id).then(() => {});
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={{ fontSize: 11, color: C.placeholder }}>Kaldır ✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Açık Talepler — yalnızca bu bölüm loading/error/empty durumuna tabi */}
+          {(isLoading || !shopLocation) ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color={C.primary} />
+              <Text style={[styles.loadingText, { color: C.textSecondary }]}>Talepler aranıyor…</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.centered}>
+              <Text style={styles.errorEmoji}>😢</Text>
+              <Text style={[styles.errorText, { color: C.text }]}>{error}</Text>
+              <TouchableOpacity
+                style={[styles.retryBtn, { backgroundColor: C.primary }]}
+                onPress={() => fetchOrders()}
+              >
+                <Text style={styles.retryBtnText}>Tekrar Dene</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (() => {
+            const visibleOrders = orders.filter((o) => {
+              const myOffer = myOfferMap.get(o.id);
+              return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
+            });
+            if (visibleOrders.length === 0) {
+              return (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyEmoji}>🗺️</Text>
+                  <Text style={[styles.emptyTitle, { color: C.text }]}>Bu bölgede talep yok</Text>
+                  <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
+                    Mesafe aralığını artırabilirsin
+                  </Text>
+                </View>
+              );
+            }
+            return (
+              <View>
+                <Text style={[styles.listHeader, { color: C.textSecondary }]}>
+                  {visibleOrders.length} açık talep
+                </Text>
+                {visibleOrders.map((item) => (
+                  <RequestCard
+                    key={item.id}
+                    order={item}
+                    colors={C}
+                    myOffer={myOfferMap.get(item.id)}
+                    offerStats={offerStatsMap.get(item.id)}
+                  />
+                ))}
+              </View>
+            );
+          })()}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -682,7 +785,7 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 56 },
   emptyTitle: { fontSize: FontSize.lg, fontWeight: '700', textAlign: 'center' },
   emptySubtitle: { fontSize: FontSize.md, textAlign: 'center' },
-  list: { padding: Spacing.md, gap: Spacing.sm, paddingBottom: 80 },
+  list: { padding: Spacing.md, gap: Spacing.sm, paddingBottom: 80, flexGrow: 1 },
   listHeader: { fontSize: FontSize.sm, marginBottom: Spacing.xs },
   sectionBox: {
     borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.md,
