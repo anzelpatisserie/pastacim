@@ -18,32 +18,42 @@ const esc = (s: unknown) =>
 // DB'de bulunmazsa aşağıdaki sabitlere düşülür (her zaman bir mail gider).
 const FALLBACK: Record<string, { subject: string; body: string }> = {
   welcome:          { subject: "Pastacım'a Hoş Geldin! 🎉", body: `<p>Aramıza katıldığın için mutluyuz. Hayalindeki pastayı tarif et, yakındaki ustalardan teklif al!</p>` },
+  welcome_pro:      { subject: "Pastacım Pro'ya Hoş Geldin! 🎉", body: `<p>Pastacım Pro'ya hoş geldin! Yakınındaki sipariş taleplerini gör, teklif ver ve işini büyüt.</p>` },
   order_ready:      { subject: "Siparişin Teslimata Hazır! 📦", body: `<p><b>"{{title}}"</b> siparişin pastacı tarafından hazırlandı ve teslim almaya hazır.</p>` },
   offer_accepted:   { subject: "Teklifin Kabul Edildi! ✅", body: `<p><b>"{{title}}"</b> siparişi için verdiğin teklif müşteri tarafından kabul edildi. Hadi hazırlamaya başla!</p>` },
   review_encourage: { subject: "Siparişin Nasıldı? ⭐", body: `<p><b>"{{title}}"</b> siparişin tamamlandı. Pastacıya bir yorum bırakarak diğer müşterilere yardımcı olur musun?</p>` },
 };
 
+// welcome maili gönderen app'e göre markalanır: baker app → welcome_pro + "Pastacım Pro".
+function templateKeyFor(type: string, isBaker: boolean): string {
+  return type === "welcome" && isBaker ? "welcome_pro" : type;
+}
+
 // deno-lint-ignore no-explicit-any
-async function buildEmail(admin: any, type: string, name: string, data: Record<string, unknown>) {
+async function buildEmail(admin: any, type: string, name: string, data: Record<string, unknown>, isBaker: boolean) {
   const title = esc(data.orderTitle ?? "siparişin");
   const safeName = esc(name || "değerli kullanıcı");
+  const tplKey = templateKeyFor(type, isBaker);
   let subject: string | undefined;
   let inner: string | undefined;
   try {
-    const { data: row } = await admin.from("email_templates").select("subject, body").eq("key", type).single();
+    const { data: row } = await admin.from("email_templates").select("subject, body").eq("key", tplKey).single();
     if (row) { subject = row.subject; inner = row.body; }
   } catch { /* DB hatası → fallback */ }
-  subject = subject ?? FALLBACK[type]?.subject;
-  inner = inner ?? FALLBACK[type]?.body;
+  subject = subject ?? FALLBACK[tplKey]?.subject;
+  inner = inner ?? FALLBACK[tplKey]?.body;
   if (!subject || !inner) return null;
   // Yer tutucular: {{title}} (escape'li kullanıcı verisi), {{name}}
   inner = inner.replace(/\{\{\s*title\s*\}\}/g, title).replace(/\{\{\s*name\s*\}\}/g, safeName);
+  const slogan = isBaker
+    ? "Pastacım Pro • Yakınındaki siparişleri yönet, teklif ver"
+    : "Pastacım • Hayalindeki pastayı yakındaki ustalar yapsın";
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2D3748">
       <div style="text-align:center;font-size:30px">🎂</div>
       <h2 style="color:#8B1A3D">${esc(subject)}</h2>
       <p>Merhaba ${safeName},</p>
       ${inner}
-      <p style="margin-top:24px;color:#718096;font-size:13px">Pastacım • Hayalindeki pastayı yakındaki ustalar yapsın</p>
+      <p style="margin-top:24px;color:#718096;font-size:13px">${slogan}</p>
     </div>`;
   return { subject, html };
 }
@@ -92,12 +102,16 @@ Deno.serve(async (req) => {
     // 3) Idempotency / loop guard: dedup satırını LOCK olarak ekle (eşzamanlı
     //    çift gönderimi engeller). ÖNEMLİ: gönderim başarısız olursa bu satırı
     //    GERİ AL (release) — aksi halde başarısız mail bir daha hiç denenmez.
+    // welcome maili app'e göre ayrı dedup'lanır (welcome vs welcome_pro) — müşteri ve
+    // pastacı app'leri kendi markalı hoş geldin mailini birer kez alır.
+    const isBaker = data.app === "baker";
+    const dedupType = templateKeyFor(type, isBaker);
     const { error: dupErr } = await admin.from("sent_emails")
-      .insert({ recipient_id: userId, type, order_id: orderId });
+      .insert({ recipient_id: userId, type: dedupType, order_id: orderId });
     if (dupErr) { console.error("send-email: dedup/skip", dupErr.code); return ok(); }
 
     const release = async () => {
-      let q = admin.from("sent_emails").delete().eq("recipient_id", userId).eq("type", type);
+      let q = admin.from("sent_emails").delete().eq("recipient_id", userId).eq("type", dedupType);
       q = orderId ? q.eq("order_id", orderId) : q.is("order_id", null);
       await q;
     };
@@ -106,14 +120,14 @@ Deno.serve(async (req) => {
     const { data: user } = await admin.from("users").select("email, full_name").eq("id", userId).single();
     if (!user?.email) { console.error("send-email: email yok"); await release(); return ok(); }
 
-    const tpl = await buildEmail(admin, type, user.full_name ?? "", data);
+    const tpl = await buildEmail(admin, type, user.full_name ?? "", data, isBaker);
     if (!tpl) { await release(); return ok(); }
 
     const res = await fetch(BREVO_URL, {
       method: "POST",
       headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
-        sender: { name: "Pastacım", email: "noreply@ipekciapp.com" },
+        sender: { name: isBaker ? "Pastacım Pro" : "Pastacım", email: "noreply@ipekciapp.com" },
         to: [{ email: user.email }],
         subject: tpl.subject,
         htmlContent: tpl.html,

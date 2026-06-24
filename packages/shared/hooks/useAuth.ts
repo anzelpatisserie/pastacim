@@ -4,9 +4,15 @@ import { Session, User } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import { sendAppEmail } from '../lib/notifications';
 import type { Database } from '../types/database.types';
+
+// Hangi app? Pastacım Pro (pastacı) scheme'i 'pastacim-pro' ile başlar.
+// (expo-constants scheme tipi string | string[] olabilir.)
+const _appScheme = Constants.expoConfig?.scheme;
+const IS_BAKER_APP = (Array.isArray(_appScheme) ? _appScheme[0] ?? '' : _appScheme ?? '').startsWith('pastacim-pro');
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -64,7 +70,7 @@ export function useAuth(): AuthState & AuthActions {
     // tarafında (sent_emails) tekilleştirilir — yani kullanıcı başına bir kez.
     // signUp anında session olmadığından (caller doğrulaması başarısız) burada
     // yapılıyor.
-    sendAppEmail(userId, 'welcome');
+    sendAppEmail(userId, 'welcome', { app: IS_BAKER_APP ? 'baker' : 'customer' });
     return true;
   }, []);
 
