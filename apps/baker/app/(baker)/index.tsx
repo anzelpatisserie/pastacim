@@ -509,8 +509,20 @@ export default function BakerHomeScreen() {
                       <Text style={[styles.miniPriceMuted, { color: C.placeholder }]}>₺{p.price}</Text>
                       <TouchableOpacity
                         onPress={() => {
-                          setInactiveOffers((prev) => prev.filter((o) => o.id !== p.id));
-                          _db.from('offers').update({ hidden_for_baker: true }).eq('id', p.id).then(() => {});
+                          Alert.alert(
+                            'Kaldır',
+                            'Bu teklifi listeden kaldırmak istiyor musun?',
+                            [
+                              { text: 'Vazgeç', style: 'cancel' },
+                              {
+                                text: 'Kaldır', style: 'destructive',
+                                onPress: () => {
+                                  setInactiveOffers((prev) => prev.filter((o) => o.id !== p.id));
+                                  _db.from('offers').update({ hidden_for_baker: true }).eq('id', p.id).then(() => {});
+                                },
+                              },
+                            ],
+                          );
                         }}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >

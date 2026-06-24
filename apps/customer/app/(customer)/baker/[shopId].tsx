@@ -29,7 +29,7 @@ function normalizeMapsUrl(url: string, name = ''): string {
 const _db: any = supabase;
 
 type Shop = Database['public']['Tables']['pastry_shops']['Row'] & {
-  owner?: { avatar_url: string | null; full_name: string | null; created_at: string | null } | null;
+  owner?: { avatar_url: string | null; full_name: string | null; created_at: string | null; phone: string | null } | null;
 };
 
 type Review = {
@@ -56,6 +56,8 @@ export default function CustomerBakerProfileScreen() {
   const [pendingOrderCount, setPendingOrderCount] = useState(0);
   const [ownerCreatedAt, setOwnerCreatedAt] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
+  // Pastacı bu müşteriye teklif verdiyse iletişim (telefon) gösterilir
+  const [canSeePhone, setCanSeePhone] = useState(false);
 
   const toggleReviews = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -69,7 +71,7 @@ export default function CustomerBakerProfileScreen() {
 
     // Dükkan bilgisi + sahip avatar + yorumlar paralel
     const [shopRes, revRes] = await Promise.all([
-      _db.from('pastry_shops').select('*, owner:users!user_id(avatar_url, full_name, created_at)').eq('id', shopId).single(),
+      _db.from('pastry_shops').select('*, owner:users!user_id(avatar_url, full_name, created_at, phone)').eq('id', shopId).single(),
       _db
         .from('reviews')
         .select('id, rating, comment, created_at, is_anonymous, customer:users!customer_id(full_name)')
@@ -117,6 +119,17 @@ export default function CustomerBakerProfileScreen() {
         ['accepted', 'in_progress', 'ready'].includes(o.order?.status ?? '')
     );
     setActiveOrderId(activeOffer?.order?.id ?? null);
+
+    // Bu pastacı bu müşteriye teklif verdiyse (pending/accepted) iletişim (telefon) görünür
+    const { data: myOffers } = await _db
+      .from('offers')
+      .select('id, order:orders!order_id(customer_id)')
+      .eq('shop_id', shopId)
+      .in('status', ['pending', 'accepted']);
+    const engaged = (myOffers ?? []).some(
+      (o: { order: { customer_id: string } | null }) => o.order?.customer_id === user.id,
+    );
+    setCanSeePhone(engaged);
 
     // Bu pastacıdan teklif bekleyen sipariş sayısı
     const { count } = await _db
@@ -286,6 +299,15 @@ export default function CustomerBakerProfileScreen() {
           {shop.address && (
             <Text style={[styles.address, { color: C.textSecondary }]}>📍 {shop.address}</Text>
           )}
+
+          {/* İletişim — yalnız bu pastacı bu müşteriye teklif verdiyse görünür */}
+          {canSeePhone && shop.owner?.phone ? (
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${shop.owner!.phone}`)}>
+              <Text style={[styles.address, { color: C.primary, fontWeight: '700' }]}>
+                📞 {shop.owner.phone}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Google Bilgileri */}
           {(shop.google_rating != null || (shop.google_review_count ?? 0) > 0 || shop.google_maps_url) && (

@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import { shopJustCreatedSignal } from './index';
 
@@ -99,6 +100,8 @@ export default function BakerSetupScreen() {
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
+  // Yeni geocode/konum gelince haritayı yeniden merkezle (drag'de DEĞİŞMEZ).
+  const [mapKey, setMapKey] = useState(0);
   const [isLocating, setIsLocating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +145,7 @@ export default function BakerSetupScreen() {
       const { latitude: lat, longitude: lng } = results[0];
       setLatitude(lat);
       setLongitude(lng);
+      setMapKey((k) => k + 1);
       Alert.alert('✅ Konum Belirlendi', `"${address.trim()}" adresi koordinatlara çevrildi.`);
     } catch {
       Alert.alert('Hata', 'Adres çevrilemedi. Mevcut konumu kullanmayı deneyin.');
@@ -161,6 +165,7 @@ export default function BakerSetupScreen() {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setLatitude(loc.coords.latitude);
       setLongitude(loc.coords.longitude);
+      setMapKey((k) => k + 1);
       try {
         const results = await Location.reverseGeocodeAsync({
           latitude: loc.coords.latitude,
@@ -353,6 +358,34 @@ export default function BakerSetupScreen() {
               <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>📍 Mevcut Konum</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Harita — konum belirlenince pin'le ince ayar */}
+          {latitude != null && longitude != null && (
+            <View style={{ marginTop: Spacing.sm }}>
+              <Text style={{ fontSize: FontSize.xs, color: C.textSecondary, marginBottom: 4 }}>
+                Pin'i basılı tutup sürükleyerek veya haritaya dokunarak konumunuzu tam ayarlayın
+              </Text>
+              <MapView
+                key={mapKey}
+                style={{ height: 200, borderRadius: Radius.md }}
+                provider={PROVIDER_DEFAULT}
+                initialRegion={{ latitude, longitude, latitudeDelta: 0.008, longitudeDelta: 0.008 }}
+                onPress={(e) => {
+                  setLatitude(e.nativeEvent.coordinate.latitude);
+                  setLongitude(e.nativeEvent.coordinate.longitude);
+                }}
+              >
+                <Marker
+                  draggable
+                  coordinate={{ latitude, longitude }}
+                  onDragEnd={(e) => {
+                    setLatitude(e.nativeEvent.coordinate.latitude);
+                    setLongitude(e.nativeEvent.coordinate.longitude);
+                  }}
+                />
+              </MapView>
+            </View>
+          )}
 
           {/* Çalışma Saatleri (opsiyonel) */}
           <Text style={[styles.label, { color: C.textSecondary, marginTop: Spacing.sm }]}>Çalışma Saatleri (opsiyonel)</Text>

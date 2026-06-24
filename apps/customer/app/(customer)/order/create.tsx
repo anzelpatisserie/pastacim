@@ -376,6 +376,8 @@ export default function CreateOrderScreen() {
             servingSize ? `${servingSize} kişilik` : null,
           ].filter(Boolean).join(' · ');
           bakers.forEach((baker) => {
+            // Sipariş sahibi aynı zamanda pastacıysa kendi siparişine bildirim gitmesin.
+            if (baker.user_id === user?.id) return;
             notifyUser({
               userId: baker.user_id,
               type:   'new_order',

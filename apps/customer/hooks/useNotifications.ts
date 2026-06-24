@@ -27,11 +27,15 @@ export function useNotifications(userId?: string) {
 
   // Badge sayısı + realtime
   const fetchUnread = useCallback(async (uid: string) => {
+    // Badge yalnız bu app'e ait (customer) + ortak (null) bildirimleri saysın —
+    // NotificationsScreen listesiyle aynı filtre. Aksi halde dual-rol hesapta baker
+    // bildirimleri müşteri badge'ini şişirir ve okunamadığı için düşmez.
     const { count } = await _db
       .from('notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', uid)
-      .eq('is_read', false);
+      .eq('is_read', false)
+      .or('target_role.is.null,target_role.eq.customer');
     setUnreadCount(count ?? 0);
   }, []);
 

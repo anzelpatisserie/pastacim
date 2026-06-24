@@ -31,7 +31,8 @@ export function useNotifications(userId?: string) {
       .from('notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', uid)
-      .eq('is_read', false);
+      .eq('is_read', false)
+      .or('target_role.is.null,target_role.eq.baker');
     setUnreadCount(count ?? 0);
   }, []);
 

@@ -65,11 +65,15 @@ export default function OrderDetailScreen() {
       const rows = (offerRes.data ?? []) as (AcceptedOffer & { status: string })[];
       setOfferCount(rows.length);
 
-      // Kabul edilen teklif
-      if (ord.selected_offer_id) {
-        const accepted = rows.find((r) => r.id === ord.selected_offer_id) ?? null;
-        setAcceptedOffer(accepted);
-      }
+      // Kabul edilen teklif — selected_offer_id yoksa MUTLAKA null'a sıfırla
+      // (ekran aynı rota olduğu için başka siparişin teklifi state'te kalıyordu).
+      const accepted = ord.selected_offer_id
+        ? (rows.find((r) => r.id === ord.selected_offer_id) ?? null)
+        : null;
+      setAcceptedOffer(accepted);
+    } else {
+      setOrder(null);
+      setAcceptedOffer(null);
     }
 
     setIsLoading(false);
