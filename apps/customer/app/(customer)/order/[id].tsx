@@ -27,7 +27,7 @@ type AcceptedOffer = {
   id: string;
   baker_id: string;
   price: number;
-  shop: { name: string; rating: number } | null;
+  shop: { id: string; name: string; rating: number } | null;
 };
 
 export default function OrderDetailScreen() {
@@ -58,7 +58,7 @@ export default function OrderDetailScreen() {
       // Teklif sayısı
       const offerRes = await _db
         .from('offers')
-        .select('id, baker_id, price, shop:pastry_shops!shop_id(name, rating)')
+        .select('id, baker_id, price, shop:pastry_shops!shop_id(id, name, rating)')
         .eq('order_id', id)
         .neq('status', 'rejected');
 
@@ -378,13 +378,21 @@ export default function OrderDetailScreen() {
         {hasAcceptedBaker && acceptedOffer && (
           <View style={[styles.bakerCard, { backgroundColor: C.card, borderColor: C.success + '55' }]}>
             <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>Pastacı</Text>
-            <View style={styles.bakerRow}>
+            <TouchableOpacity
+              style={styles.bakerRow}
+              activeOpacity={0.6}
+              disabled={!acceptedOffer.shop?.id}
+              onPress={() => acceptedOffer.shop?.id && router.push({
+                pathname: '/(customer)/baker/[shopId]',
+                params: { shopId: acceptedOffer.shop.id },
+              })}
+            >
               <View style={[styles.bakerAvatar, { backgroundColor: C.primary + '22' }]}>
                 <Text style={{ fontSize: 22 }}>🎂</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.bakerName, { color: C.text }]}>
-                  {acceptedOffer.shop?.name ?? 'Pastacı'}
+                  {acceptedOffer.shop?.name ?? 'Pastacı'} ›
                 </Text>
                 {(acceptedOffer.shop?.rating ?? 0) > 0 && (
                   <Text style={[styles.bakerRating, { color: C.textSecondary }]}>
@@ -393,7 +401,7 @@ export default function OrderDetailScreen() {
                 )}
               </View>
               <Text style={[styles.acceptedPrice, { color: C.primary }]}>₺{acceptedOffer.price}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         )}
 

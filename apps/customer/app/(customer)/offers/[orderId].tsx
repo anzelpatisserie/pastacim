@@ -333,9 +333,9 @@ function OfferCard({
         <View style={[styles.rankBadge, { backgroundColor: C.primary + '18', borderColor: C.primary + '44' }]}>
           <Text style={[styles.rankText, { color: C.primary }]}>{rank}.</Text>
         </View>
-        <View style={{ flex: 1 }}>
+        <TouchableOpacity style={{ flex: 1 }} onPress={onViewProfile} activeOpacity={0.6}>
           <Text style={[styles.shopName, { color: C.text }]} numberOfLines={1}>
-            {offer.shop?.name ?? 'Pastacı'}
+            {offer.shop?.name ?? 'Pastacı'} ›
           </Text>
           <View style={styles.metaLine}>
             {rating > 0 ? (
@@ -351,7 +351,7 @@ function OfferCard({
             <Text style={[styles.metaLineDot, { color: C.placeholder }]}>·</Text>
             <Text style={[styles.metaLinePrice, { color: C.primary }]}>₺{offer.price}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Süre */}
