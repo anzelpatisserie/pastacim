@@ -18,10 +18,14 @@ const _db: any = supabase;
 export function useNotifications(userId?: string) {
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Push token kaydı — sadece bir kez
+  // Push token kaydı — sadece bir kez.
+  // ÖNEMLİ: izin isteğini girişten 3 sn geciktir. New Architecture'da (bridgeless)
+  // Google OAuth tarayıcısından dönüşle bildirim izni dialogu ÜST ÜSTE gelince
+  // activity onResume'da context-not-ready NPE'si oluşup BEYAZ EKRANA düşüyordu.
   useEffect(() => {
     if (!userId) return;
-    registerForPush(userId);
+    const t = setTimeout(() => registerForPush(userId), 3000);
+    return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
