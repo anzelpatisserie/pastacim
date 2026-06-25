@@ -11,7 +11,6 @@ import {
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { makeRedirectUri } from 'expo-auth-session';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import { useThemeColors, ThemeColors, Spacing, Radius, FontSize, supabase } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
 
@@ -136,25 +135,23 @@ export default function OnboardingScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Apple ile devam et (yalnızca iOS) */}
+        {/* Apple ile devam et (yalnızca iOS) — çerçeve Google butonuyla aynı */}
         {Platform.OS === 'ios' && (
-          <View style={styles.appleBtnWrap}>
+          <TouchableOpacity
+            style={styles.googleBtn}
+            onPress={handleApple}
+            disabled={isAppleLoading}
+            activeOpacity={0.85}
+          >
             {isAppleLoading ? (
-              <ActivityIndicator color={C.text} />
+              <ActivityIndicator color="#1F1F1F" />
             ) : (
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                buttonStyle={
-                  C.background === '#FFFFFF' || C.background === '#FFF' || C.background === '#fff'
-                    ? AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-                    : AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                }
-                cornerRadius={Radius.full}
-                style={styles.appleBtn}
-                onPress={handleApple}
-              />
+              <>
+                <Text style={styles.appleBtnIcon}></Text>
+                <Text style={styles.googleBtnText}>Apple ile devam et</Text>
+              </>
             )}
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* E-posta ile devam et */}
@@ -316,12 +313,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F1F1F',
   },
-  appleBtnWrap: {
-    width: '100%',
-  },
-  appleBtn: {
-    width: '100%',
-    height: 50,
+  appleBtnIcon: {
+    fontSize: 22,
+    color: '#1F1F1F',
+    marginTop: -2,
   },
   emailBtn: {
     width: '100%',
