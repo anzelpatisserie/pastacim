@@ -13,7 +13,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import Constants from 'expo-constants';
-import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, FeedbackModal, TabHeader } from '@pastacim/shared';
+import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, FeedbackModal, TabHeader, openAddressInMaps } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 import type { Database } from '@pastacim/shared';
 
@@ -621,7 +621,12 @@ export default function BakerProfileScreen() {
                   </View>
                 </View>
                 {shop.address && (
-                  <Text style={[styles.shopAddress, { color: C.textSecondary }]}>📍 {shop.address}</Text>
+                  <TouchableOpacity
+                    onPress={() => openAddressInMaps(shop.address, shop.latitude, shop.longitude)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={[styles.shopAddress, { color: C.primary }]}>📍 {shop.address} ›</Text>
+                  </TouchableOpacity>
                 )}
 
                 {/* Google Bilgileri */}
