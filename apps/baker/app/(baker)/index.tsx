@@ -343,7 +343,7 @@ export default function BakerHomeScreen() {
         <Text style={[styles.filterLabel, { color: C.textSecondary }]}>
           📍 Arama:{' '}
           <Text style={{ color: C.primary, fontWeight: '700' }}>
-            {radiusKm >= 9999 ? 'Tümü' : `${radiusKm} km`}
+            {radiusKm >= 25000 ? 'Tümü' : `${radiusKm} km`}
           </Text>
         </Text>
         <View style={styles.radiusButtons}>
@@ -368,13 +368,13 @@ export default function BakerHomeScreen() {
             style={[
               styles.radiusBtn,
               {
-                backgroundColor: radiusKm >= 9999 ? C.primary : C.background,
-                borderColor: radiusKm >= 9999 ? C.primary : C.border,
+                backgroundColor: radiusKm >= 25000 ? C.primary : C.background,
+                borderColor: radiusKm >= 25000 ? C.primary : C.border,
               },
             ]}
-            onPress={() => setRadiusKm(9999)}
+            onPress={() => setRadiusKm(25000)}
           >
-            <Text style={[styles.radiusBtnText, { color: radiusKm >= 9999 ? '#FFF' : C.textSecondary }]}>
+            <Text style={[styles.radiusBtnText, { color: radiusKm >= 25000 ? '#FFF' : C.textSecondary }]}>
               🌍
             </Text>
           </TouchableOpacity>
