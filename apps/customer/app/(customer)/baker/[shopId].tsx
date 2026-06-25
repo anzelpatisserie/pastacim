@@ -14,7 +14,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
+import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal, openAddressInMaps } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 function normalizeMapsUrl(url: string, name = ''): string {
@@ -297,7 +297,12 @@ export default function CustomerBakerProfileScreen() {
             )}
           </View>
           {shop.address && (
-            <Text style={[styles.address, { color: C.textSecondary }]}>📍 {shop.address}</Text>
+            <TouchableOpacity
+              onPress={() => openAddressInMaps(shop.address, shop.latitude, shop.longitude)}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.address, { color: C.primary, fontWeight: '700' }]}>📍 {shop.address} ›</Text>
+            </TouchableOpacity>
           )}
 
           {/* İletişim — yalnız bu pastacı bu müşteriye teklif verdiyse görünür */}
