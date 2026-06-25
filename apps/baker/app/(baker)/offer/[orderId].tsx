@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyFromTemplate, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyFromTemplate, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps } from '@pastacim/shared';
 import type { Database, OrderOfferSummaryRow, CustomerSummary } from '@pastacim/shared';
 
 type Order = Database['public']['Tables']['orders']['Row'];
@@ -323,9 +323,11 @@ export default function MakeOfferScreen() {
                   {order.delivery_type === 'delivery' ? '🚚 Teslimat' : '🏪 Gel-Al'}
                 </Text>
                 {order.delivery_type === 'delivery' && order.delivery_address ? (
-                  <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.textSecondary }]}>
-                    📍 {order.delivery_address}
-                  </Text>
+                  <TouchableOpacity onPress={() => openAddressInMaps(order.delivery_address)} activeOpacity={0.6}>
+                    <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.primary }]}>
+                      📍 {order.delivery_address} ›
+                    </Text>
+                  </TouchableOpacity>
                 ) : null}
               </View>
             </View>
@@ -568,9 +570,11 @@ export default function MakeOfferScreen() {
                   {order.delivery_type === 'delivery' ? '🚚 Teslimat' : '🏪 Gel-Al'}
                 </Text>
                 {order.delivery_type === 'delivery' && order.delivery_address ? (
-                  <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.textSecondary }]}>
-                    📍 {order.delivery_address}
-                  </Text>
+                  <TouchableOpacity onPress={() => openAddressInMaps(order.delivery_address)} activeOpacity={0.6}>
+                    <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.primary }]}>
+                      📍 {order.delivery_address} ›
+                    </Text>
+                  </TouchableOpacity>
                 ) : null}
               </View>
             </View>

@@ -12,7 +12,7 @@ import {
 import { router, useFocusEffect, Redirect } from 'expo-router';
 import * as Location from 'expo-location';
 import { Alert } from 'react-native';
-import { supabase, rpcNearbyOrders, rpcWithdrawOffer, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, TabHeader } from '@pastacim/shared';
+import { supabase, rpcNearbyOrders, rpcWithdrawOffer, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, TabHeader, openAddressInMaps } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -682,11 +682,15 @@ function RequestCard({
           </View>
         )}
         {order.delivery_address && (
-          <View style={[styles.metaChip, { backgroundColor: C.background }]}>
-            <Text style={[styles.metaChipText, { color: C.textSecondary }]} numberOfLines={1}>
-              📍 {order.delivery_address.length > 30 ? order.delivery_address.substring(0, 30) + '…' : order.delivery_address}
+          <TouchableOpacity
+            style={[styles.metaChip, { backgroundColor: C.background }]}
+            onPress={() => openAddressInMaps(order.delivery_address)}
+            activeOpacity={0.6}
+          >
+            <Text style={[styles.metaChipText, { color: C.primary }]} numberOfLines={1}>
+              📍 {order.delivery_address.length > 26 ? order.delivery_address.substring(0, 26) + '…' : order.delivery_address} ›
             </Text>
-          </View>
+          </TouchableOpacity>
         )}
         {order.created_at && (
           <View style={[styles.metaChip, { backgroundColor: C.background }]}>

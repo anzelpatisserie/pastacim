@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
+import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal, openAddressInMaps } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -362,10 +362,14 @@ export default function OrderDetailScreen() {
               </Text>
             </View>
             {order.delivery_type === 'delivery' && order.delivery_address ? (
-              <View style={[styles.metaItem, { backgroundColor: C.background }]}>
+              <TouchableOpacity
+                style={[styles.metaItem, { backgroundColor: C.background }]}
+                onPress={() => openAddressInMaps(order.delivery_address, order.delivery_latitude ?? order.latitude, order.delivery_longitude ?? order.longitude)}
+                activeOpacity={0.6}
+              >
                 <Text style={styles.metaEmoji}>📍</Text>
-                <Text style={[styles.metaValue, { color: C.text }]}>{order.delivery_address}</Text>
-              </View>
+                <Text style={[styles.metaValue, { color: C.primary }]}>{order.delivery_address} ›</Text>
+              </TouchableOpacity>
             ) : null}
             {order.created_at ? (
               <View style={[styles.metaItem, { backgroundColor: C.background }]}>

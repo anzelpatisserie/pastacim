@@ -45,6 +45,9 @@ export {
 } from './lib/notifications';
 export type { NotificationRole } from './lib/notifications';
 
+// Maps
+export { openAddressInMaps } from './lib/maps';
+
 // Auth hook
 export { useAuth } from './hooks/useAuth';
 
