@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList,
+  View, Text, StyleSheet, FlatList, Linking,
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -10,7 +10,7 @@ import { useNotifications } from '../../hooks/useNotifications';
 
 type Offer = Database['public']['Tables']['offers']['Row'] & {
   order: (Database['public']['Tables']['orders']['Row'] & {
-    customer: { id: string; full_name: string | null } | null;
+    customer: { id: string; full_name: string | null; phone: string | null } | null;
   }) | null;
 };
 
@@ -54,7 +54,7 @@ export default function BakerMyOrdersScreen() {
           *,
           order:orders!order_id(
             *,
-            customer:users!customer_id(id, full_name)
+            customer:users!customer_id(id, full_name, phone)
           )
         `)
         .eq('baker_id', user.id)
@@ -323,6 +323,13 @@ function OfferOrderCard({
           👤 {offer.order.customer.full_name}
         </Text>
       )}
+      {offer.order?.customer?.phone ? (
+        <TouchableOpacity onPress={() => Linking.openURL(`tel:${offer.order!.customer!.phone}`)} activeOpacity={0.6}>
+          <Text style={[styles.customer, { color: C.primary, fontWeight: '700' }]}>
+            📞 {offer.order.customer.phone}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.metaRow}>
         {offer.order?.serving_size && (
