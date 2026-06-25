@@ -94,9 +94,10 @@ const DEFAULT_HOURS: WorkingHours = DAY_KEYS.reduce((acc, d) => {
 
 export default function BakerSetupScreen() {
   const C = useThemeColors();
-  const { refreshProfile } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
@@ -259,6 +260,11 @@ export default function BakerSetupScreen() {
         return;
       }
 
+      // Cep telefonu (opsiyonel) → users.phone (müşteriler teklif sonrası görebilsin)
+      if (phone.trim() && user?.id) {
+        await supabase.from('users').update({ phone: phone.trim() }).eq('id', user.id);
+      }
+
       await refreshProfile();
       // index'e: dükkan oluşturuldu, redirect latch'ini sıfırla ve 'exists'e geçecek
       // taze sorgu yap (aksi halde stale 'none' setup'a geri yönlendirir).
@@ -317,6 +323,17 @@ export default function BakerSetupScreen() {
             multiline
             numberOfLines={3}
             textAlignVertical="top"
+          />
+
+          <Text style={[styles.label, { color: C.textSecondary }]}>Cep Telefonu (opsiyonel)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: C.card, borderColor: C.border, color: C.text }]}
+            placeholder="05XX XXX XX XX"
+            placeholderTextColor={C.placeholder}
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            maxLength={20}
           />
 
           <Text style={[styles.label, { color: C.textSecondary }]}>Adres *</Text>
