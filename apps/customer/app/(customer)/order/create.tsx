@@ -589,7 +589,7 @@ export default function CreateOrderScreen() {
           </View>
 
 
-          {/* Teslimat Adresi */}
+          {/* Teslimat Adresi — yalnız adrese teslim */}
           {deliveryType === 'delivery' && (
             <View style={styles.field}>
               <Text style={[styles.label, { color: C.text }]}>Teslimat Adresi</Text>
@@ -601,7 +601,16 @@ export default function CreateOrderScreen() {
                 onChangeText={setDeliveryAddress}
                 maxLength={200}
               />
-              <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+            </View>
+          )}
+
+          {/* Konum — HER İKİ teslimat türü için (yakın pastacı eşleşmesi) */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: C.text }]}>
+              {deliveryType === 'delivery' ? 'Konum' : 'Konumunuz'}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+              {deliveryType === 'delivery' && (
                 <TouchableOpacity
                   style={[styles.locationBtn, { flex: 1, backgroundColor: C.primary + '15', borderColor: C.primary + '44' }]}
                   onPress={handleGeocodeAddress}
@@ -613,23 +622,29 @@ export default function CreateOrderScreen() {
                     <Text style={[styles.locationBtnText, { color: C.primary }]}>🔍 Adresi Doğrula</Text>
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.locationBtn, { flex: 1, backgroundColor: C.card, borderColor: C.border }]}
-                  onPress={handleUseCurrentLocation}
-                  disabled={isLocating}
-                >
-                  <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>📍 Mevcut Konum</Text>
-                </TouchableOpacity>
-              </View>
-              {locationLabel ? (
-                <Text style={{ fontSize: FontSize.xs, color: C.success, marginTop: 2 }}>{locationLabel}</Text>
-              ) : (
-                <Text style={{ fontSize: FontSize.xs, color: C.textSecondary, marginTop: 2 }}>
-                  Doğru pastacılarla eşleşmeniz için konumunuzu onaylayın.
-                </Text>
               )}
+              <TouchableOpacity
+                style={[styles.locationBtn, { flex: 1, backgroundColor: C.card, borderColor: C.border }]}
+                onPress={handleUseCurrentLocation}
+                disabled={isLocating}
+              >
+                {isLocating && deliveryType !== 'delivery' ? (
+                  <ActivityIndicator size="small" color={C.textSecondary} />
+                ) : (
+                  <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>📍 Mevcut Konum</Text>
+                )}
+              </TouchableOpacity>
             </View>
-          )}
+            {locationLabel ? (
+              <Text style={{ fontSize: FontSize.xs, color: C.success, marginTop: 2 }}>{locationLabel}</Text>
+            ) : (
+              <Text style={{ fontSize: FontSize.xs, color: C.textSecondary, marginTop: 2 }}>
+                {deliveryType === 'delivery'
+                  ? 'Doğru pastacılarla eşleşmeniz için konumunuzu onaylayın.'
+                  : 'Yakındaki pastacılarla eşleşmeniz için konumunuzu seçin (📍 Mevcut Konum).'}
+              </Text>
+            )}
+          </View>
 
           {/* Konum Onay Modalı (harita + pin) */}
           <LocationConfirmModal
