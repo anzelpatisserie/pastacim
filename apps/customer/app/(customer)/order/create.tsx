@@ -900,6 +900,8 @@ function LocationConfirmModal({
             key={point ? `${point.lat},${point.lng}` : 'map'}
             style={confirmStyles.map}
             provider={PROVIDER_DEFAULT}
+            zoomControlEnabled
+            zoomEnabled
             initialRegion={{
               latitude: pin.lat,
               longitude: pin.lng,

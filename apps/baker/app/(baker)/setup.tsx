@@ -386,6 +386,8 @@ export default function BakerSetupScreen() {
                 key={mapKey}
                 style={{ height: 200, borderRadius: Radius.md }}
                 provider={PROVIDER_DEFAULT}
+                zoomControlEnabled
+                zoomEnabled
                 initialRegion={{ latitude, longitude, latitudeDelta: 0.008, longitudeDelta: 0.008 }}
                 onPress={(e) => {
                   setLatitude(e.nativeEvent.coordinate.latitude);
