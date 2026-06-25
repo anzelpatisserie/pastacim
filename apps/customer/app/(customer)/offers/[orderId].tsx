@@ -115,7 +115,7 @@ export default function OffersScreen() {
               .filter((o) => o.id !== offer.id && o.baker_id !== offer.baker_id && o.status === 'pending')
               .forEach(async (rejected) => {
                 try {
-                  const token = await getUserPushToken(rejected.baker_id);
+                  const token = await getUserPushToken(rejected.baker_id, 'baker');
                   if (token) {
                     await sendPushNotification({
                       token,

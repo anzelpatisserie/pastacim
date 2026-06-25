@@ -81,14 +81,21 @@ export function navigateFromNotification(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
 
-/** Bir kullanıcının push token'ını DB'den al */
-export async function getUserPushToken(userId: string): Promise<string | null> {
+/**
+ * Bir kullanıcının push token'ını al. role verilirse o APP'in token'ı döner
+ * (yoksa legacy push_token'a düşer) — dual-rol kullanıcı doğru app'te push alsın.
+ */
+export async function getUserPushToken(userId: string, role?: NotificationRole): Promise<string | null> {
   const { data } = await _db
     .from('users')
-    .select('push_token')
+    .select('push_token, customer_push_token, baker_push_token')
     .eq('id', userId)
     .single();
-  return (data as { push_token: string | null } | null)?.push_token ?? null;
+  const u = data as { push_token: string | null; customer_push_token: string | null; baker_push_token: string | null } | null;
+  if (!u) return null;
+  if (role === 'customer') return u.customer_push_token ?? u.push_token ?? null;
+  if (role === 'baker') return u.baker_push_token ?? u.push_token ?? null;
+  return u.push_token ?? null;
 }
 
 /** Expo Push API'ye bildirim gönder */
@@ -153,17 +160,22 @@ export async function notifyUser(params: {
     });
   }
 
-  // 2. Push notification (async, hata yakala)
+  // 2. Push notification — targetRole varsa O APP'in token'ına, yoksa her iki app'e.
   try {
-    const token = await getUserPushToken(params.userId);
-    if (token) {
-      await sendPushNotification({
-        token,
-        title: params.title,
-        body: params.body,
-        // type'ı data içine göm → OS listener navigateFromNotification'ı çağırabilsin
-        data: { type: params.type, ...(params.data ?? {}) },
-      });
+    let tokens: string[];
+    if (params.targetRole) {
+      const t = await getUserPushToken(params.userId, params.targetRole);
+      tokens = t ? [t] : [];
+    } else {
+      const [c, b] = await Promise.all([
+        getUserPushToken(params.userId, 'customer'),
+        getUserPushToken(params.userId, 'baker'),
+      ]);
+      tokens = [...new Set([c, b].filter((x): x is string => !!x))];
+    }
+    const pushData = { type: params.type, ...(params.data ?? {}) };
+    for (const token of tokens) {
+      await sendPushNotification({ token, title: params.title, body: params.body, data: pushData });
     }
   } catch {
     // push başarısız olsa da devam et

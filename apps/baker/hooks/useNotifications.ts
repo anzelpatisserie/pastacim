@@ -122,7 +122,7 @@ async function registerForPush(uid: string) {
 
     const result = await Notifications.getExpoPushTokenAsync({ projectId });
     // SECURITY DEFINER RPC: aynı token başka kullanıcıda varsa önce temizler
-    await _db.rpc('register_push_token', { p_token: result.data });
+    await _db.rpc('register_push_token', { p_token: result.data, p_app: 'baker' });
     console.log('[Push] Token kaydedildi:', result.data);
   } catch (err) {
     console.warn('[Push] Token alınamadı:', err);
