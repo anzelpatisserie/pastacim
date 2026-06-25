@@ -65,20 +65,18 @@ export default function MakeOfferScreen() {
       .in('status', ['pending', 'accepted'])
       .limit(1);
     const myActiveOffer = offerRes.data && offerRes.data.length > 0 ? offerRes.data[0] : null;
-    if (myActiveOffer) {
-      setAlreadyOffered(true);
-      setMyOfferMessage((myActiveOffer.message as string | null) ?? null);
-    }
+    // KOŞULSUZ sıfırla — ekran (gizli tab) yeniden kullanıldığı için, teklif geri
+    // çekilince (silinince) eski 'mevcut' durumu state'te kalıyordu.
+    setAlreadyOffered(!!myActiveOffer);
+    setMyOfferMessage(myActiveOffer ? ((myActiveOffer.message as string | null) ?? null) : null);
 
     // Sipariş kapalı sayılır:
     // - status pending/offers_received DEĞİL VE
     // - baker'ın kabul edilmiş teklifi yok (yani başkasının teklifi kabul edilmiş)
-    if (orderRes.data && !['pending', 'offers_received'].includes(orderRes.data.status)) {
-      const isMyAcceptedOrder = myActiveOffer?.status === 'accepted';
-      if (!isMyAcceptedOrder) {
-        setOrderClosed(true);
-      }
-    }
+    const closed = !!(orderRes.data
+      && !['pending', 'offers_received'].includes(orderRes.data.status)
+      && myActiveOffer?.status !== 'accepted');
+    setOrderClosed(closed);
 
     // Bu siparişe verilmiş diğer tekliflerin özetini al (rakip teklifleri görmek için)
     const { data: summary } = await rpcGetOrderOfferSummary(orderId);
