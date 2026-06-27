@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       email_campaigns: {
@@ -683,7 +708,9 @@ export type Database = {
       users: {
         Row: {
           avatar_url: string | null
+          baker_push_token: string | null
           created_at: string
+          customer_push_token: string | null
           email: string | null
           email_opt_out: boolean
           email_unsub_token: string
@@ -700,7 +727,9 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          baker_push_token?: string | null
           created_at?: string
+          customer_push_token?: string | null
           email?: string | null
           email_opt_out?: boolean
           email_unsub_token?: string
@@ -717,7 +746,9 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          baker_push_token?: string | null
           created_at?: string
+          customer_push_token?: string | null
           email?: string | null
           email_opt_out?: boolean
           email_unsub_token?: string
@@ -823,8 +854,21 @@ export type Database = {
     }
     Functions: {
       accept_offer: { Args: { p_offer_id: string }; Returns: Json }
-      add_wallet_balance: {
-        Args: { p_amount: number }
+      add_wallet_balance:
+        | {
+            Args: { p_amount: number }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.add_wallet_balance(p_amount => int4), public.add_wallet_balance(p_amount => numeric). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+        | {
+            Args: { p_amount: number }
+            Returns: {
+              error: true
+            } & "Could not choose the best candidate function between: public.add_wallet_balance(p_amount => int4), public.add_wallet_balance(p_amount => numeric). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+          }
+      admin_ban_user: {
+        Args: { p_ban: boolean; p_user_id: string }
         Returns: Json
       }
       admin_broadcast: {
@@ -844,6 +888,15 @@ export type Database = {
       admin_delete_order: { Args: { p_order_id: string }; Returns: undefined }
       admin_delete_shop: { Args: { p_user_id: string }; Returns: undefined }
       admin_delete_user: { Args: { p_user_id: string }; Returns: undefined }
+      admin_get_report_messages: {
+        Args: { p_user_a: string; p_user_b: string }
+        Returns: {
+          content: string
+          created_at: string
+          id: string
+          sender_id: string
+        }[]
+      }
       admin_get_stats: {
         Args: never
         Returns: {
@@ -883,6 +936,10 @@ export type Database = {
       }
       admin_set_email_opt_out: {
         Args: { p_opt_out: boolean; p_user_id: string }
+        Returns: Json
+      }
+      admin_set_report_status: {
+        Args: { p_id: string; p_status: string }
         Returns: Json
       }
       admin_set_shop_active: {
@@ -953,6 +1010,16 @@ export type Database = {
         Returns: undefined
       }
       earth: { Args: never; Returns: number }
+      file_report: {
+        Args: {
+          p_app_name: string
+          p_details: string
+          p_reason: string
+          p_target_id: string
+          p_target_type: string
+        }
+        Returns: Json
+      }
       get_conversations: {
         Args: never
         Returns: {
@@ -986,6 +1053,12 @@ export type Database = {
           sent_count: number
           subject: string
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "email_campaigns"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_email_subscribers: {
         Args: { p_app: string }
@@ -1007,6 +1080,12 @@ export type Database = {
           subject: string
           updated_at: string
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "email_templates"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_notification_campaigns: {
         Args: never
@@ -1021,6 +1100,12 @@ export type Database = {
           sent_count: number
           title: string
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "notification_campaigns"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_notification_templates: {
         Args: never
@@ -1032,6 +1117,12 @@ export type Database = {
           title: string
           updated_at: string
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "notification_templates"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_order_offer_summary: {
         Args: { p_order_id: string }
@@ -1040,6 +1131,26 @@ export type Database = {
           price: number
           shop_rating: number
           shop_review_count: number
+        }[]
+      }
+      get_reports: {
+        Args: never
+        Returns: {
+          app_name: string
+          created_at: string
+          details: string
+          id: string
+          reason: string
+          reported_banned: boolean
+          reported_user_email: string
+          reported_user_id: string
+          reported_user_name: string
+          reporter_email: string
+          reporter_id: string
+          reporter_name: string
+          status: string
+          target_id: string
+          target_type: string
         }[]
       }
       get_user_auth_provider: { Args: { p_email: string }; Returns: string }
@@ -1084,6 +1195,15 @@ export type Database = {
           title: string
         }[]
       }
+      notify_new_message: {
+        Args: {
+          p_preview: string
+          p_receiver_id: string
+          p_sender_id: string
+          p_target_role: string
+        }
+        Returns: undefined
+      }
       place_order:
         | {
             Args: {
@@ -1119,7 +1239,9 @@ export type Database = {
             }
             Returns: Json
           }
-      register_push_token: { Args: { p_token: string }; Returns: undefined }
+      register_push_token:
+        | { Args: { p_token: string }; Returns: undefined }
+        | { Args: { p_app: string; p_token: string }; Returns: undefined }
       reject_offer: { Args: { p_offer_id: string }; Returns: Json }
       request_wallet_top_up: {
         Args: { p_amount: number; p_note?: string }
@@ -1290,6 +1412,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       delivery_type: ["delivery", "pickup"],
