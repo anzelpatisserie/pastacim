@@ -1,3 +1,7 @@
+// expo-router ESM jest-expo transform'unda patlıyor; useAuth → notifications.ts
+// zinciri router'ı import ettiği için mock'la (pre-existing).
+jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn(), replace: jest.fn() } }));
+
 // Mock Supabase before imports
 jest.mock('../lib/supabase', () => ({
   supabase: {
