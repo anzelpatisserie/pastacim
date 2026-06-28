@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyUser, notifyNewMessage, rpcGetCustomerSummaryForBaker, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
+import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyNewMessage, rpcGetCustomerSummaryForBaker, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
 import type { Database, CustomerSummary } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -310,13 +310,11 @@ export default function MessagesScreen() {
 
       if (msgError) throw new Error(msgError.message);
 
-      notifyUser({
-        userId: otherUserId,
-        type:  'new_message',
-        inApp: false,
-        title: '📷 Yeni Görsel',
-        body:  'Bir resim gönderildi',
-        data:  { senderId: user.id },
+      notifyNewMessage({
+        receiverId: otherUserId,
+        senderId:   user.id,
+        targetRole: 'customer',
+        preview:    '📷 Fotoğraf',
       }).catch(() => {});
 
     } catch (err) {
@@ -396,10 +394,17 @@ export default function MessagesScreen() {
     setCustomerSummary(null);
     setIsLoadingCustomer(true);
     setShowCustomerModal(true);
-    const { data } = await rpcGetCustomerSummaryForBaker(sendOrderId);
-    if (mountedRef.current) {
-      setCustomerSummary(data);
-      setIsLoadingCustomer(false);
+    try {
+      const { data } = await rpcGetCustomerSummaryForBaker(sendOrderId);
+      if (mountedRef.current) {
+        setCustomerSummary(data);
+      }
+    } catch {
+      // hata durumunda modal boş kalır, "yüklenemedi" mesajı gösterilir
+    } finally {
+      if (mountedRef.current) {
+        setIsLoadingCustomer(false);
+      }
     }
   };
 
@@ -637,7 +642,7 @@ export default function MessagesScreen() {
         animationType="fade"
         onRequestClose={() => setShowCustomerModal(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowCustomerModal(false)}>
+        <Pressable style={styles.custModalOverlay} onPress={() => setShowCustomerModal(false)}>
           <Pressable style={[styles.custModalCard, { backgroundColor: C.card }]} onPress={() => {}}>
             <Text style={[styles.custModalLabel, { color: C.textSecondary }]}>Müşteri Profili</Text>
             {isLoadingCustomer ? (
@@ -768,6 +773,8 @@ const styles = StyleSheet.create({
   sendBtnIcon: { color: '#FFF', fontSize: 20, fontWeight: '700', marginTop: -2 },
   // Tam ekran görsel
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', alignItems: 'center', justifyContent: 'center' },
+  // Müşteri özet modalı arka planı (daha açık)
+  custModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   modalImage: { width: '100%', height: '85%' },
   modalCloseBtn: {
     position: 'absolute', top: 52, right: 20,
