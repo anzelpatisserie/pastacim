@@ -10,7 +10,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { useFocusEffect } from 'expo-router';
-import { supabase } from '@pastacim/shared';
+import { supabase, fetchUnreadBadgeCount, setAppBadge } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -60,15 +60,22 @@ export function useNotifications(userId?: string) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-        () => fetchUnread(userId),
+        () => {
+          fetchUnread(userId);
+          fetchUnreadBadgeCount(userId, 'customer').then(setAppBadge).catch(() => {});
+        },
       )
       .subscribe();
 
     channelRef.current = channel;
 
+    // İlk yüklemede uygulama rozeti de ayarla
+    fetchUnreadBadgeCount(userId, 'customer').then(setAppBadge).catch(() => {});
+
     return () => {
       supabase.removeChannel(channel);
       channelRef.current = null;
+      setAppBadge(0);
     };
   }, [userId, fetchUnread]);
 
@@ -127,6 +134,8 @@ async function registerForPush(uid: string) {
     // SECURITY DEFINER RPC: aynı token başka kullanıcıda varsa önce temizler
     await _db.rpc('register_push_token', { p_token: result.data, p_app: 'customer' });
     console.log('[Push] Token kaydedildi:', result.data);
+    // Token kaydından sonra uygulama rozeti güncelle
+    fetchUnreadBadgeCount(uid, 'customer').then(setAppBadge).catch(() => {});
   } catch (err) {
     // Simülatörde push token alınamaz — normal
     console.warn('[Push] Token alınamadı:', err);

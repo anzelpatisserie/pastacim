@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
+import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyNewMessage, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +38,8 @@ export default function MessagesScreen() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<MessageWithOrder[]>([]);
   const [otherUserName, setOtherUserName] = useState('');
+  const [shopId, setShopId] = useState<string | null>(null);
+  const [shopName, setShopName] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -85,6 +87,20 @@ export default function MessagesScreen() {
         if (!mountedRef.current) return;
         if (data?.full_name) setOtherUserName(data.full_name);
       });
+  }, [otherUserId]);
+
+  // Pastacının dükkan adı (header için)
+  useEffect(() => {
+    if (!otherUserId) return;
+    _db.from('pastry_shops').select('id, name').eq('user_id', otherUserId).maybeSingle()
+      .then(({ data }: { data: { id: string; name: string } | null }) => {
+        if (!mountedRef.current) return;
+        if (data) {
+          setShopId(data.id);
+          setShopName(data.name);
+        }
+      })
+      .catch(() => {});
   }, [otherUserId]);
 
   // Tüm mesajları yükle (kişi bazlı — tüm siparişler dahil)
@@ -218,13 +234,11 @@ export default function MessagesScreen() {
     setIsSending(false);
     if (error) { setInputText(text); return; }
 
-    notifyUser({
-      userId: otherUserId,
-      type:  'new_message',
-      inApp: false,
-      title: '💬 Yeni Mesaj',
-      body:  text.length > 60 ? text.slice(0, 57) + '…' : text,
-      data:  { senderId: user.id },
+    notifyNewMessage({
+      receiverId: otherUserId,
+      senderId:   user.id,
+      targetRole: 'baker',
+      preview:    text.length > 60 ? text.slice(0, 57) + '…' : text,
     }).catch(() => {});
   };
 
@@ -309,13 +323,11 @@ export default function MessagesScreen() {
 
       if (msgError) throw new Error(msgError.message);
 
-      notifyUser({
-        userId: otherUserId,
-        type:  'new_message',
-        inApp: false,
-        title: '📷 Yeni Görsel',
-        body:  'Bir resim gönderildi',
-        data:  { senderId: user.id },
+      notifyNewMessage({
+        receiverId: otherUserId,
+        senderId:   user.id,
+        targetRole: 'baker',
+        preview:    '📷 Fotoğraf',
       }).catch(() => {});
 
     } catch (err) {
@@ -391,21 +403,29 @@ export default function MessagesScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
 
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.border, backgroundColor: C.card }]}>
           <TouchableOpacity onPress={() => { Keyboard.dismiss(); router.back(); }}>
             <Text style={[styles.backText, { color: C.primary }]}>←</Text>
           </TouchableOpacity>
-          <View style={styles.headerCenter}>
+          <TouchableOpacity
+            style={styles.headerCenter}
+            onPress={() => { if (shopId) router.push(`/(customer)/baker/${shopId}`); }}
+            disabled={!shopId}
+            activeOpacity={shopId ? 0.7 : 1}
+          >
             <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
-              <Text style={styles.avatarEmoji}>👤</Text>
+              <Text style={styles.avatarEmoji}>🏪</Text>
             </View>
-            <Text style={[styles.headerName, { color: C.text }]}>
-              {otherUserName || 'Kullanıcı'}
+            <Text style={[styles.headerName, { color: C.text, textDecorationLine: shopId ? 'underline' : 'none' }]}>
+              {(shopName ?? otherUserName) || 'Kullanıcı'}
             </Text>
-          </View>
+            {shopId ? (
+              <Text style={{ color: C.primary, fontSize: 16, fontWeight: '600' }}>›</Text>
+            ) : null}
+          </TouchableOpacity>
           <View style={styles.headerActions}>
             <TouchableOpacity
               style={styles.deleteConvBtn}
