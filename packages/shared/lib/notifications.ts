@@ -290,6 +290,7 @@ export async function fileReport(params: {
   reason: string;
   details?: string;
   appName: string;
+  imageUrl?: string;
 }): Promise<{ reportId: string | null }> {
   try {
     const { data } = await _db.rpc('file_report', {
@@ -298,6 +299,7 @@ export async function fileReport(params: {
       p_reason:      params.reason,
       p_details:     params.details ?? null,
       p_app_name:    params.appName,
+      p_image_url:   params.imageUrl ?? null,
     });
     const res = data as { report_id: string | null } | null;
     return { reportId: res?.report_id ?? null };

@@ -541,6 +541,7 @@ export type Database = {
           created_at: string
           details: string | null
           id: string
+          image_url: string | null
           reason: string
           reporter_id: string
           status: string
@@ -552,6 +553,7 @@ export type Database = {
           created_at?: string
           details?: string | null
           id?: string
+          image_url?: string | null
           reason: string
           reporter_id: string
           status?: string
@@ -563,6 +565,7 @@ export type Database = {
           created_at?: string
           details?: string | null
           id?: string
+          image_url?: string | null
           reason?: string
           reporter_id?: string
           status?: string
@@ -1014,6 +1017,7 @@ export type Database = {
         Args: {
           p_app_name: string
           p_details: string
+          p_image_url?: string
           p_reason: string
           p_target_id: string
           p_target_type: string

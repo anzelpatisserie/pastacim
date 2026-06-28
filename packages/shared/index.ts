@@ -49,6 +49,7 @@ export type { NotificationRole } from './lib/notifications';
 
 // Badge
 export { computeBadgeCount, setAppBadge, fetchUnreadBadgeCount } from './lib/badge';
+export { safeAvatarUri } from './lib/avatar';
 
 // Maps
 export { openAddressInMaps } from './lib/maps';
