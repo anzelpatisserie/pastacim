@@ -47,6 +47,9 @@ export {
 } from './lib/notifications';
 export type { NotificationRole } from './lib/notifications';
 
+// Badge
+export { computeBadgeCount, setAppBadge, fetchUnreadBadgeCount } from './lib/badge';
+
 // Maps
 export { openAddressInMaps } from './lib/maps';
 
