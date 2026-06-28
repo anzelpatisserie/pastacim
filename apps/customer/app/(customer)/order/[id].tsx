@@ -421,8 +421,8 @@ export default function OrderDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Pastacıya Mesaj */}
-          {hasAcceptedBaker && acceptedOffer && (
+          {/* Pastacıya Mesaj — yalnızca sohbet açıkken (aktif sipariş); tamamlanan/iptal'de gizli */}
+          {hasAcceptedBaker && acceptedOffer && ['accepted', 'in_progress', 'ready'].includes(order.status) && (
             <TouchableOpacity
               style={[styles.btnOutline, { borderColor: C.primary + '66', backgroundColor: C.primary + '12' }]}
               onPress={() => router.push({

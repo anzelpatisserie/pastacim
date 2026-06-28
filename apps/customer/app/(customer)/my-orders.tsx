@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
   },
   completeBtnText: { color: '#FFF', fontSize: FontSize.xs, fontWeight: '700' },
   deleteBtn: {
-    marginTop: 2, paddingVertical: 7,
+    marginTop: Spacing.sm, paddingVertical: 7,
     borderRadius: Radius.sm, borderWidth: 1, alignItems: 'center',
   },
   deleteBtnText: { fontSize: FontSize.xs, fontWeight: '600' },

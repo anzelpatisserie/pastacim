@@ -403,7 +403,11 @@ export default function MessagesScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
 
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.border, backgroundColor: C.card }]}>

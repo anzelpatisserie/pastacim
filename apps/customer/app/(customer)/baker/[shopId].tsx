@@ -2,7 +2,7 @@
  * Müşteri → Pastacı Profil Sayfası
  * Keşfet ekranından bir pastacıya tıklanınca açılır.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, Image, RefreshControl, Linking,
@@ -146,6 +146,13 @@ export default function CustomerBakerProfileScreen() {
     loadOrderState();
   }, [loadData, loadOrderState]));
 
+  // loadData kimliği useAuth dalgalanmasıyla değişebildiğinden realtime effect'ini
+  // YALNIZCA shopId'ye bağlıyoruz; loadData'yı ref ile güncel tutuyoruz. Aksi halde
+  // effect tekrar çalışıp aynı topic'li kanala subscribe sonrası .on() ekleniyor →
+  // "cannot add postgres_changes after subscribe()" crash'i.
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
+
   // Realtime: yorum eklenince veya puan değişince anında güncelle
   useEffect(() => {
     if (!shopId) return;
@@ -155,7 +162,7 @@ export default function CustomerBakerProfileScreen() {
       // Yeni yorum
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'reviews', filter: `shop_id=eq.${shopId}` },
-        () => { loadData(); }
+        () => { loadDataRef.current(); }
       )
       // Puan güncellendi (trigger)
       .on('postgres_changes',
@@ -168,7 +175,7 @@ export default function CustomerBakerProfileScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [shopId, loadData]);
+  }, [shopId]);
 
   if (isLoading) {
     return (

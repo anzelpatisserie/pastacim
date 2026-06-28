@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,8 +15,8 @@ import { Alert } from 'react-native';
 import { supabase, rpcNearbyOrders, rpcWithdrawOffer, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, TabHeader, openAddressInMaps } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
-import { ActiveOrderCard, isActiveOffer } from './_components/ActiveOrderCard';
-import type { ActiveOffer } from './_components/ActiveOrderCard';
+import { ActiveOrderCard, isActiveOffer } from '../../components/ActiveOrderCard';
+import type { ActiveOffer } from '../../components/ActiveOrderCard';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -329,26 +329,29 @@ export default function BakerHomeScreen() {
   useEffect(() => { fetchAcceptedOffers(); }, [fetchAcceptedOffers]);
   useFocusEffect(useCallback(() => { fetchAcceptedOffers(); }, [fetchAcceptedOffers]));
 
+  // Refetch fonksiyonlarını ref ile güncel tut: realtime effect'i SADECE user.id'ye
+  // bağlı kalsın. Aksi halde fetch* callback'lerinin kimliği (useAuth dalgalanması)
+  // değişince effect tekrar çalışıp kanal sürekli kurulup yıkılıyor (churn) →
+  // event'ler kaçıyor (tamamlanan sipariş canlı güncellenmiyor) + re-subscribe crash riski.
+  const refetchRef = useRef({ fetchOrders, fetchMyOffers, fetchAcceptedOffers });
+  refetchRef.current = { fetchOrders, fetchMyOffers, fetchAcceptedOffers };
+
   // Realtime: kendi tekliflerim ve siparişler değişince listeyi tazele.
   // NOT: DELETE event'lerinin baker_id filtresiyle düşmesi REPLICA IDENTITY FULL
   // gerektirir; bu yüzden offers tablosunu filtresiz dinleyip refetch ediyoruz.
   useEffect(() => {
     if (!user?.id) return;
+    const refetchAll = () => {
+      const r = refetchRef.current;
+      r.fetchOrders(true); r.fetchMyOffers(); r.fetchAcceptedOffers();
+    };
     const channel = supabase
       .channel(`baker-home:${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'offers' },
-        () => { fetchOrders(true); fetchMyOffers(); fetchAcceptedOffers(); }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        () => { fetchOrders(true); fetchMyOffers(); fetchAcceptedOffers(); }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'offers' }, refetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, refetchAll)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user?.id, fetchOrders, fetchMyOffers, fetchAcceptedOffers]);
+  }, [user?.id]);
 
   // Dükkan profili yoksa kurulum ekranına yönlendir (declarative — Android'de güvenilir).
   // Karar SADECE shopState latch'ine dayanır (DB'den pastry_shops sorgusu). Bu,
@@ -519,6 +522,79 @@ export default function BakerHomeScreen() {
             </View>
           )}
 
+
+          {/* Açık Talepler — yalnızca bu bölüm loading/error/empty durumuna tabi */}
+          {(isLoading || !shopLocation) ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color={C.primary} />
+              <Text style={[styles.loadingText, { color: C.textSecondary }]}>Talepler aranıyor…</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.centered}>
+              <Text style={styles.errorEmoji}>😢</Text>
+              <Text style={[styles.errorText, { color: C.text }]}>{error}</Text>
+              <TouchableOpacity
+                style={[styles.retryBtn, { backgroundColor: C.primary }]}
+                onPress={() => fetchOrders()}
+              >
+                <Text style={styles.retryBtnText}>Tekrar Dene</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (() => {
+            const visibleOrders = orders.filter((o) => {
+              const myOffer = myOfferMap.get(o.id);
+              return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
+            });
+            if (visibleOrders.length === 0) {
+              return (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyEmoji}>🗺️</Text>
+                  <Text style={[styles.emptyTitle, { color: C.text }]}>Bu bölgede talep yok</Text>
+                  <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
+                    Mesafe aralığını artırabilirsin
+                  </Text>
+                </View>
+              );
+            }
+            return (
+              <View>
+                <Text style={[styles.listHeader, { color: C.textSecondary }]}>
+                  {visibleOrders.length} açık talep
+                </Text>
+                {visibleOrders.map((item) => (
+                  <RequestCard
+                    key={item.id}
+                    order={item}
+                    colors={C}
+                    myOffer={myOfferMap.get(item.id)}
+                    offerStats={offerStatsMap.get(item.id)}
+                  />
+                ))}
+              </View>
+            );
+          })()}
+
+          {/* ✅ Tamamlanan Siparişler (Collapse — varsayılan kapalı) */}
+          {tamamlananSiparisler.length > 0 && (
+            <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
+              <TouchableOpacity
+                style={styles.sectionHeaderRow}
+                onPress={() => setTamamlananExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sectionTitle, { color: C.text }]}>
+                  ✅ Tamamlanan Siparişler ({tamamlananSiparisler.length})
+                </Text>
+                <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                  {tamamlananExpanded ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {tamamlananExpanded && tamamlananSiparisler.map((o) => (
+                <ActiveOrderCard key={o.id} offer={o} onChanged={fetchAcceptedOffers} />
+              ))}
+            </View>
+          )}
+
           {/* Siparişe Dönmeyen Tekliflerim (Collapse) */}
           {inactiveOffers.length > 0 && (
             <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -590,78 +666,6 @@ export default function BakerHomeScreen() {
                   </View>
                 );
               })}
-            </View>
-          )}
-
-          {/* Açık Talepler — yalnızca bu bölüm loading/error/empty durumuna tabi */}
-          {(isLoading || !shopLocation) ? (
-            <View style={styles.centered}>
-              <ActivityIndicator size="large" color={C.primary} />
-              <Text style={[styles.loadingText, { color: C.textSecondary }]}>Talepler aranıyor…</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.centered}>
-              <Text style={styles.errorEmoji}>😢</Text>
-              <Text style={[styles.errorText, { color: C.text }]}>{error}</Text>
-              <TouchableOpacity
-                style={[styles.retryBtn, { backgroundColor: C.primary }]}
-                onPress={() => fetchOrders()}
-              >
-                <Text style={styles.retryBtnText}>Tekrar Dene</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (() => {
-            const visibleOrders = orders.filter((o) => {
-              const myOffer = myOfferMap.get(o.id);
-              return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
-            });
-            if (visibleOrders.length === 0) {
-              return (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyEmoji}>🗺️</Text>
-                  <Text style={[styles.emptyTitle, { color: C.text }]}>Bu bölgede talep yok</Text>
-                  <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-                    Mesafe aralığını artırabilirsin
-                  </Text>
-                </View>
-              );
-            }
-            return (
-              <View>
-                <Text style={[styles.listHeader, { color: C.textSecondary }]}>
-                  {visibleOrders.length} açık talep
-                </Text>
-                {visibleOrders.map((item) => (
-                  <RequestCard
-                    key={item.id}
-                    order={item}
-                    colors={C}
-                    myOffer={myOfferMap.get(item.id)}
-                    offerStats={offerStatsMap.get(item.id)}
-                  />
-                ))}
-              </View>
-            );
-          })()}
-
-          {/* ✅ Tamamlanan Siparişler (Collapse — varsayılan kapalı) */}
-          {tamamlananSiparisler.length > 0 && (
-            <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
-              <TouchableOpacity
-                style={styles.sectionHeaderRow}
-                onPress={() => setTamamlananExpanded((v) => !v)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.sectionTitle, { color: C.text }]}>
-                  ✅ Tamamlanan Siparişler ({tamamlananSiparisler.length})
-                </Text>
-                <Text style={[styles.chevron, { color: C.textSecondary }]}>
-                  {tamamlananExpanded ? '▾' : '▸'}
-                </Text>
-              </TouchableOpacity>
-              {tamamlananExpanded && tamamlananSiparisler.map((o) => (
-                <ActiveOrderCard key={o.id} offer={o} onChanged={fetchAcceptedOffers} />
-              ))}
             </View>
           )}
       </ScrollView>

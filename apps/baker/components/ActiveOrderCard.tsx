@@ -216,15 +216,19 @@ export function ActiveOrderCard({
           )}
 
           <View style={styles.btnRow}>
-            <TouchableOpacity
-              style={[styles.msgBtn, { backgroundColor: C.primary, flex: 1 }]}
-              onPress={() => router.push({
-                pathname: '/messages/[conversationId]',
-                params: { conversationId: offer.order!.customer_id, orderId: offer.order!.id },
-              })}
-            >
-              <Text style={styles.msgBtnText}>💬 Müşteriye Mesaj</Text>
-            </TouchableOpacity>
+            {/* Mesaj butonu yalnızca mesajlaşma açıkken (aktif sipariş) görünür;
+                kapalı/tamamlanan siparişte sohbet kilitli olduğundan gizlenir. */}
+            {active && (
+              <TouchableOpacity
+                style={[styles.msgBtn, { backgroundColor: C.primary, flex: 1 }]}
+                onPress={() => router.push({
+                  pathname: '/messages/[conversationId]',
+                  params: { conversationId: offer.order!.customer_id, orderId: offer.order!.id },
+                })}
+              >
+                <Text style={styles.msgBtnText}>💬 Müşteriye Mesaj</Text>
+              </TouchableOpacity>
+            )}
 
             {!active && (
               <TouchableOpacity

@@ -1,0 +1,11 @@
+name = "pastacim-legal"
+main = "src/index.js"
+compatibility_date = "2026-06-26"
+
+# pastacim.ipekciapp.com'u Custom Domain olarak bağla.
+# Custom Domain, route'tan farklı olarak DNS kaydını ve TLS sertifikasını
+# wrangler tarafından otomatik oluşturur (ayrı DNS izni gerektirmez).
+# Tüm path'ler Worker'a gelir; Worker /terms, /privacy ve / dışını 404 döner.
+routes = [
+  { pattern = "pastacim.ipekciapp.com", custom_domain = true },
+]
