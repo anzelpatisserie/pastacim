@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,13 +20,24 @@ export function useUnreadMessages(userId?: string) {
     setUnreadMessages(count ?? 0);
   }, []);
 
+  // useNotifications ile aynı kanıtlanmış pattern: channelRef guard + benzersiz
+  // topic. useAuth dalgalanması effect'i yeniden çalıştırınca aynı topic'li
+  // (henüz kaldırılmamış) kanala subscribe sonrası .on() eklenip
+  // "cannot add postgres_changes after subscribe()" crash'i oluşuyordu.
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => {
     if (!userId) return;
 
     fetchUnread(userId);
 
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     const channel = supabase
-      .channel(`unread_messages:${userId}`)
+      .channel(`unread_messages:${userId}:${Date.now()}`)
       .on(
         'postgres_changes',
         {
@@ -39,7 +50,12 @@ export function useUnreadMessages(userId?: string) {
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    channelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
   }, [userId, fetchUnread]);
 
   return { unreadMessages };
