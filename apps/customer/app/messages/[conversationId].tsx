@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyNewMessage, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
+import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyNewMessage, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal, safeAvatarUri } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +38,7 @@ export default function MessagesScreen() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<MessageWithOrder[]>([]);
   const [otherUserName, setOtherUserName] = useState('');
+  const [otherUserAvatar, setOtherUserAvatar] = useState<string | null>(null);
   const [shopId, setShopId] = useState<string | null>(null);
   const [shopName, setShopName] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
@@ -79,13 +80,14 @@ export default function MessagesScreen() {
   const isChatExpired = !hasActiveProcess;
   const expiredReason = 'Aktif bir sipariş veya teklif bulunmuyor.';
 
-  // Karşı kullanıcının adı
+  // Karşı kullanıcının adı ve avatarı
   useEffect(() => {
     if (!otherUserId) return;
-    _db.from('users').select('full_name').eq('id', otherUserId).single()
-      .then(({ data }: { data: { full_name: string | null } | null }) => {
+    _db.from('users').select('full_name, avatar_url').eq('id', otherUserId).single()
+      .then(({ data }: { data: { full_name: string | null; avatar_url: string | null } | null }) => {
         if (!mountedRef.current) return;
         if (data?.full_name) setOtherUserName(data.full_name);
+        if (data?.avatar_url) setOtherUserAvatar(data.avatar_url);
       });
   }, [otherUserId]);
 
@@ -416,17 +418,21 @@ export default function MessagesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerCenter}
-            onPress={() => { if (shopId) router.push(`/(customer)/baker/${shopId}`); }}
-            disabled={!shopId}
-            activeOpacity={shopId ? 0.7 : 1}
+            onPress={() => { if (shopId && !isChatExpired) router.push(`/(customer)/baker/${shopId}`); }}
+            disabled={!shopId || isChatExpired}
+            activeOpacity={(shopId && !isChatExpired) ? 0.7 : 1}
           >
-            <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
-              <Text style={styles.avatarEmoji}>🏪</Text>
-            </View>
-            <Text style={[styles.headerName, { color: C.text, textDecorationLine: shopId ? 'underline' : 'none' }]}>
+            {safeAvatarUri(otherUserAvatar) ? (
+              <Image source={{ uri: safeAvatarUri(otherUserAvatar)! }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
+                <Text style={styles.avatarEmoji}>🏪</Text>
+              </View>
+            )}
+            <Text style={[styles.headerName, { color: C.text, textDecorationLine: (shopId && !isChatExpired) ? 'underline' : 'none' }]}>
               {(shopName ?? otherUserName) || 'Kullanıcı'}
             </Text>
-            {shopId ? (
+            {(shopId && !isChatExpired) ? (
               <Text style={{ color: C.primary, fontSize: 16, fontWeight: '600' }}>›</Text>
             ) : null}
           </TouchableOpacity>

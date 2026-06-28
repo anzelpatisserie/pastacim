@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps } from '@pastacim/shared';
+import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps, safeAvatarUri } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -27,7 +27,7 @@ type AcceptedOffer = {
   id: string;
   baker_id: string;
   price: number;
-  shop: { id: string; name: string; rating: number } | null;
+  shop: { id: string; name: string; rating: number; avatar_url: string | null } | null;
 };
 
 export default function OrderDetailScreen() {
@@ -57,7 +57,7 @@ export default function OrderDetailScreen() {
       // Teklif sayısı
       const offerRes = await _db
         .from('offers')
-        .select('id, baker_id, price, shop:pastry_shops!shop_id(id, name, rating)')
+        .select('id, baker_id, price, shop:pastry_shops!shop_id(id, name, rating, avatar_url)')
         .eq('order_id', id)
         .neq('status', 'rejected');
 
@@ -380,19 +380,23 @@ export default function OrderDetailScreen() {
             <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>Pastacı</Text>
             <TouchableOpacity
               style={styles.bakerRow}
-              activeOpacity={0.6}
-              disabled={!acceptedOffer.shop?.id}
-              onPress={() => acceptedOffer.shop?.id && router.push({
+              activeOpacity={(!isDone && acceptedOffer.shop?.id) ? 0.6 : 1}
+              disabled={isDone || !acceptedOffer.shop?.id}
+              onPress={() => !isDone && acceptedOffer.shop?.id && router.push({
                 pathname: '/(customer)/baker/[shopId]',
                 params: { shopId: acceptedOffer.shop.id },
               })}
             >
-              <View style={[styles.bakerAvatar, { backgroundColor: C.primary + '22' }]}>
-                <Text style={{ fontSize: 22 }}>🎂</Text>
-              </View>
+              {safeAvatarUri(acceptedOffer.shop?.avatar_url ?? null) ? (
+                <Image source={{ uri: safeAvatarUri(acceptedOffer.shop!.avatar_url)! }} style={styles.bakerAvatar} />
+              ) : (
+                <View style={[styles.bakerAvatar, { backgroundColor: C.primary + '22' }]}>
+                  <Text style={{ fontSize: 22 }}>🎂</Text>
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={[styles.bakerName, { color: C.text }]}>
-                  {acceptedOffer.shop?.name ?? 'Pastacı'} ›
+                  {acceptedOffer.shop?.name ?? 'Pastacı'}{!isDone ? ' ›' : ''}
                 </Text>
                 {(acceptedOffer.shop?.rating ?? 0) > 0 && (
                   <Text style={[styles.bakerRating, { color: C.textSecondary }]}>
