@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyFromTemplate, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps } from '@pastacim/shared';
+import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyFromTemplate, notifyNewMessage, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps } from '@pastacim/shared';
 import type { Database, OrderOfferSummaryRow, CustomerSummary } from '@pastacim/shared';
 
 type Order = Database['public']['Tables']['orders']['Row'];
@@ -165,6 +165,14 @@ export default function MakeOfferScreen() {
             receiver_id: order.customer_id,
             content:     trimmedMessage,
           });
+          // Mesaj in-app bildirimi (push:false — teklif bildirimi zaten push atıyor)
+          notifyNewMessage({
+            receiverId: order.customer_id,
+            senderId:   user.id,
+            targetRole: 'customer',
+            preview:    trimmedMessage.length > 60 ? trimmedMessage.slice(0, 57) + '…' : trimmedMessage,
+            push:       false,
+          }).catch(() => {});
         }
       } catch {
         // mesaj eklenemese bile teklif akışı devam etsin

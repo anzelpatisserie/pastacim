@@ -16,8 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
-import type { Database } from '@pastacim/shared';
+import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyUser, notifyNewMessage, rpcGetCustomerSummaryForBaker, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal } from '@pastacim/shared';
+import type { Database, CustomerSummary } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -44,6 +44,9 @@ export default function MessagesScreen() {
   const [sendOrderId, setSendOrderId] = useState<string | null>(initialOrderId ?? null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [customerSummary, setCustomerSummary] = useState<CustomerSummary | null>(null);
+  const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const mountedRef = useRef(true);
 
@@ -218,13 +221,11 @@ export default function MessagesScreen() {
     setIsSending(false);
     if (error) { setInputText(text); return; }
 
-    notifyUser({
-      userId: otherUserId,
-      type:  'new_message',
-      inApp: false,
-      title: '💬 Yeni Mesaj',
-      body:  text.length > 60 ? text.slice(0, 57) + '…' : text,
-      data:  { senderId: user.id },
+    notifyNewMessage({
+      receiverId: otherUserId,
+      senderId:   user.id,
+      targetRole: 'customer',
+      preview:    text.length > 60 ? text.slice(0, 57) + '…' : text,
     }).catch(() => {});
   };
 
@@ -389,23 +390,44 @@ export default function MessagesScreen() {
   const formatTime  = (s: string) => new Date(s).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   const formatDate  = (s: string) => new Date(s).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
 
+  // Müşteri özet modalı — sendOrderId gerekli (header'a basınca çağrılır)
+  const fetchAndShowCustomerSummary = async () => {
+    if (!sendOrderId) return;
+    setCustomerSummary(null);
+    setIsLoadingCustomer(true);
+    setShowCustomerModal(true);
+    const { data } = await rpcGetCustomerSummaryForBaker(sendOrderId);
+    if (mountedRef.current) {
+      setCustomerSummary(data);
+      setIsLoadingCustomer(false);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
 
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.border, backgroundColor: C.card }]}>
           <TouchableOpacity onPress={() => { Keyboard.dismiss(); router.back(); }}>
             <Text style={[styles.backText, { color: C.primary }]}>←</Text>
           </TouchableOpacity>
-          <View style={styles.headerCenter}>
+          <TouchableOpacity
+            style={styles.headerCenter}
+            onPress={fetchAndShowCustomerSummary}
+            disabled={!sendOrderId}
+            activeOpacity={0.7}
+          >
             <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
               <Text style={styles.avatarEmoji}>👤</Text>
             </View>
-            <Text style={[styles.headerName, { color: C.text }]}>
+            <Text style={[styles.headerName, { color: C.text, textDecorationLine: sendOrderId ? 'underline' : 'none' }]}>
               {otherUserName || 'Kullanıcı'}
             </Text>
-          </View>
+            {sendOrderId ? (
+              <Text style={{ color: C.primary, fontSize: 16, fontWeight: '600' }}>›</Text>
+            ) : null}
+          </TouchableOpacity>
           <View style={styles.headerActions}>
             <TouchableOpacity
               style={styles.deleteConvBtn}
@@ -607,6 +629,70 @@ export default function MessagesScreen() {
         targetId={otherUserId}
         appName="baker"
       />
+
+      {/* Müşteri Özet Modalı */}
+      <Modal
+        visible={showCustomerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCustomerModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowCustomerModal(false)}>
+          <Pressable style={[styles.custModalCard, { backgroundColor: C.card }]} onPress={() => {}}>
+            <Text style={[styles.custModalLabel, { color: C.textSecondary }]}>Müşteri Profili</Text>
+            {isLoadingCustomer ? (
+              <ActivityIndicator color={C.primary} style={{ marginVertical: 24 }} />
+            ) : customerSummary ? (
+              <>
+                <Text style={[styles.custModalName, { color: C.text }]}>
+                  {customerSummary.full_name ?? 'Müşteri'}
+                </Text>
+                <Text style={[styles.custModalMeta, { color: C.textSecondary }]}>
+                  📅{' '}
+                  {customerSummary.member_days < 30
+                    ? `${customerSummary.member_days} gündür`
+                    : customerSummary.member_days < 365
+                      ? `${Math.floor(customerSummary.member_days / 30)} aydır`
+                      : `${Math.floor(customerSummary.member_days / 365)} yıldır`}{' '}
+                  Pastacım üyesi
+                </Text>
+                <View style={styles.custModalStats}>
+                  <View style={styles.custModalStat}>
+                    <Text style={[styles.custModalStatNum, { color: C.primary }]}>
+                      {customerSummary.total_orders}
+                    </Text>
+                    <Text style={[styles.custModalStatLbl, { color: C.textSecondary }]}>Toplam</Text>
+                  </View>
+                  <View style={styles.custModalStat}>
+                    <Text style={[styles.custModalStatNum, { color: '#48BB78' }]}>
+                      {customerSummary.completed_orders}
+                    </Text>
+                    <Text style={[styles.custModalStatLbl, { color: C.textSecondary }]}>Tamamlandı</Text>
+                  </View>
+                  <View style={styles.custModalStat}>
+                    <Text style={[styles.custModalStatNum, {
+                      color: customerSummary.cancelled_orders > 0 ? '#FC8181' : C.textSecondary,
+                    }]}>
+                      {customerSummary.cancelled_orders}
+                    </Text>
+                    <Text style={[styles.custModalStatLbl, { color: C.textSecondary }]}>İptal</Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <Text style={[styles.custModalMeta, { color: C.textSecondary }]}>
+                Müşteri bilgisi yüklenemedi.
+              </Text>
+            )}
+            <TouchableOpacity
+              style={[styles.custModalCloseBtn, { backgroundColor: C.primary }]}
+              onPress={() => setShowCustomerModal(false)}
+            >
+              <Text style={styles.custModalCloseBtnText}>Kapat</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -690,4 +776,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   modalCloseBtnText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
+  // Müşteri özet modalı
+  custModalCard: {
+    margin: Spacing.xl, borderRadius: Radius.xl, padding: Spacing.lg, gap: Spacing.md,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3,
+    shadowRadius: 8, elevation: 8,
+  },
+  custModalLabel: { fontSize: FontSize.xs, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  custModalName: { fontSize: FontSize.lg, fontWeight: '800' },
+  custModalMeta: { fontSize: FontSize.xs },
+  custModalStats: { flexDirection: 'row', gap: Spacing.sm },
+  custModalStat: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: Radius.md },
+  custModalStatNum: { fontSize: FontSize.xl, fontWeight: '800' },
+  custModalStatLbl: { fontSize: 10, marginTop: 2 },
+  custModalCloseBtn: { paddingVertical: 12, borderRadius: Radius.full, alignItems: 'center', marginTop: Spacing.xs },
+  custModalCloseBtnText: { color: '#FFF', fontWeight: '700', fontSize: FontSize.sm },
 });
