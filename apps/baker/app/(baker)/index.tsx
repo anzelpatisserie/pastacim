@@ -15,6 +15,8 @@ import { Alert } from 'react-native';
 import { supabase, rpcNearbyOrders, rpcWithdrawOffer, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, TabHeader, openAddressInMaps } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
+import { ActiveOrderCard, isActiveOffer } from './_components/ActiveOrderCard';
+import type { ActiveOffer } from './_components/ActiveOrderCard';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -72,6 +74,10 @@ export default function BakerHomeScreen() {
   const [pendingOffers, setPendingOffers] = useState<MyOfferWithOrder[]>([]);
   const [inactiveOffers, setInactiveOffers] = useState<MyOfferWithOrder[]>([]);
   const [inactiveExpanded, setInactiveExpanded] = useState(false);
+  // Kabul edilmiş siparişler (eski "Siparişler" sekmesi içeriği) — collapse bölümler
+  const [acceptedOffers, setAcceptedOffers] = useState<ActiveOffer[]>([]);
+  const [aktifExpanded, setAktifExpanded] = useState(true);      // otomatik açık
+  const [tamamlananExpanded, setTamamlananExpanded] = useState(false); // varsayılan kapalı
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -296,6 +302,33 @@ export default function BakerHomeScreen() {
   useEffect(() => { fetchMyOffers(); }, [fetchMyOffers]);
   useFocusEffect(useCallback(() => { fetchMyOffers(); }, [fetchMyOffers]));
 
+  // ─── Kabul Edilmiş Siparişlerim (eski "Siparişler" sekmesi) ───────────────
+  // Yarıçaptan bağımsız: baker'ın kabul edilmiş teklifleri + bağlı sipariş/müşteri.
+  // Aktif (accepted/in_progress/ready) ve tamamlanan ayrımı render'da yapılır.
+  const fetchAcceptedOffers = useCallback(async () => {
+    if (!user?.id) {
+      setAcceptedOffers([]);
+      return;
+    }
+    const { data } = await _db
+      .from('offers')
+      .select(`
+        *,
+        order:orders!order_id(
+          *,
+          customer:users!customer_id(id, full_name, phone)
+        )
+      `)
+      .eq('baker_id', user.id)
+      .eq('status', 'accepted')
+      .eq('hidden_for_baker', false)
+      .order('created_at', { ascending: false }) as { data: ActiveOffer[] | null };
+    setAcceptedOffers(data ?? []);
+  }, [user?.id]);
+
+  useEffect(() => { fetchAcceptedOffers(); }, [fetchAcceptedOffers]);
+  useFocusEffect(useCallback(() => { fetchAcceptedOffers(); }, [fetchAcceptedOffers]));
+
   // Realtime: kendi tekliflerim ve siparişler değişince listeyi tazele.
   // NOT: DELETE event'lerinin baker_id filtresiyle düşmesi REPLICA IDENTITY FULL
   // gerektirir; bu yüzden offers tablosunu filtresiz dinleyip refetch ediyoruz.
@@ -306,16 +339,16 @@ export default function BakerHomeScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'offers' },
-        () => { fetchOrders(true); fetchMyOffers(); }
+        () => { fetchOrders(true); fetchMyOffers(); fetchAcceptedOffers(); }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
-        () => { fetchOrders(true); fetchMyOffers(); }
+        () => { fetchOrders(true); fetchMyOffers(); fetchAcceptedOffers(); }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user?.id, fetchOrders, fetchMyOffers]);
+  }, [user?.id, fetchOrders, fetchMyOffers, fetchAcceptedOffers]);
 
   // Dükkan profili yoksa kurulum ekranına yönlendir (declarative — Android'de güvenilir).
   // Karar SADECE shopState latch'ine dayanır (DB'den pastry_shops sorgusu). Bu,
@@ -328,6 +361,10 @@ export default function BakerHomeScreen() {
   if (shopState === 'none' && !shopJustCreatedSignal.value) {
     return <Redirect href={'/(baker)/setup' as never} />;
   }
+
+  // Kabul edilmiş siparişleri aktif / tamamlanan olarak ayır
+  const aktifSiparisler = acceptedOffers.filter(isActiveOffer);
+  const tamamlananSiparisler = acceptedOffers.filter((o) => o.order?.status === 'completed');
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
@@ -396,7 +433,28 @@ export default function BakerHomeScreen() {
           />
         }
       >
-        {/* Bekleyen Tekliflerim */}
+        {/* 🔵 Aktif Siparişler (Collapse — varsayılan açık) */}
+          {aktifSiparisler.length > 0 && (
+            <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
+              <TouchableOpacity
+                style={styles.sectionHeaderRow}
+                onPress={() => setAktifExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sectionTitle, { color: C.text }]}>
+                  🔵 Aktif Siparişler ({aktifSiparisler.length})
+                </Text>
+                <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                  {aktifExpanded ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {aktifExpanded && aktifSiparisler.map((o) => (
+                <ActiveOrderCard key={o.id} offer={o} onChanged={fetchAcceptedOffers} />
+              ))}
+            </View>
+          )}
+
+          {/* Bekleyen Tekliflerim */}
           {pendingOffers.length > 0 && (
             <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.sectionTitle, { color: C.text }]}>
@@ -585,6 +643,27 @@ export default function BakerHomeScreen() {
               </View>
             );
           })()}
+
+          {/* ✅ Tamamlanan Siparişler (Collapse — varsayılan kapalı) */}
+          {tamamlananSiparisler.length > 0 && (
+            <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
+              <TouchableOpacity
+                style={styles.sectionHeaderRow}
+                onPress={() => setTamamlananExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sectionTitle, { color: C.text }]}>
+                  ✅ Tamamlanan Siparişler ({tamamlananSiparisler.length})
+                </Text>
+                <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                  {tamamlananExpanded ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {tamamlananExpanded && tamamlananSiparisler.map((o) => (
+                <ActiveOrderCard key={o.id} offer={o} onChanged={fetchAcceptedOffers} />
+              ))}
+            </View>
+          )}
       </ScrollView>
     </View>
   );

@@ -50,12 +50,6 @@ export default function BakerLayout() {
           <TabIcon emoji="📋" focused={focused} activeColor={C.primary} />
         ),
       }} />
-      <Tabs.Screen name="my-orders" options={{
-        title: 'Siparişler', tabBarLabel: 'Siparişler',
-        tabBarIcon: ({ focused }) => (
-          <TabIcon emoji="✅" focused={focused} activeColor={C.primary} />
-        ),
-      }} />
       <Tabs.Screen name="messages" options={{
         title: 'Mesajlar', tabBarLabel: 'Mesajlar',
         tabBarIcon: ({ focused }) => (
@@ -68,6 +62,7 @@ export default function BakerLayout() {
           <TabIcon emoji="👤" focused={focused} activeColor={C.primary} />
         ),
       }} />
+      <Tabs.Screen name="my-orders" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="admin-feedbacks" options={{ href: null }} />
       <Tabs.Screen name="admin-dashboard" options={{ href: null }} />
