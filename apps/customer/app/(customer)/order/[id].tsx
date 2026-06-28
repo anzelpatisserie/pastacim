@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal, openAddressInMaps } from '@pastacim/shared';
+import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,7 +43,6 @@ export default function OrderDetailScreen() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [isReverting, setIsReverting] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
-  const [showReport, setShowReport] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -284,14 +283,7 @@ export default function OrderDetailScreen() {
           <Text style={[styles.backText, { color: C.primary }]}>← Geri</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: C.text }]}>Sipariş Detayı</Text>
-        <TouchableOpacity
-          onPress={() => setShowReport(true)}
-          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          activeOpacity={0.6}
-          style={{ width: 48, alignItems: 'flex-end' }}
-        >
-          <Text style={{ fontSize: 18 }}>⚠️</Text>
-        </TouchableOpacity>
+        <View style={{ width: 48 }} />
       </View>
 
       <ScrollView
@@ -502,14 +494,6 @@ export default function OrderDetailScreen() {
         </Pressable>
       </Modal>
 
-      {/* Şikayet Et */}
-      <ReportModal
-        visible={showReport}
-        onClose={() => setShowReport(false)}
-        targetType="order"
-        targetId={id}
-        appName="customer"
-      />
     </SafeAreaView>
   );
 }

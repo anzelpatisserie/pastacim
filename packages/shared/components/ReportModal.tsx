@@ -1,12 +1,12 @@
 // Şikayet / rapor modalı — sipariş / kullanıcı / dükkan / mesaj şikayeti.
-// reports tablosuna insert eder (RLS: reporter_id = auth.uid()).
+// file_report RPC üzerinden insert eder (admin'e in-app + push sunucu tarafında gider).
 import { useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
   StyleSheet, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { fileReport } from '../lib/notifications';
 import { useAuth } from '../hooks/useAuth';
 import { useThemeColors, Spacing, Radius, FontSize } from '../lib/constants';
 
@@ -44,9 +44,6 @@ export default function ReportModal({
   const [details, setDetails] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const _db: any = supabase;
-
   const reset = () => {
     setReason(null);
     setDetails('');
@@ -69,15 +66,14 @@ export default function ReportModal({
 
     setIsSubmitting(true);
     try {
-      const { error } = await _db.from('reports').insert({
-        reporter_id: user.id,
-        target_type: targetType,
-        target_id: targetId ?? null,
+      const { reportId } = await fileReport({
+        targetType,
+        targetId,
         reason,
-        details: details.trim() || null,
-        app_name: appName,
+        details: details.trim() || undefined,
+        appName,
       });
-      if (error) throw new Error(error.message);
+      if (!reportId) throw new Error('Şikayet kaydedilemedi');
 
       Alert.alert(
         'Şikayetiniz Alındı',
