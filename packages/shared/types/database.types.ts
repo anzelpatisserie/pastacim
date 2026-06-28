@@ -1025,6 +1025,7 @@ export type Database = {
         Returns: {
           last_message: string
           last_message_at: string
+          other_user_avatar: string
           other_user_id: string
           other_user_name: string
           unread_count: number

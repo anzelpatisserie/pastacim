@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList,
+  View, Text, StyleSheet, FlatList, Image,
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -105,9 +105,13 @@ function ConvRow({ item, colors: C, onDelete }: { item: Conversation; colors: Re
       activeOpacity={0.75}
     >
       {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
-        <Text style={styles.avatarEmoji}>👤</Text>
-      </View>
+      {item.other_user_avatar ? (
+        <Image source={{ uri: item.other_user_avatar }} style={styles.avatar} />
+      ) : (
+        <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
+          <Text style={styles.avatarEmoji}>👤</Text>
+        </View>
+      )}
 
       {/* İçerik */}
       <View style={{ flex: 1, gap: 3 }}>
