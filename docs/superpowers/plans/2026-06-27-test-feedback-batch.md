@@ -193,26 +193,29 @@ git commit -m "feat(db): 0006 eksik bildirim şablonları + mesaj dedup + admin 
 - Modify: `packages/shared/index.ts` (yeni export'lar)
 - Test: `packages/shared/__tests__/notifications.test.ts` (yeni)
 
+> **GÜVENLİK (migration 0011):** RPC'ler sertleştirildi. Push'lar artık **sunucu tarafında** (pg_net) atılıyor — push token'ları client'a HİÇ dönmüyor. `notify_new_message` yetki kontrollü (`auth.uid()=sender` + konuşma var) ve `p_push boolean` parametresi aldı. `file_report` admin token'ı döndürmüyor. Bu yüzden helper'lar sadeleşti: client'ta `getUserPushToken`/`sendPushNotification` YOK.
+
 **Interfaces:**
-- Consumes: `notify_new_message`, `file_report` RPC'leri (Task 1).
+- Consumes: `notify_new_message(p_receiver_id, p_sender_id, p_target_role, p_preview, p_push)`, `file_report(...)` RPC'leri (Task 1 + 0011).
 - Produces:
-  - `notifyNewMessage(params: { receiverId: string; senderId: string; targetRole?: NotificationRole; preview: string; pushToken?: string | null }): Promise<void>` — in-app dedup RPC + (pushToken verilirse) push gönder. Mesaj gönderiminde kullanılır.
-  - `fileReport(params: { targetType: 'order'|'user'|'shop'|'message'; targetId?: string; reason: string; details?: string; appName: string }): Promise<{ reportId: string | null }>` — `file_report` RPC + dönen admin_token'a push gönder.
+  - `notifyNewMessage(params: { receiverId: string; senderId: string; targetRole?: NotificationRole; preview: string; push?: boolean }): Promise<void>` — in-app dedup + (push!==false ise) sunucu-push. `push:false` → teklif-mesajı (teklif bildirimi zaten push atıyor). **Çağıran KENDİ adına olmalı** (senderId = giriş yapan kullanıcı); server doğruluyor.
+  - `fileReport(params: { targetType: 'order'|'user'|'shop'|'message'; targetId?: string; reason: string; details?: string; appName: string }): Promise<{ reportId: string | null }>` — `file_report` RPC; admin in-app bildirim + admin push sunucuda. Helper sadece `reportId` döner.
 
 - [ ] **Step 1: `notifyNewMessage` ve `fileReport`'u yaz** (notifications.ts sonuna, `notifyFromTemplate`'ten sonra):
 
 ```ts
 /**
- * Yeni mesaj bildirimi: in-app feed'e dedup'lu kayıt (notify_new_message RPC) +
- * (pushToken verilirse) push. Teklif-mesajında pushToken atlanır (teklif bildirimi
- * zaten push atıyor → çift çalma olmasın).
+ * Yeni mesaj bildirimi: in-app feed'e dedup'lu kayıt + alıcıya push — ikisi de
+ * notify_new_message RPC içinde (server-side; push token client'a hiç gitmez).
+ * push:false → push gönderme (teklif-mesajı: teklif bildirimi zaten push atıyor).
+ * NOT: senderId giriş yapan kullanıcı olmalı; server auth.uid()=sender doğrular.
  */
 export async function notifyNewMessage(params: {
   receiverId: string;
   senderId: string;
   targetRole?: NotificationRole;
   preview: string;
-  pushToken?: string | null;
+  push?: boolean;
 }): Promise<void> {
   try {
     await _db.rpc('notify_new_message', {
@@ -220,22 +223,14 @@ export async function notifyNewMessage(params: {
       p_sender_id:   params.senderId,
       p_target_role: params.targetRole ?? null,
       p_preview:     params.preview,
+      p_push:        params.push ?? true,
     });
-  } catch { /* feed yazımı başarısız olsa da push'u dene */ }
-
-  if (params.pushToken) {
-    await sendPushNotification({
-      token: params.pushToken,
-      title: '💬 Yeni Mesaj',
-      body:  params.preview,
-      data:  { type: 'new_message', senderId: params.senderId },
-    });
-  }
+  } catch { /* RPC hatası akışı engellemesin */ }
 }
 
 /**
- * Şikayet gönder: reports'a insert + admin'e in-app bildirim (file_report RPC),
- * dönen admin push token'ına push gönder.
+ * Şikayet gönder: reports'a insert + admin'e in-app bildirim + admin push —
+ * hepsi file_report RPC içinde (server-side). Helper sadece reportId döner.
  */
 export async function fileReport(params: {
   targetType: 'order' | 'user' | 'shop' | 'message';
@@ -252,15 +247,7 @@ export async function fileReport(params: {
       p_details:     params.details ?? null,
       p_app_name:    params.appName,
     });
-    const res = data as { report_id: string | null; admin_token: string | null } | null;
-    if (res?.admin_token) {
-      await sendPushNotification({
-        token: res.admin_token,
-        title: '🚩 Yeni Şikayet',
-        body:  'Bir kullanıcı şikayet gönderdi: ' + params.reason,
-        data:  { type: 'report', reportId: res.report_id },
-      });
-    }
+    const res = data as { report_id: string | null } | null;
     return { reportId: res?.report_id ?? null };
   } catch {
     return { reportId: null };
@@ -298,7 +285,7 @@ describe('notifyNewMessage', () => {
     const { supabase } = require('../lib/supabase');
     await notifyNewMessage({ receiverId: 'r1', senderId: 's1', preview: 'selam' });
     expect(supabase.rpc).toHaveBeenCalledWith('notify_new_message', {
-      p_receiver_id: 'r1', p_sender_id: 's1', p_target_role: null, p_preview: 'selam',
+      p_receiver_id: 'r1', p_sender_id: 's1', p_target_role: null, p_preview: 'selam', p_push: true,
     });
   });
 });
@@ -453,8 +440,8 @@ git commit -m "feat(baker): Siparişler sekmesini Talepler'e collapse bölüm ol
 
 - [ ] **Step 1: Mesaj başlığı** — `apps/baker/app/messages/[conversationId].tsx` header (customer ile aynı yapı, ~line 401-408): müşteri adı (`otherUserName`) tıklanabilir olsun. `onPress` → `get_customer_summary_for_baker` ile özet çek, bir modal'da göster (full_name, total/completed/cancelled orders, member_days). Tıklanabilirliği görsel belli et (alt çizgi/chevron). Geri tuşu mevcut.
 - [ ] **Step 2: Klavye fix (Item 2)** — `KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}` yap (Android'de `undefined` yerine `height` + gerekirse `keyboardVerticalOffset={0}`; test edip input bar'ın klavye üstünde kaldığını doğrula). NOT: mesaj ekranında header var, FeedbackModal'dan farklı olarak burada `height` doğru davranışı verir; cihazda doğrula.
-- [ ] **Step 3: Mesaj gönderiminde in-app notif (Item 6)** — `sendMessage` içinde (customer örneği: lines 221-228) `notifyUser({inApp:false})`'ı kaldır, yerine: önce alıcının push token'ını al (`getUserPushToken(otherUserId, 'customer')` — alıcı müşteri app'inde), sonra `notifyNewMessage({ receiverId: otherUserId, senderId: user.id, targetRole: 'customer', preview, pushToken })`. (Baker mesaj atınca alıcı müşteri.)
-- [ ] **Step 4: Teklif-mesajı in-app notif (Item 6)** — `offer/[orderId].tsx`'te mesaj insert'ünden sonra (Explore: lines 162-167) **push'suz** in-app notif: `notifyNewMessage({ receiverId: customerId, senderId: user.id, targetRole: 'customer', preview: <teklif mesajı>, pushToken: undefined })`. (Teklif `new_offer` push'u zaten gidiyor.)
+- [ ] **Step 3: Mesaj gönderiminde in-app notif (Item 6)** — `sendMessage` içinde (customer örneği: lines 221-228) `notifyUser({inApp:false})`'ı kaldır, yerine: `notifyNewMessage({ receiverId: otherUserId, senderId: user.id, targetRole: 'customer', preview })`. (Baker mesaj atınca alıcı müşteri; push sunucuda atılır, client token çekmez.) `getUserPushToken` KULLANMA.
+- [ ] **Step 4: Teklif-mesajı in-app notif (Item 6)** — `offer/[orderId].tsx`'te mesaj insert'ünden sonra (Explore: lines 162-167) **push'suz** in-app notif: `notifyNewMessage({ receiverId: customerId, senderId: user.id, targetRole: 'customer', preview: <teklif mesajı>, push: false })`. (Teklif `new_offer` push'u zaten gidiyor.) NOT: mesaj insert'i await'lenip BİTTİKTEN sonra çağır (server konuşma-var kontrolü yapıyor).
 - [ ] **Step 5: Badge (Item 3)** — `apps/baker/hooks/useNotifications.ts`: token kaydından sonra ve realtime bildirim/mesaj geldiğinde `fetchUnreadBadgeCount(userId,'baker').then(setAppBadge)` çağır. Logout/temizlemede `setAppBadge(0)`. (Hook'taki mevcut notification listener + useUnreadMessages kaynaklı tetikleme noktalarına bağla.)
 - [ ] **Step 6:** tsc — `cd apps/baker && npx tsc --noEmit` → hata yok.
 - [ ] **Step 7: Commit**
@@ -473,12 +460,12 @@ git commit -m "feat(baker): mesaj başlığı müşteri özeti + klavye fix + ik
 - Modify: `apps/customer/hooks/useNotifications.ts` (badge)
 
 **Interfaces:**
-- Consumes: `notifyNewMessage`, `getUserPushToken` (Task 2), `fetchUnreadBadgeCount`/`setAppBadge` (Task 3). Dükkan bilgisi: `pastry_shops` (otherUserId = baker user_id → shop'u bul).
+- Consumes: `notifyNewMessage` (Task 2; push sunucuda, client token çekmez), `fetchUnreadBadgeCount`/`setAppBadge` (Task 3). Dükkan bilgisi: `pastry_shops` (otherUserId = baker user_id → shop'u bul).
 
 - [ ] **Step 1: Başlıkta dükkan adı (Item 5)** — `[conversationId].tsx` header (lines 401-408): `otherUserName` yerine konuşmadaki pastacının **dükkan adını** göster. Veri: mevcut `otherUserId` (baker user) ile `pastry_shops` sorgusu — `_db.from('pastry_shops').select('id, name').eq('user_id', otherUserId).maybeSingle()`. Dükkan yoksa (karşı taraf pastacı değilse) `otherUserName`'e düş.
 - [ ] **Step 2: Başlığa tıkla → profil** — header center'a `onPress` ekle: shop bulunduysa `router.push(`/(customer)/baker/${shopId}`)`. Tıklanabilirliği görsel belli et. Geri tuşuyla mesaja dönülür (mevcut).
 - [ ] **Step 3: Klavye fix (Item 2)** — `behavior={Platform.OS === 'ios' ? 'padding' : 'height'}` (line 394: şu an Android `undefined`). Cihazda input bar'ın klavye üstünde kaldığını doğrula.
-- [ ] **Step 4: Mesaj in-app notif (Item 6)** — `sendMessage` (lines 221-228): `notifyUser({inApp:false})` yerine alıcının baker token'ını al (`getUserPushToken(otherUserId,'baker')`) + `notifyNewMessage({ receiverId: otherUserId, senderId: user.id, targetRole: 'baker', preview, pushToken })`. (Müşteri mesaj atınca alıcı pastacı.)
+- [ ] **Step 4: Mesaj in-app notif (Item 6)** — `sendMessage` (lines 221-228): `notifyUser({inApp:false})` yerine `notifyNewMessage({ receiverId: otherUserId, senderId: user.id, targetRole: 'baker', preview })`. (Müşteri mesaj atınca alıcı pastacı; push sunucuda atılır.) `getUserPushToken` KULLANMA.
 - [ ] **Step 5: Badge (Item 3)** — `apps/customer/hooks/useNotifications.ts`: `fetchUnreadBadgeCount(userId,'customer').then(setAppBadge)` token kaydı + bildirim/mesaj geldiğinde; logout'ta `setAppBadge(0)`.
 - [ ] **Step 6:** tsc — `cd apps/customer && npx tsc --noEmit` → hata yok.
 - [ ] **Step 7: Commit**
