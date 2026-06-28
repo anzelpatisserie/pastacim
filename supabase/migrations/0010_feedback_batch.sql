@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0006: test feedback batch — eksik bildirim şablonları + mesaj dedup +
+-- 0010: test feedback batch — eksik bildirim şablonları + mesaj dedup +
 --       admin report bildirimi. Applied via MCP apply_migration 2026-06-27.
 -- ============================================================================
 

@@ -18,7 +18,8 @@ export async function fetchUnreadBadgeCount(userId: string, role: NotificationRo
     const [{ count: n }, { count: m }] = await Promise.all([
       _db.from('notifications').select('id', { count: 'exact', head: true })
         .eq('user_id', userId).eq('is_read', false)
-        .or(`target_role.is.null,target_role.eq.${role}`),
+        .or(`target_role.is.null,target_role.eq.${role}`)
+        .neq('type', 'new_message'),
       _db.from('messages').select('id', { count: 'exact', head: true })
         .eq('receiver_id', userId).eq('is_read', false),
     ]);

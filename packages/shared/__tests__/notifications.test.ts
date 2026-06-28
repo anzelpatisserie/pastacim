@@ -8,7 +8,7 @@ jest.mock('../lib/supabase', () => {
 });
 
 describe('notifyNewMessage', () => {
-  it('calls notify_new_message RPC with dedup params and no push when no token', async () => {
+  it('calls notify_new_message with all params incl. p_push:true by default', async () => {
     const { supabase } = require('../lib/supabase');
     await notifyNewMessage({ receiverId: 'r1', senderId: 's1', preview: 'selam' });
     expect(supabase.rpc).toHaveBeenCalledWith('notify_new_message', {

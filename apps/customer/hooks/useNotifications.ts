@@ -65,6 +65,13 @@ export function useNotifications(userId?: string) {
           fetchUnreadBadgeCount(userId, 'customer').then(setAppBadge).catch(() => {});
         },
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${userId}` },
+        () => {
+          fetchUnreadBadgeCount(userId, 'customer').then(setAppBadge).catch(() => {});
+        },
+      )
       .subscribe();
 
     channelRef.current = channel;
@@ -82,7 +89,10 @@ export function useNotifications(userId?: string) {
   // Sayfa odağa gelince badge'i tazele — realtime kaçırma durumlarına karşı garanti güncelleme
   useFocusEffect(
     useCallback(() => {
-      if (userId) fetchUnread(userId);
+      if (userId) {
+        fetchUnread(userId);
+        fetchUnreadBadgeCount(userId, 'customer').then(setAppBadge).catch(() => {});
+      }
     }, [userId, fetchUnread])
   );
 
