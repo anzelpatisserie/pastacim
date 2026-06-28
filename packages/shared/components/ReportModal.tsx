@@ -91,7 +91,8 @@ export default function ReportModal({
       if (imageUri && user?.id) {
         const response = await fetch(imageUri);
         const arrayBuffer = await response.arrayBuffer();
-        const path = `reports/${user.id}/${Date.now()}.jpg`;
+        // İlk klasör uid olmalı (feedbacks bucket RLS: foldername[1]=auth.uid)
+        const path = `${user.id}/reports/${Date.now()}.jpg`;
         const { error: uploadError } = await supabase.storage
           .from('feedbacks')
           .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
