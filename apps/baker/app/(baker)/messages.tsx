@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { router, useFocusEffect } from 'expo-router';
-import { rpcGetConversations, rpcDeleteConversation, useAuth, useThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
+import { rpcGetConversations, rpcDeleteConversation, useAuth, useThemeColors, Spacing, Radius, FontSize, TabHeader, safeAvatarUri } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -105,8 +105,8 @@ function ConvRow({ item, colors: C, onDelete }: { item: Conversation; colors: Re
       activeOpacity={0.75}
     >
       {/* Avatar */}
-      {item.other_user_avatar ? (
-        <Image source={{ uri: item.other_user_avatar }} style={styles.avatar} />
+      {safeAvatarUri(item.other_user_avatar) ? (
+        <Image source={{ uri: safeAvatarUri(item.other_user_avatar)! }} style={styles.avatar} />
       ) : (
         <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
           <Text style={styles.avatarEmoji}>👤</Text>

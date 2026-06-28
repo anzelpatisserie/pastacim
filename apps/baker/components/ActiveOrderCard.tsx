@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import {
   View, Text, StyleSheet, Linking,
-  TouchableOpacity, ActivityIndicator, Alert,
+  TouchableOpacity, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { router } from 'expo-router';
-import { supabase, notifyFromTemplate, sendAppEmail, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, notifyFromTemplate, sendAppEmail, useThemeColors, Spacing, Radius, FontSize, safeAvatarUri } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 export type ActiveOffer = Database['public']['Tables']['offers']['Row'] & {
   order: (Database['public']['Tables']['orders']['Row'] & {
-    customer: { id: string; full_name: string | null; phone: string | null } | null;
+    customer: { id: string; full_name: string | null; phone: string | null; avatar_url: string | null } | null;
   }) | null;
 };
 
@@ -177,11 +177,21 @@ export function ActiveOrderCard({
       <Text style={[styles.price, { color: C.primary }]}>₺{offer.price}</Text>
 
       {offer.order?.customer?.full_name && (
-        <Text style={[styles.customer, { color: C.textSecondary }]}>
-          👤 {offer.order.customer.full_name}
-        </Text>
+        <View style={styles.customerRow}>
+          {safeAvatarUri(offer.order.customer.avatar_url) ? (
+            <Image
+              source={{ uri: safeAvatarUri(offer.order.customer.avatar_url)! }}
+              style={styles.customerAvatar}
+            />
+          ) : (
+            <Text style={styles.customerAvatarEmoji}>👤</Text>
+          )}
+          <Text style={[styles.customer, { color: C.textSecondary }]}>
+            {offer.order.customer.full_name}
+          </Text>
+        </View>
       )}
-      {offer.order?.customer?.phone ? (
+      {active && offer.order?.customer?.phone ? (
         <TouchableOpacity onPress={() => Linking.openURL(`tel:${offer.order!.customer!.phone}`)} activeOpacity={0.6}>
           <Text style={[styles.customer, { color: C.primary, fontWeight: '700' }]}>
             📞 {offer.order.customer.phone}
@@ -252,7 +262,10 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.full },
   statusText: { fontSize: FontSize.xs, fontWeight: '700' },
   price: { fontSize: FontSize.xxl, fontWeight: '800' },
-  customer: { fontSize: FontSize.sm },
+  customer: { fontSize: FontSize.sm, flexShrink: 1 },
+  customerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  customerAvatar: { width: 22, height: 22, borderRadius: 11, flexShrink: 0 },
+  customerAvatarEmoji: { fontSize: 16 },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   metaText: { fontSize: FontSize.xs },
   btnCol: { gap: Spacing.sm },

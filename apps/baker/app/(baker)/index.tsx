@@ -7,12 +7,12 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-
+  Image,
 } from 'react-native';
 import { router, useFocusEffect, Redirect } from 'expo-router';
 import * as Location from 'expo-location';
 import { Alert } from 'react-native';
-import { supabase, rpcNearbyOrders, rpcWithdrawOffer, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, TabHeader, openAddressInMaps } from '@pastacim/shared';
+import { supabase, rpcNearbyOrders, rpcWithdrawOffer, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, DEFAULT_RADIUS_KM, TabHeader, openAddressInMaps, safeAvatarUri } from '@pastacim/shared';
 import type { Database, ThemeColors } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 import { ActiveOrderCard, isActiveOffer } from '../../components/ActiveOrderCard';
@@ -316,7 +316,7 @@ export default function BakerHomeScreen() {
         *,
         order:orders!order_id(
           *,
-          customer:users!customer_id(id, full_name, phone)
+          customer:users!customer_id(id, full_name, phone, avatar_url)
         )
       `)
       .eq('baker_id', user.id)
@@ -787,7 +787,14 @@ function RequestCard({
       {/* Müşteri özeti */}
       {order.customer_full_name && (
         <View style={[styles.customerRow, { backgroundColor: C.background, borderColor: C.border }]}>
-          <Text style={[styles.customerEmoji]}>👤</Text>
+          {safeAvatarUri(order.customer_avatar_url) ? (
+            <Image
+              source={{ uri: safeAvatarUri(order.customer_avatar_url)! }}
+              style={styles.customerAvatarImg}
+            />
+          ) : (
+            <Text style={styles.customerEmoji}>👤</Text>
+          )}
           <View style={{ flex: 1 }}>
             <Text style={[styles.customerName, { color: C.text }]} numberOfLines={1}>
               {order.customer_full_name}
@@ -960,6 +967,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   customerEmoji: { fontSize: 18 },
+  customerAvatarImg: { width: 32, height: 32, borderRadius: 16, flexShrink: 0 },
   customerName: { fontSize: FontSize.sm, fontWeight: '700' },
   customerStats: { fontSize: 11, marginTop: 1 },
 });
