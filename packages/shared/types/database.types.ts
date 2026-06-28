@@ -1198,6 +1198,7 @@ export type Database = {
       notify_new_message: {
         Args: {
           p_preview: string
+          p_push?: boolean
           p_receiver_id: string
           p_sender_id: string
           p_target_role: string
