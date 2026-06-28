@@ -66,6 +66,15 @@ export function navigateFromNotification(
         // Geri bildirim teşviki → profildeki geri bildirim modalını aç.
         router.push(`${base}/profile?openFeedback=1` as never);
         break;
+      case 'report':
+        // Admin → şikayet paneli
+        router.push(`${base}/admin-reports` as never);
+        break;
+      case 'review_request':
+        // Müşteri → puanlama / sipariş kartı
+        if (role === 'customer' && orderId) router.push(`/(customer)/order/${orderId}` as never);
+        else router.push(`${base}/my-orders` as never);
+        break;
       // offer_accepted / offer_rejected / offer_withdrawn / order_completed /
       // order_cancelled → mevcut app'in siparişlerim sekmesi (güvenli varsayılan;
       // asla çapraz-app rotaya gitmez).
@@ -246,6 +255,56 @@ export async function notifyFromTemplate(params: {
   });
 }
 
+
+/**
+ * Yeni mesaj bildirimi: in-app feed'e dedup'lu kayıt + alıcıya push — ikisi de
+ * notify_new_message RPC içinde (server-side; push token client'a hiç gitmez).
+ * push:false → push gönderme (teklif-mesajı: teklif bildirimi zaten push atıyor).
+ * NOT: senderId giriş yapan kullanıcı olmalı; server auth.uid()=sender doğrular.
+ */
+export async function notifyNewMessage(params: {
+  receiverId: string;
+  senderId: string;
+  targetRole?: NotificationRole;
+  preview: string;
+  push?: boolean;
+}): Promise<void> {
+  try {
+    await _db.rpc('notify_new_message', {
+      p_receiver_id: params.receiverId,
+      p_sender_id:   params.senderId,
+      p_target_role: params.targetRole ?? null,
+      p_preview:     params.preview,
+      p_push:        params.push ?? true,
+    });
+  } catch { /* RPC hatası akışı engellemesin */ }
+}
+
+/**
+ * Şikayet gönder: reports'a insert + admin'e in-app bildirim + admin push —
+ * hepsi file_report RPC içinde (server-side). Helper sadece reportId döner.
+ */
+export async function fileReport(params: {
+  targetType: 'order' | 'user' | 'shop' | 'message';
+  targetId?: string;
+  reason: string;
+  details?: string;
+  appName: string;
+}): Promise<{ reportId: string | null }> {
+  try {
+    const { data } = await _db.rpc('file_report', {
+      p_target_type: params.targetType,
+      p_target_id:   params.targetId ?? null,
+      p_reason:      params.reason,
+      p_details:     params.details ?? null,
+      p_app_name:    params.appName,
+    });
+    const res = data as { report_id: string | null } | null;
+    return { reportId: res?.report_id ?? null };
+  } catch {
+    return { reportId: null };
+  }
+}
 
 /**
  * Önemli anlarda kullanıcıya e-posta gönderir (Brevo, send-email edge function).

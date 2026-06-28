@@ -41,6 +41,8 @@ export {
   sendPushNotification,
   notifyUser,
   notifyFromTemplate,
+  notifyNewMessage,
+  fileReport,
   sendAppEmail,
 } from './lib/notifications';
 export type { NotificationRole } from './lib/notifications';
