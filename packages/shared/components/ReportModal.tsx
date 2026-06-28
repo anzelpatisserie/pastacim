@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator,
+  StyleSheet, Alert, ActivityIndicator, Image,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '../lib/supabase';
 import { fileReport } from '../lib/notifications';
 import { useAuth } from '../hooks/useAuth';
 import { useThemeColors, Spacing, Radius, FontSize } from '../lib/constants';
@@ -42,11 +44,28 @@ export default function ReportModal({
 
   const [reason, setReason] = useState<string | null>(null);
   const [details, setDetails] = useState('');
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const reset = () => {
     setReason(null);
     setDetails('');
+    setImageUri(null);
+  };
+
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('İzin Gerekli', 'Galeri iznine ihtiyaç var.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      quality: 0.6,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setImageUri(result.assets[0].uri);
+    }
   };
 
   const handleClose = () => {
@@ -65,13 +84,30 @@ export default function ReportModal({
     }
 
     setIsSubmitting(true);
+    let imageUrl: string | undefined;
+
     try {
+      // Resim varsa yükle
+      if (imageUri && user?.id) {
+        const response = await fetch(imageUri);
+        const arrayBuffer = await response.arrayBuffer();
+        const path = `reports/${user.id}/${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('feedbacks')
+          .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('feedbacks').getPublicUrl(path);
+          imageUrl = urlData.publicUrl;
+        }
+      }
+
       const { reportId } = await fileReport({
         targetType,
         targetId,
         reason,
         details: details.trim() || undefined,
         appName,
+        imageUrl,
       });
       if (!reportId) throw new Error('Şikayet kaydedilemedi');
 
@@ -97,7 +133,7 @@ export default function ReportModal({
     >
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={[styles.sheet, { backgroundColor: C.background }]}>
           {/* Header */}
@@ -158,6 +194,29 @@ export default function ReportModal({
             />
             <Text style={[styles.charCount, { color: C.placeholder }]}>{details.length}/500</Text>
 
+            {/* Resim eki */}
+            <Text style={[styles.label, { color: C.textSecondary, marginTop: Spacing.md }]}>
+              Resim (isteğe bağlı)
+            </Text>
+            {imageUri ? (
+              <View style={styles.imageWrapper}>
+                <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                <TouchableOpacity
+                  style={[styles.removeImageBtn, { backgroundColor: C.error }]}
+                  onPress={() => setImageUri(null)}
+                >
+                  <Text style={styles.removeImageText}>✕ Kaldır</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.imagePickBtn, { backgroundColor: C.card, borderColor: C.border }]}
+                onPress={handlePickImage}
+              >
+                <Text style={[styles.imagePickText, { color: C.textSecondary }]}>📷 Resim Ekle</Text>
+              </TouchableOpacity>
+            )}
+
             {/* Gönder */}
             <TouchableOpacity
               style={[styles.submitBtn, { backgroundColor: C.primary }, isSubmitting && { opacity: 0.7 }]}
@@ -208,6 +267,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md, minHeight: 100,
   },
   charCount: { fontSize: FontSize.xs, textAlign: 'right', marginTop: 2 },
+  imageWrapper: { marginTop: 4, marginBottom: Spacing.sm },
+  imagePreview: { width: '100%', height: 140, borderRadius: Radius.md },
+  removeImageBtn: {
+    marginTop: Spacing.xs, paddingVertical: 8,
+    borderRadius: Radius.md, alignItems: 'center',
+  },
+  removeImageText: { color: '#FFF', fontWeight: '700', fontSize: FontSize.sm },
+  imagePickBtn: {
+    borderWidth: 1.5, borderStyle: 'dashed', borderRadius: Radius.md,
+    paddingVertical: 16, alignItems: 'center', marginTop: 4, marginBottom: Spacing.sm,
+  },
+  imagePickText: { fontSize: FontSize.sm, fontWeight: '600' },
   submitBtn: {
     paddingVertical: 16, borderRadius: Radius.full, alignItems: 'center', marginTop: Spacing.lg,
   },
