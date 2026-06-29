@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Linking } from 'react-native';
+import { Linking, View } from 'react-native';
 import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -163,11 +163,15 @@ function RootLayoutNav() {
         androidUrl="https://play.google.com/store/apps/details?id=com.pastacim.customer"
       />
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(customer)" />
-        <Stack.Screen name="messages/[conversationId]" options={{ headerShown: false }} />
-      </Stack>
+      {/* Web'de üstteki WebStoreBanner yükseklik ekler; navigator'ı flex:1 ile
+          sararak kalan alana yayıyoruz, aksi halde tab bar viewport dışına taşar. */}
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(customer)" />
+          <Stack.Screen name="messages/[conversationId]" options={{ headerShown: false }} />
+        </Stack>
+      </View>
       <NameEntryModal visible={needsName} onDone={refreshProfile} />
     </GestureHandlerRootView>
   );

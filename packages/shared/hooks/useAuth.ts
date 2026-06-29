@@ -18,6 +18,24 @@ WebBrowser.maybeCompleteAuthSession();
 
 const EPHEMERAL_SESSION_KEY = 'pastacim_ephemeral_session';
 
+// "Beni Hatırla" kapalı bayrağı için platform-güvenli depolama.
+// expo-secure-store web'de DESTEKLENMEZ (throw eder) → web'de localStorage kullan.
+// Native'de bu çağrılar throw etmediği için bootstrap'ta isLoading takılmaz.
+const ephemeralStore = {
+  get: async (): Promise<string | null> => {
+    if (Platform.OS === 'web') return globalThis.localStorage?.getItem(EPHEMERAL_SESSION_KEY) ?? null;
+    return SecureStore.getItemAsync(EPHEMERAL_SESSION_KEY);
+  },
+  set: async (value: string): Promise<void> => {
+    if (Platform.OS === 'web') { globalThis.localStorage?.setItem(EPHEMERAL_SESSION_KEY, value); return; }
+    await SecureStore.setItemAsync(EPHEMERAL_SESSION_KEY, value);
+  },
+  remove: async (): Promise<void> => {
+    if (Platform.OS === 'web') { globalThis.localStorage?.removeItem(EPHEMERAL_SESSION_KEY); return; }
+    await SecureStore.deleteItemAsync(EPHEMERAL_SESSION_KEY);
+  },
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
 
@@ -83,9 +101,9 @@ export function useAuth(): AuthState & AuthActions {
   useEffect(() => {
     (async () => {
       // "Beni Hatırla" kapalıyken giriş yapıldıysa app yeniden açılışta otomatik çıkış yap
-      const ephemeral = await SecureStore.getItemAsync(EPHEMERAL_SESSION_KEY);
+      const ephemeral = await ephemeralStore.get();
       if (ephemeral === 'true') {
-        await SecureStore.deleteItemAsync(EPHEMERAL_SESSION_KEY);
+        await ephemeralStore.remove();
         await supabase.auth.signOut();
         setSession(null);
         setProfile(null);
@@ -140,9 +158,9 @@ export function useAuth(): AuthState & AuthActions {
 
     if (!error) {
       if (rememberMe) {
-        await SecureStore.deleteItemAsync(EPHEMERAL_SESSION_KEY);
+        await ephemeralStore.remove();
       } else {
-        await SecureStore.setItemAsync(EPHEMERAL_SESSION_KEY, 'true');
+        await ephemeralStore.set('true');
       }
     }
 
