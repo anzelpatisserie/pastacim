@@ -581,6 +581,7 @@ export type Database = {
           created_at: string
           customer_id: string
           id: string
+          image_url: string | null
           is_anonymous: boolean
           order_id: string
           rating: number
@@ -592,6 +593,7 @@ export type Database = {
           created_at?: string
           customer_id: string
           id?: string
+          image_url?: string | null
           is_anonymous?: boolean
           order_id: string
           rating: number
@@ -603,6 +605,7 @@ export type Database = {
           created_at?: string
           customer_id?: string
           id?: string
+          image_url?: string | null
           is_anonymous?: boolean
           order_id?: string
           rating?: number
@@ -1251,6 +1254,10 @@ export type Database = {
       reject_offer: { Args: { p_offer_id: string }; Returns: Json }
       request_wallet_top_up: {
         Args: { p_amount: number; p_note?: string }
+        Returns: Json
+      }
+      set_email_subscription: {
+        Args: { p_resubscribe?: boolean; p_token: string; p_user_id: string }
         Returns: Json
       }
       set_order_status:
