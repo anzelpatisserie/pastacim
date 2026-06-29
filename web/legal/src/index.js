@@ -145,24 +145,68 @@ const HOME = page('Yasal', `
   </ul>
 `);
 
-function htmlResponse(body) {
+function htmlResponse(body, cache = true) {
   return new Response(body, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': cache ? 'public, max-age=3600' : 'no-store',
       'X-Content-Type-Options': 'nosniff',
     },
   });
 }
 
+// ── E-posta aboneliği (unsubscribe / resubscribe) ───────────────────────────
+// Supabase edge function'lar HTML'i sandbox'lıyor (text/plain'e çeviriyor); bu
+// yüzden sayfa burada (Cloudflare worker) servis edilir, opt-out RPC ile yapılır.
+const SUPA_URL = 'https://lvrbzhziayegyinkcuka.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2cmJ6aHppYXllZ3lpbmtjdWthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MDkzMDMsImV4cCI6MjA5NTE4NTMwM30.GtcdOSz26CZ8nrHGYOCmVcpCdefhT_njTIfx2KDhEgI';
+
+function unsubPage(heading, bodyHtml, extraHtml = '') {
+  return htmlResponse(`<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${heading} — Pastacım</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#FFF9F9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}.card{background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:480px;width:100%;padding:40px 32px;text-align:center}.emoji{font-size:48px;margin-bottom:16px}h2{color:#8B1A3D;font-size:22px;font-weight:800;margin-bottom:16px}p{color:#4A5568;font-size:14px;line-height:1.7;margin-bottom:10px}.btn{display:inline-block;margin-top:24px;padding:14px 32px;background:#8B1A3D;color:#fff;border-radius:999px;text-decoration:none;font-weight:700;font-size:14px}.note{color:#A0AEC0;font-size:12px;margin-top:28px}</style>
+</head><body><div class="card"><div class="emoji">🎂</div><h2>${heading}</h2>${bodyHtml}${extraHtml}<p class="note">Pastacım &mdash; Türkiye'nin pasta platformu</p></div></body></html>`, false);
+}
+
+async function handleUnsubscribe(url) {
+  const u = url.searchParams.get('u');
+  const t = url.searchParams.get('t');
+  const resub = url.searchParams.get('resubscribe') === '1' || url.searchParams.get('action') === 'resubscribe';
+  if (!u || !t) return unsubPage('Geçersiz Bağlantı', '<p>Bu abonelik linki geçersiz görünüyor.</p>');
+  try {
+    const resp = await fetch(`${SUPA_URL}/rest/v1/rpc/set_email_subscription`, {
+      method: 'POST',
+      headers: { apikey: SUPA_ANON, Authorization: `Bearer ${SUPA_ANON}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_user_id: u, p_token: t, p_resubscribe: resub }),
+    });
+    const data = await resp.json().catch(() => null);
+    if (!data || data.ok !== true) {
+      return unsubPage('Geçersiz Bağlantı', '<p>Bu abonelik bağlantısı artık geçerli değil. Lütfen e-postanızdaki orijinal bağlantıyı kullanın.</p>');
+    }
+    if (resub) {
+      return unsubPage('Tekrar Abone Oldunuz! 🎉', '<p>Bundan sonra Pastacım&apos;dan kampanya ve duyuruları tekrar alacaksınız.</p>');
+    }
+    const resubUrl = `${url.origin}${url.pathname}?u=${encodeURIComponent(u)}&t=${encodeURIComponent(t)}&resubscribe=1`;
+    return unsubPage(
+      'Abonelikten Çıktınız',
+      "<p>Bundan sonra yalnızca önemli bildirimler (sipariş durumu, teklif, hesap güvenliği) gönderilecek; pazarlama ve toplu e-posta almayacaksınız.</p><p>Fikrinizi değiştirirseniz aşağıdaki düğmeye tıklayabilirsiniz.</p>",
+      `<a class="btn" href="${resubUrl}">Tekrar Abone Ol</a>`,
+    );
+  } catch {
+    return unsubPage('Hata', '<p>Bir hata oluştu. Lütfen daha sonra tekrar deneyin.</p>');
+  }
+}
+
 export default {
   async fetch(request) {
-    const { pathname } = new URL(request.url);
-    switch (pathname.replace(/\/+$/, '') || '/') {
+    const url = new URL(request.url);
+    switch (url.pathname.replace(/\/+$/, '') || '/') {
       case '/terms':
         return htmlResponse(TERMS);
       case '/privacy':
         return htmlResponse(PRIVACY);
+      case '/unsubscribe':
+        return handleUnsubscribe(url);
       case '/':
         return htmlResponse(HOME);
       default:

@@ -56,7 +56,9 @@ Deno.serve(async (req) => {
     for (let i = 0; i < recipients.length; i += 20) {
       const chunk = recipients.slice(i, i + 20);
       await Promise.all(chunk.map(async (u: { id: string; email: string; email_unsub_token: string }) => {
-        const unsubUrl = `${FUNCTIONS_BASE}/unsubscribe?u=${u.id}&t=${u.email_unsub_token}`;
+        // Unsubscribe sayfası Cloudflare worker'da (Supabase edge function HTML'i
+        // sandbox'lıyor → text/plain). Worker düzgün HTML render eder + opt-out RPC.
+        const unsubUrl = `https://pastacim.ipekciapp.com/unsubscribe?u=${u.id}&t=${u.email_unsub_token}`;
         try {
           const res = await fetch(BREVO_URL, {
             method: "POST",
