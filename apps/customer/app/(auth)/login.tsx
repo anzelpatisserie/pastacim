@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
-import { makeRedirectUri } from 'expo-auth-session';
+import { authRedirectUrl } from '@pastacim/shared';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useThemeColors, Spacing, Radius, FontSize, supabase } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
@@ -111,7 +111,7 @@ export default function LoginScreen() {
       return;
     }
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: 'pastacim://auth-callback?type=recovery',
+      redirectTo: authRedirectUrl('pastacim', true),
     });
     setIsResetLoading(false);
     if (resetError) {
@@ -134,7 +134,7 @@ export default function LoginScreen() {
       email: email.trim().toLowerCase(),
       password,
       fullName: fullName.trim(),
-      redirectTo: 'pastacim://auth-callback',
+      redirectTo: authRedirectUrl('pastacim'),
     });
     setIsLoading(false);
 
@@ -166,7 +166,7 @@ export default function LoginScreen() {
       ]);
 
     try {
-      const redirectUrl = makeRedirectUri({ scheme: 'pastacim', path: 'auth-callback' });
+      const redirectUrl = authRedirectUrl('pastacim');
       const { error: gError } = await withTimeout(signInWithGoogle(redirectUrl), 15000, 'signInWithGoogle');
       if (gError) {
         setError(gError);

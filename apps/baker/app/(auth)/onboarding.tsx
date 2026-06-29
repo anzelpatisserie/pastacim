@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { makeRedirectUri } from 'expo-auth-session';
+import { authRedirectUrl } from '@pastacim/shared';
 import { useThemeColors, ThemeColors, Spacing, Radius, FontSize, supabase } from '@pastacim/shared';
 import { useAuth } from '@pastacim/shared';
 
@@ -34,7 +34,7 @@ export default function OnboardingScreen() {
       ]);
 
     try {
-      const redirectUrl = makeRedirectUri({ scheme: 'pastacim-pro', path: 'auth-callback' });
+      const redirectUrl = authRedirectUrl('pastacim-pro');
       const { error: gError } = await withTimeout(signInWithGoogle(redirectUrl), 15000, 'signInWithGoogle');
       if (gError) {
         setError(gError);

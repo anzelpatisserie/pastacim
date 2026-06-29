@@ -77,6 +77,7 @@ export type { Region } from './components/AppMap';
 
 // WebStoreBanner (web-only; native'de null döner)
 export { WebStoreBanner } from './components/WebStoreBanner';
+export { authRedirectUrl } from './lib/authRedirect';
 
 // Types
 export type { Database, Json } from './types/database.types';
