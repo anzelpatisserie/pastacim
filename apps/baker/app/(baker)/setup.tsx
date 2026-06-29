@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import { AppMapView as MapView, AppMarker as Marker } from '@pastacim/shared';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import { shopJustCreatedSignal } from './index';
 
@@ -385,7 +385,6 @@ export default function BakerSetupScreen() {
               <MapView
                 key={mapKey}
                 style={{ height: 200, borderRadius: Radius.md }}
-                provider={PROVIDER_DEFAULT}
                 zoomControlEnabled
                 zoomEnabled
                 initialRegion={{ latitude, longitude, latitudeDelta: 0.008, longitudeDelta: 0.008 }}

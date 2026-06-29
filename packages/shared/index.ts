@@ -71,6 +71,13 @@ export { default as NameEntryModal } from './components/NameEntryModal';
 export { default as ReportModal } from './components/ReportModal';
 export type { ReportTargetType } from './components/ReportModal';
 
+// AppMap (platform-split: native = react-native-maps, web = Google Maps JS)
+export { AppMapView, AppMarker } from './components/AppMap';
+export type { Region } from './components/AppMap';
+
+// WebStoreBanner (web-only; native'de null döner)
+export { WebStoreBanner } from './components/WebStoreBanner';
+
 // Types
 export type { Database, Json } from './types/database.types';
 export type { OrderOfferSummaryRow, CustomerSummary } from './lib/supabase';

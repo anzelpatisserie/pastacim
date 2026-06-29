@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import { AppMapView as MapView, AppMarker as Marker } from '@pastacim/shared';
 import { rpcPlaceOrder, rpcNearbyBakers, supabase, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 
 const SEARCH_RADIUS = 20;
@@ -64,7 +64,7 @@ export default function CreateOrderScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [servingSize, setServingSize] = useState('');
-  const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
+  const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('pickup');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryDate, setDeliveryDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -586,6 +586,11 @@ export default function CreateOrderScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+            <Text style={{ fontSize: FontSize.xs, color: C.textSecondary, marginTop: Spacing.xs }}>
+              {deliveryType === 'pickup'
+                ? 'Siparişinizi pastacının adresinden kendiniz teslim alacaksınız.'
+                : 'Siparişin adresinize teslim edilmesini istediğinizi belirttiniz.'}
+            </Text>
           </View>
 
 
@@ -935,7 +940,6 @@ function LocationConfirmModal({
             // Yeni geocode noktası gelince haritayı yeniden merkezle (key remount)
             key={point ? `${point.lat},${point.lng}` : 'map'}
             style={confirmStyles.map}
-            provider={PROVIDER_DEFAULT}
             zoomControlEnabled
             zoomEnabled
             initialRegion={{
