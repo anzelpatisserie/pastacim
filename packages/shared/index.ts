@@ -76,7 +76,7 @@ export { AppMapView, AppMarker } from './components/AppMap';
 export type { Region } from './components/AppMap';
 
 // WebStoreBanner (web-only; native'de null döner)
-export { WebStoreBanner } from './components/WebStoreBanner';
+export { WebStoreBanner, WEB_BANNER_HEIGHT } from './components/WebStoreBanner';
 export { authRedirectUrl } from './lib/authRedirect';
 
 // Types

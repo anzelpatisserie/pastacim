@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { Linking, View, Platform } from 'react-native';
 import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -8,7 +8,7 @@ import * as Updates from 'expo-updates';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal, WebStoreBanner } from '@pastacim/shared';
+import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal, WebStoreBanner, WEB_BANNER_HEIGHT } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
 
 export { ErrorBoundary } from 'expo-router';
@@ -29,7 +29,9 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
-  const [showSplash, setShowSplash] = useState(true);
+  // Web'de splash'ı atla: OAuth dönüşünde tam-sayfa reload splash'ı tekrar
+  // oynatır + web'de native-açılış hissi gereksiz.
+  const [showSplash, setShowSplash] = useState(Platform.OS !== 'web');
 
   useEffect(() => {
     if (fontError) throw fontError;
@@ -164,7 +166,7 @@ function RootLayoutNav() {
       <StatusBar style="auto" />
       {/* Web'de üstteki WebStoreBanner yükseklik ekler; navigator'ı flex:1 ile
           sararak kalan alana yayıyoruz, aksi halde tab bar viewport dışına taşar. */}
-      <View style={{ flex: 1, minHeight: 0 }}>
+      <View style={{ flex: 1, minHeight: 0, paddingTop: Platform.OS === 'web' ? WEB_BANNER_HEIGHT : 0 }}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(baker)" />

@@ -1,5 +1,9 @@
 import React from 'react';
-import { Platform, View, Text, Pressable, Linking, StyleSheet } from 'react-native';
+import { Platform, View, Text, Pressable, Linking, StyleSheet, ViewStyle } from 'react-native';
+
+// Web banner yüksekliği — root layout navigator'a bu kadar paddingTop verir
+// (banner position:fixed olduğundan akıştan çıkar; içerik altında kalmasın diye).
+export const WEB_BANNER_HEIGHT = 52;
 
 type Props = {
   appName: string;
@@ -7,10 +11,19 @@ type Props = {
   androidUrl?: string;
 };
 
+// position:'fixed' RN tiplerinde yok ama react-native-web destekler.
+const fixedTop = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 1000,
+} as unknown as ViewStyle;
+
 export function WebStoreBanner({ appName, iosUrl, androidUrl }: Props) {
   if (Platform.OS !== 'web') return null;
   return (
-    <View style={styles.bar}>
+    <View style={[styles.bar, fixedTop]}>
       <Text style={styles.brand}>{appName}</Text>
       <View style={styles.links}>
         {iosUrl ? (
@@ -30,11 +43,11 @@ export function WebStoreBanner({ appName, iosUrl, androidUrl }: Props) {
 
 const styles = StyleSheet.create({
   bar: {
+    height: WEB_BANNER_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
     backgroundColor: '#8B1A3D',
   },
   brand: { color: '#fff', fontWeight: '700', fontSize: 16 },
