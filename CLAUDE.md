@@ -280,6 +280,19 @@ Aynı Supabase hesabı **hem müşteri hem pastacı** olabilir. Rol enum'u yerin
 
 ---
 
+## ⚡ Token / Oturum Verimliliği (ZORUNLU)
+
+Bağlam (context) maliyeti her turda tüm geçmiş kadar büyür. Kotayı korumak için:
+
+1. **Görev başına YENİ oturum.** Bağımsız bir batch/feature bitince `/clear` veya yeni sohbet aç. Uzun oturum = pahalı turlar (en büyük etken budur).
+2. **Büyük çıktıları bağlama dökme.** `get_logs`, `git log`, büyük `git diff`, koca dosya okumalarını `head`/`grep`/`limit`/satır-aralığı ile sınırla. Tüm dosyayı değil, gereken kısmı oku.
+3. **Ağır dosya işini subagent'a ver.** Subagent bağlamı izoledir; raporu KISA tut. Çok dosyalı/paralel işler için subagent dispatch et.
+4. **Emülatör screenshot/build/OTA döngülerini minimumda tut.** Doğrulama için önce `tsc`/grep; görsel doğrulama sadece gerektiğinde, tek sefer.
+5. **Bağımsız tool çağrılarını tek mesajda batch'le** (tur sayısını azaltır).
+6. **DB değişiklikleri:** MCP `apply_migration` + dosyaya kısa kayıt; tam SQL'i tekrar bağlama dökme.
+
+---
+
 ## Önemli Komutlar
 
 ```bash
