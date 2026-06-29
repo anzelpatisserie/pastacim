@@ -86,6 +86,17 @@ supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: windo
 - **SPA fallback:** `dist/_redirects` içine `/* /index.html 200` (expo-router client-side routing için zorunlu)
 - DNS zaten Cloudflare'de → custom domain bağlama CNAME ile otomatik
 
+### E1. Mevcut Yasal Worker ile Birlikte Yaşama (KRİTİK — URL kırılmamalı)
+`pastacim.ipekciapp.com` şu an `web/legal/` Cloudflare Worker'ı tarafından **custom domain** olarak tutuluyor ve şu yolları sunuyor: `/terms`, `/privacy` (Apple & Play'e verilen yasal URL'ler), `/unsubscribe` (gönderilmiş e-postalardaki abonelikten-çık linki — dolaşımda).
+
+**Bu 3 URL aynen korunmalı.** Çözüm:
+1. `web/legal/wrangler.toml` → Worker'ı `custom_domain = true` (tüm subdomain) yerine **path-route'lara** çevir:
+   `pastacim.ipekciapp.com/terms*`, `/privacy*`, `/unsubscribe*`
+2. `pastacim.ipekciapp.com`'u `pastacim-web` Pages projesine custom domain olarak bağla.
+3. Cloudflare'de **Worker route'ları Pages'ten önceliklidir** → bu 3 yol Worker'a, geri kalan her şey Pages'e (web app) gider.
+
+Sonuç: web app kökte (`/`), mevcut yasal/unsubscribe URL'leri hiç değişmeden çalışır. `pastacimpro.ipekciapp.com`'da worker yok → doğrudan Pages.
+
 ## F. Kapsam Dışı (Bu Faz)
 
 - Push bildirimleri (web-push sonraki faz)
