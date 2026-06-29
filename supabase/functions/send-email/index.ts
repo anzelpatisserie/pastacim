@@ -79,23 +79,26 @@ Deno.serve(async (req) => {
     if (!caller) { console.error("send-email: unauthenticated"); return ok(); }
 
     // 2) Tip-bazında yetki: çağıran ilgili siparişin tarafı mı?
+    // İki-adımlı yetki (embedded-filter `.eq("orders.customer_id",...)` runtime'da
+    // 0 satır döndürüp mailleri sessizce düşürüyordu — DB seviyesinde mantık doğru
+    // olmasına rağmen). Embedded filter'sız, kanıtlanmış sorgu:
     let authorized = false;
     if (type === "welcome") {
       authorized = caller.id === userId;
-    } else if (type === "order_ready" || type === "review_encourage") {
-      // caller = pastacı, userId = müşteri
-      const { data: rows } = await admin.from("offers")
-        .select("id, orders!inner(customer_id)")
-        .eq("baker_id", caller.id).eq("status", "accepted")
-        .eq("orders.customer_id", userId).limit(1);
-      authorized = !!rows?.length;
-    } else if (type === "offer_accepted") {
-      // caller = müşteri, userId = pastacı
-      const { data: rows } = await admin.from("offers")
-        .select("id, orders!inner(customer_id)")
-        .eq("baker_id", userId).eq("status", "accepted")
-        .eq("orders.customer_id", caller.id).limit(1);
-      authorized = !!rows?.length;
+    } else {
+      // order_ready/review_encourage: baker=caller, müşteri=userId
+      // offer_accepted:                baker=userId, müşteri=caller
+      const bakerId = type === "offer_accepted" ? userId : caller.id;
+      const customerId = type === "offer_accepted" ? caller.id : userId;
+      const { data: offs } = await admin.from("offers")
+        .select("order_id").eq("baker_id", bakerId).eq("status", "accepted");
+      // deno-lint-ignore no-explicit-any
+      const orderIds = (offs ?? []).map((o: any) => o.order_id);
+      if (orderIds.length) {
+        const { data: ords } = await admin.from("orders")
+          .select("id").in("id", orderIds).eq("customer_id", customerId).limit(1);
+        authorized = !!ords?.length;
+      }
     }
     if (!authorized) { console.error("send-email: unauthorized", type, caller.id); return ok(); }
 
