@@ -243,6 +243,12 @@ export function useAuth(): AuthState & AuthActions {
         return { error: 'Google girişi başlatılamadı: ' + (error?.message ?? 'bilinmeyen') };
       }
 
+      // Web: tam-sayfa redirect; dönüşte detectSessionInUrl session'ı yakalar
+      if (Platform.OS === 'web') {
+        globalThis.location.assign(data.url);
+        return { error: null };
+      }
+
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
       if (result.type === 'cancel' || result.type === 'dismiss') {
