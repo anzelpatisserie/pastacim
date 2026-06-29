@@ -66,10 +66,26 @@ export function AppMapView({
 
 export function AppMarker({
   coordinate,
+  draggable,
+  onDragEnd,
 }: {
   coordinate: Coordinate;
   draggable?: boolean;
-  onDragEnd?: unknown;
+  onDragEnd?: (e: { nativeEvent: { coordinate: Coordinate } }) => void;
 }) {
-  return <GMarker position={{ lat: coordinate.latitude, lng: coordinate.longitude }} />;
+  return (
+    <GMarker
+      position={{ lat: coordinate.latitude, lng: coordinate.longitude }}
+      draggable={draggable}
+      onDragEnd={(e) => {
+        if (e.latLng && onDragEnd) {
+          onDragEnd({
+            nativeEvent: {
+              coordinate: { latitude: e.latLng.lat(), longitude: e.latLng.lng() },
+            },
+          });
+        }
+      }}
+    />
+  );
 }
