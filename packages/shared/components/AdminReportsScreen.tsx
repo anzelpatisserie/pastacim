@@ -22,6 +22,7 @@ type ReportRow = {
   reason: string;
   details: string | null;
   image_url: string | null;
+  image_signed_url?: string | null;
   target_type: string;
   target_id: string | null;
   app_name: string;
@@ -66,7 +67,22 @@ export default function AdminReportsScreen() {
     if (refresh) setRefreshing(true);
     const { data, error } = await _db.rpc('get_reports');
     if (error) console.error('[AdminReports]', error.message);
-    setReports((data ?? []) as ReportRow[]);
+    const rows = (data ?? []) as ReportRow[];
+
+    // feedbacks bucket private — resmi göstermek için signed URL üret
+    const withSignedUrls = await Promise.all(
+      rows.map(async (r) => {
+        if (!r.image_url) return r;
+        // URL'den storage path'i çıkar: .../feedbacks/{path}
+        const match = r.image_url.match(/\/feedbacks\/(.+)$/);
+        if (!match) return { ...r, image_signed_url: r.image_url };
+        const { data: signed } = await supabase.storage
+          .from('feedbacks')
+          .createSignedUrl(match[1], 3600);
+        return { ...r, image_signed_url: signed?.signedUrl ?? null };
+      }),
+    );
+    setReports(withSignedUrls);
     setLoading(false);
     setRefreshing(false);
   }, []);
@@ -172,9 +188,9 @@ export default function AdminReportsScreen() {
               </View>
               <Text style={[styles.reason, { color: C.primary }]}>{r.reason}</Text>
               {r.details ? <Text style={[styles.details, { color: C.textSecondary }]}>{r.details}</Text> : null}
-              {r.image_url ? (
-                <TouchableOpacity onPress={() => setImageModalUrl(r.image_url)} activeOpacity={0.8} style={styles.imgThumbWrap}>
-                  <Image source={{ uri: r.image_url }} style={styles.imgThumb} resizeMode="cover" />
+              {r.image_signed_url ? (
+                <TouchableOpacity onPress={() => setImageModalUrl(r.image_signed_url ?? null)} activeOpacity={0.8} style={styles.imgThumbWrap}>
+                  <Image source={{ uri: r.image_signed_url }} style={styles.imgThumb} resizeMode="cover" />
                   <Text style={[styles.imgLabel, { color: C.textSecondary }]}>📎 Kanıt resmi · büyütmek için dokun</Text>
                 </TouchableOpacity>
               ) : null}

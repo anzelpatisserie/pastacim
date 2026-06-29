@@ -112,8 +112,24 @@ export default function BakerHomeScreen() {
               Alert.alert('Hata', 'Teklif geri çekilemedi.');
               return;
             }
-            // Listeden çıkar
+            // Bekleyen tekliflerden anında çıkar (optimistik geri bildirim)
             setPendingOffers((prev) => prev.filter((p) => p.id !== offerId));
+            // myOfferMap stale kalmasın: pending teklifi withdrawn yap ki sipariş
+            // "Yakındaki Talepler" (açık talepler) listesine geri dönsün. Aksi halde
+            // sayfa yenilenene dek myOfferMap'te 'pending' kaldığı için sipariş kaybolur.
+            setMyOfferMap((prev) => {
+              const next = new Map(prev);
+              for (const [orderId, off] of prev) {
+                if (off.id === offerId) {
+                  next.set(orderId, { ...off, status: 'withdrawn' });
+                  break;
+                }
+              }
+              return next;
+            });
+            // Tam tutarlılık için sunucudan tazele (inactiveOffers + istatistikler).
+            fetchOrders(true);
+            fetchMyOffers();
           },
         },
       ]
