@@ -345,13 +345,13 @@ export default function AdminEmailsScreen() {
                       <ActivityIndicator size="small" color={C.primary} />
                     ) : (
                       <Switch
-                        value={s.email_opt_out}
+                        value={!s.email_opt_out}
                         onValueChange={() => handleToggleOptOut(s.id, s.email_opt_out)}
                         trackColor={{ false: C.border, true: C.primary }}
                         thumbColor="#FFF"
                       />
                     )}
-                    <Text style={[styles.subOptLabel, { color: s.email_opt_out ? C.primary : C.textSecondary }]}>
+                    <Text style={[styles.subOptLabel, { color: s.email_opt_out ? C.textSecondary : C.primary }]}>
                       {s.email_opt_out ? 'Çıktı' : 'Abone'}
                     </Text>
                   </View>
