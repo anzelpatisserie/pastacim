@@ -29,6 +29,8 @@ export default function CustomerMyOrdersScreen() {
   const { user } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
+  const [showHistory, setShowHistory] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +55,23 @@ export default function CustomerMyOrdersScreen() {
     if (fetchError) {
       setError('Siparişler yüklenemedi.');
     } else {
-      setOrders(data ?? []);
+      const fetchedOrders: Order[] = data ?? [];
+      setOrders(fetchedOrders);
+
+      // Hangi tamamlanmış siparişlere yorum yapılmış?
+      const completedIds = fetchedOrders
+        .filter((o) => o.status === 'completed')
+        .map((o) => o.id);
+      if (completedIds.length > 0) {
+        const { data: reviewData } = await (supabase as any)
+          .from('reviews')
+          .select('order_id')
+          .eq('customer_id', user.id)
+          .in('order_id', completedIds);
+        setReviewedOrderIds(new Set((reviewData ?? []).map((r: { order_id: string }) => r.order_id)));
+      } else {
+        setReviewedOrderIds(new Set());
+      }
     }
     if (refresh) setIsRefreshing(false);
     else setIsLoading(false);
@@ -246,7 +264,7 @@ export default function CustomerMyOrdersScreen() {
 
           type ListItem =
             | { kind: 'order'; order: Order }
-            | { kind: 'header'; title: string; count: number };
+            | { kind: 'header'; title: string; count: number; collapsible?: boolean; isExpanded?: boolean };
 
           const listData: ListItem[] = [
             ...(activeOrders.length > 0
@@ -257,8 +275,14 @@ export default function CustomerMyOrdersScreen() {
               : []),
             ...(historyOrders.length > 0
               ? [
-                  { kind: 'header' as const, title: '📜 Geçmiş Siparişler', count: historyOrders.length },
-                  ...historyOrders.map((o) => ({ kind: 'order' as const, order: o })),
+                  {
+                    kind: 'header' as const,
+                    title: '📜 Geçmiş Siparişler',
+                    count: historyOrders.length,
+                    collapsible: true,
+                    isExpanded: showHistory,
+                  },
+                  ...(showHistory ? historyOrders.map((o) => ({ kind: 'order' as const, order: o })) : []),
                 ]
               : []),
           ];
@@ -271,11 +295,28 @@ export default function CustomerMyOrdersScreen() {
               }
               renderItem={({ item }) => {
                 if (item.kind === 'header') {
+                  if (item.collapsible) {
+                    return (
+                      <TouchableOpacity
+                        style={styles.sectionHeader}
+                        onPress={() => setShowHistory((v) => !v)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.sectionHeaderText, { color: C.textSecondary }]}>
+                          {item.title}
+                          <Text style={[styles.sectionCount, { color: C.placeholder }]}>{'  '}{item.count}</Text>
+                        </Text>
+                        <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                          {item.isExpanded ? '▾' : '▸'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  }
                   return (
                     <View style={styles.sectionHeader}>
                       <Text style={[styles.sectionHeaderText, { color: C.textSecondary }]}>
                         {item.title}
-                        <Text style={[styles.sectionCount, { color: C.placeholder }]}>  {item.count}</Text>
+                        <Text style={[styles.sectionCount, { color: C.placeholder }]}>{'  '}{item.count}</Text>
                       </Text>
                     </View>
                   );
@@ -287,6 +328,7 @@ export default function CustomerMyOrdersScreen() {
                     isCancelling={cancellingId === item.order.id}
                     isCompleting={completingId === item.order.id}
                     isDeletingCard={deletingId === item.order.id}
+                    hasReview={reviewedOrderIds.has(item.order.id)}
                     onCancel={() => handleCancel(item.order)}
                     onComplete={() => handleComplete(item.order)}
                     onDelete={() => handleDelete(item.order)}
@@ -307,13 +349,14 @@ export default function CustomerMyOrdersScreen() {
 }
 
 function OrderCard({
-  order, colors: C, isCancelling, isCompleting, isDeletingCard, onCancel, onComplete, onDelete,
+  order, colors: C, isCancelling, isCompleting, isDeletingCard, hasReview, onCancel, onComplete, onDelete,
 }: {
   order: Order;
   colors: ThemeColors;
   isCancelling: boolean;
   isCompleting: boolean;
   isDeletingCard: boolean;
+  hasReview: boolean;
   onCancel: () => void;
   onComplete: () => void;
   onDelete: () => void;
@@ -421,6 +464,17 @@ function OrderCard({
         </View>
       )}
 
+      {/* Tamamlandı & henüz yorum yapılmadı → Puanla CTA */}
+      {order.status === 'completed' && !hasReview && (
+        <TouchableOpacity
+          style={[styles.reviewCtaBtn, { backgroundColor: '#F5A623' + '20', borderColor: '#F5A623' + '88' }]}
+          onPress={() => router.push({ pathname: '/(customer)/review/[orderId]', params: { orderId: order.id } })}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.reviewCtaBtnText, { color: '#C8881C' }]}>{'⭐ Puanla & Yorum Yap'}</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Tamamlanan / İptal edilen siparişleri sil */}
       {isDone && (
         <TouchableOpacity
@@ -485,9 +539,13 @@ const styles = StyleSheet.create({
   createBtn: { paddingHorizontal: Spacing.xl, paddingVertical: 12, borderRadius: Radius.full, marginTop: Spacing.sm },
   createBtnText: { color: '#FFF', fontWeight: '700', fontSize: FontSize.md },
   list: { padding: Spacing.md, gap: Spacing.sm, paddingBottom: 80 },
-  sectionHeader: { paddingTop: Spacing.sm, paddingBottom: Spacing.xs, marginTop: Spacing.xs },
+  sectionHeader: {
+    paddingTop: Spacing.sm, paddingBottom: Spacing.xs, marginTop: Spacing.xs,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
   sectionHeaderText: { fontSize: FontSize.sm, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   sectionCount: { fontSize: FontSize.xs },
+  chevron: { fontSize: 14, fontWeight: '700' },
   card: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.sm },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: Spacing.sm },
   cardTitle: { fontSize: FontSize.md, fontWeight: '700', flex: 1 },
@@ -517,4 +575,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm, borderWidth: 1, alignItems: 'center',
   },
   deleteBtnText: { fontSize: FontSize.xs, fontWeight: '600' },
+  reviewCtaBtn: {
+    marginTop: Spacing.sm, paddingVertical: 9,
+    borderRadius: Radius.full, borderWidth: 1.5, alignItems: 'center',
+  },
+  reviewCtaBtnText: { fontSize: FontSize.sm, fontWeight: '700' },
 });

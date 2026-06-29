@@ -636,25 +636,47 @@ export default function CreateOrderScreen() {
               )}
             </View>
           ) : (
-            /* Gel-al — sadece konum (adres gerekmez) */
+            /* Gel-al — konum + adres (teslimat ile aynı düzen) */
             <View style={styles.field}>
-              <Text style={[styles.label, { color: C.text }]}>Konumunuz</Text>
+              <Text style={[styles.label, { color: C.text }]}>Konumunuz *</Text>
+
+              {/* 1) Önce mevcut konum — adresi hızlıca doldurur */}
               <TouchableOpacity
-                style={[styles.locationBtn, { backgroundColor: C.card, borderColor: C.border }]}
+                style={[styles.locationBtn, { backgroundColor: C.primary + '15', borderColor: C.primary + '44' }]}
                 onPress={handleUseCurrentLocation}
                 disabled={isLocating}
               >
                 {isLocating ? (
-                  <ActivityIndicator size="small" color={C.textSecondary} />
+                  <ActivityIndicator size="small" color={C.primary} />
                 ) : (
-                  <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>📍 Mevcut Konum</Text>
+                  <Text style={[styles.locationBtnText, { color: C.primary }]}>📍 Mevcut Konumu Kullan</Text>
                 )}
               </TouchableOpacity>
+
+              {/* 2) Adres alanı — bağlam/eşleşme için */}
+              <TextInput
+                style={[styles.input, { backgroundColor: C.card, borderColor: C.border, color: C.text, marginTop: Spacing.sm }]}
+                placeholder="📍 Mevcut konum ile dolar; gerekirse düzenleyin"
+                placeholderTextColor={C.placeholder}
+                value={deliveryAddress}
+                onChangeText={setDeliveryAddress}
+                maxLength={200}
+              />
+
+              {/* 3) Adresi elle yazdıysan/düzenlediysen doğrula */}
+              <TouchableOpacity
+                style={[styles.locationBtn, { backgroundColor: C.card, borderColor: C.border, marginTop: Spacing.sm }]}
+                onPress={handleGeocodeAddress}
+                disabled={isLocating}
+              >
+                <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>🔍 Yazdığım Adresi Doğrula</Text>
+              </TouchableOpacity>
+
               {locationLabel ? (
                 <Text style={{ fontSize: FontSize.xs, color: C.success, marginTop: 2 }}>{locationLabel}</Text>
               ) : (
                 <Text style={{ fontSize: FontSize.xs, color: C.textSecondary, marginTop: 2 }}>
-                  Yakındaki pastacılarla eşleşmeniz için konumunuzu seçin (📍 Mevcut Konum).
+                  Yakındaki pastacılarla eşleşmeniz için konumunuzu onaylayın.
                 </Text>
               )}
             </View>

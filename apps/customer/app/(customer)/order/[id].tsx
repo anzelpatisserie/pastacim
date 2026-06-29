@@ -38,6 +38,7 @@ export default function OrderDetailScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [offerCount, setOfferCount] = useState(0);
   const [acceptedOffer, setAcceptedOffer] = useState<AcceptedOffer | null>(null);
+  const [hasReview, setHasReview] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -45,7 +46,7 @@ export default function OrderDetailScreen() {
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!id) return;
+    if (!id || !user?.id) return;
     setIsLoading(true);
 
     // Siparişi yükle
@@ -70,13 +71,27 @@ export default function OrderDetailScreen() {
         ? (rows.find((r) => r.id === ord.selected_offer_id) ?? null)
         : null;
       setAcceptedOffer(accepted);
+
+      // Sipariş tamamlandıysa müşteri yorum yaptı mı?
+      if (ord.status === 'completed') {
+        const { data: reviewData } = await _db
+          .from('reviews')
+          .select('id')
+          .eq('order_id', id)
+          .eq('customer_id', user.id)
+          .maybeSingle();
+        setHasReview(reviewData !== null);
+      } else {
+        setHasReview(false);
+      }
     } else {
       setOrder(null);
       setAcceptedOffer(null);
+      setHasReview(false);
     }
 
     setIsLoading(false);
-  }, [id]);
+  }, [id, user?.id]);
 
   useEffect(() => {
     if (user?.id) fetchData();
@@ -465,6 +480,16 @@ export default function OrderDetailScreen() {
                 ? <ActivityIndicator color={C.error} size="small" />
                 : <Text style={[styles.btnCancelText, { color: C.error }]}>🗑️ Siparişi İptal Et</Text>
               }
+            </TouchableOpacity>
+          )}
+
+          {/* Puan Ver — sipariş tamamlandı & henüz yorum yapılmadı */}
+          {order.status === 'completed' && !hasReview && (
+            <TouchableOpacity
+              style={[styles.btnPrimary, { backgroundColor: '#F5A623' }]}
+              onPress={() => router.push({ pathname: '/(customer)/review/[orderId]', params: { orderId: order.id } })}
+            >
+              <Text style={styles.btnPrimaryText}>{'⭐ Puan Ver & Yorum Yap'}</Text>
             </TouchableOpacity>
           )}
 

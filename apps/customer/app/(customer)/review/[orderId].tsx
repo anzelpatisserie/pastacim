@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  TextInput, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Switch,
+  TextInput, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Switch, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,6 +17,7 @@ type ReviewData = {
   comment: string | null;
   created_at: string;
   is_anonymous: boolean;
+  image_url: string | null;
 };
 
 export default function ReviewScreen() {
@@ -32,6 +34,7 @@ export default function ReviewScreen() {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -70,7 +73,7 @@ export default function ReviewScreen() {
     // Daha önce yorum yapıldı mı?
     const { data: review } = await _db
       .from('reviews')
-      .select('id, rating, comment, created_at, is_anonymous')
+      .select('id, rating, comment, created_at, is_anonymous, image_url')
       .eq('order_id', orderId)
       .eq('customer_id', user!.id)
       .maybeSingle();
@@ -85,6 +88,21 @@ export default function ReviewScreen() {
     setIsLoading(false);
   };
 
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('İzin Gerekli', 'Galeri erişimi için izin vermeniz gerekiyor.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      quality: 0.6,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
   const handleSubmit = async () => {
     if (rating === 0) {
       Alert.alert('Puan Gerekli', 'Lütfen bir puan seçin.');
@@ -96,6 +114,31 @@ export default function ReviewScreen() {
     }
 
     setIsSubmitting(true);
+
+    // Görsel varsa Storage'a yükle
+    let imageUrl: string | null = null;
+    if (imageUri && user?.id) {
+      try {
+        const path = `${user.id}/reviews/${Date.now()}.jpg`;
+        const response = await fetch(imageUri);
+        const arrayBuffer = await response.arrayBuffer();
+        const { error: uploadError } = await supabase.storage
+          .from('feedbacks')
+          .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+        if (uploadError) {
+          Alert.alert('Görsel Yüklenemedi', uploadError.message);
+          setIsSubmitting(false);
+          return;
+        }
+        const { data: urlData } = supabase.storage.from('feedbacks').getPublicUrl(path);
+        imageUrl = urlData.publicUrl;
+      } catch (e: unknown) {
+        Alert.alert('Görsel Hatası', e instanceof Error ? e.message : 'Görsel işlenemedi.');
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     const { error } = await _db.from('reviews').insert({
       order_id:    orderId,
       customer_id: user!.id,
@@ -104,6 +147,7 @@ export default function ReviewScreen() {
       rating,
       comment: comment.trim() || null,
       is_anonymous: isAnonymous,
+      image_url: imageUrl,
     });
     setIsSubmitting(false);
 
@@ -208,6 +252,33 @@ export default function ReviewScreen() {
             editable={!isReadOnly}
           />
 
+          {/* Fotoğraf Ekle */}
+          <Text style={[styles.sectionLabel, { color: C.text }]}>Fotoğraf (isteğe bağlı)</Text>
+          {isReadOnly ? (
+            existingReview?.image_url ? (
+              <Image source={{ uri: existingReview.image_url }} style={styles.reviewImage} resizeMode="cover" />
+            ) : null
+          ) : imageUri ? (
+            <View style={styles.imagePreviewRow}>
+              <Image source={{ uri: imageUri }} style={styles.reviewImage} resizeMode="cover" />
+              <TouchableOpacity
+                style={[styles.imageRemoveBtn, { backgroundColor: C.error }]}
+                onPress={() => setImageUri(null)}
+              >
+                <Text style={styles.imageRemoveBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.imageAddBtn, { backgroundColor: C.card, borderColor: C.border }]}
+              onPress={handlePickImage}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.imageAddIcon, { color: C.primary }]}>📷</Text>
+              <Text style={[styles.imageAddText, { color: C.textSecondary }]}>Fotoğraf Seç</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Anonim yorum toggle */}
           <View style={[styles.anonymousRow, { backgroundColor: C.card, borderColor: C.border }]}>
             <View style={{ flex: 1 }}>
@@ -298,4 +369,18 @@ const styles = StyleSheet.create({
   },
   anonymousLabel: { fontSize: FontSize.md, fontWeight: '700' },
   anonymousSub: { fontSize: FontSize.xs, marginTop: 2 },
+  imagePreviewRow: { position: 'relative', alignSelf: 'flex-start' },
+  reviewImage: { width: 160, height: 160, borderRadius: Radius.md },
+  imageRemoveBtn: {
+    position: 'absolute', top: -8, right: -8,
+    width: 24, height: 24, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  imageRemoveBtnText: { color: '#FFF', fontSize: 12, fontWeight: '800' },
+  imageAddBtn: {
+    borderWidth: 1.5, borderStyle: 'dashed', borderRadius: Radius.md,
+    paddingVertical: 24, alignItems: 'center', gap: Spacing.xs,
+  },
+  imageAddIcon: { fontSize: 28 },
+  imageAddText: { fontSize: FontSize.sm, fontWeight: '600' },
 });
