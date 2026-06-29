@@ -45,6 +45,21 @@ async function buildEmail(admin: any, type: string, name: string, data: Record<s
   if (!subject || !inner) return null;
   // Yer tutucular: {{title}} (escape'li kullanıcı verisi), {{name}}
   inner = inner.replace(/\{\{\s*title\s*\}\}/g, title).replace(/\{\{\s*name\s*\}\}/g, safeName);
+
+  // review_encourage: "⭐ Puan Ver" deep link butonu ekle.
+  // Deep link iOS Mail'de her zaman çalışmaz (güvenilir yol in-app bildirimi);
+  // yine de en iyi çaba olarak ekliyoruz. orderId yoksa App Store'a düşüyoruz.
+  if (type === "review_encourage") {
+    const reviewOrderId = data.orderId as string | undefined;
+    const reviewHref = reviewOrderId
+      ? `pastacim:///(customer)/review/${reviewOrderId}`
+      : "https://apps.apple.com/app/pastacim/id6746534083";
+    inner += `<div style="text-align:center;margin-top:24px">
+      <a href="${reviewHref}" style="display:inline-block;background:#8B1A3D;color:#FFF;text-decoration:none;font-weight:700;font-size:16px;padding:14px 32px;border-radius:50px">⭐ Puan Ver</a>
+    </div>
+    <p style="font-size:12px;color:#A0AEC0;text-align:center;margin-top:8px">Butona tıklayarak uygulamadaki puanlama ekranına ulaşabilirsin.</p>`;
+  }
+
   const slogan = isBaker
     ? "Pastacım Pro • Yakınındaki siparişleri yönet, teklif ver"
     : "Pastacım • Hayalindeki pastayı yakındaki ustalar yapsın";

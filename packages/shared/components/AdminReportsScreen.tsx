@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  RefreshControl, ActivityIndicator, Alert, Modal, ScrollView,
+  RefreshControl, ActivityIndicator, Alert, Modal, ScrollView, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -21,6 +21,7 @@ type ReportRow = {
   created_at: string;
   reason: string;
   details: string | null;
+  image_url: string | null;
   target_type: string;
   target_id: string | null;
   app_name: string;
@@ -52,6 +53,9 @@ export default function AdminReportsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('open');
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Resim tam ekran modalı
+  const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
 
   // Kanıt (mesaj) modalı
   const [evidenceFor, setEvidenceFor] = useState<ReportRow | null>(null);
@@ -168,6 +172,12 @@ export default function AdminReportsScreen() {
               </View>
               <Text style={[styles.reason, { color: C.primary }]}>{r.reason}</Text>
               {r.details ? <Text style={[styles.details, { color: C.textSecondary }]}>{r.details}</Text> : null}
+              {r.image_url ? (
+                <TouchableOpacity onPress={() => setImageModalUrl(r.image_url)} activeOpacity={0.8} style={styles.imgThumbWrap}>
+                  <Image source={{ uri: r.image_url }} style={styles.imgThumb} resizeMode="cover" />
+                  <Text style={[styles.imgLabel, { color: C.textSecondary }]}>📎 Kanıt resmi · büyütmek için dokun</Text>
+                </TouchableOpacity>
+              ) : null}
 
               <Text style={[styles.meta, { color: C.textSecondary }]}>
                 Şikayet eden: {r.reporter_name ?? '—'} ({r.reporter_email ?? '—'})
@@ -212,6 +222,19 @@ export default function AdminReportsScreen() {
           )}
         />
       )}
+
+      {/* Tam ekran resim modalı */}
+      <Modal visible={!!imageModalUrl} transparent animationType="fade" onRequestClose={() => setImageModalUrl(null)}>
+        <TouchableOpacity
+          style={styles.imgFullOverlay}
+          activeOpacity={1}
+          onPress={() => setImageModalUrl(null)}>
+          {imageModalUrl ? (
+            <Image source={{ uri: imageModalUrl }} style={styles.imgFull} resizeMode="contain" />
+          ) : null}
+          <Text style={styles.imgFullClose}>✕ Kapat</Text>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Kanıt (mesaj) modalı */}
       <Modal visible={!!evidenceFor} transparent animationType="slide" onRequestClose={() => setEvidenceFor(null)}>
@@ -279,4 +302,10 @@ const styles = StyleSheet.create({
   modalSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
   msgBubble: { borderWidth: 1, borderRadius: Radius.md, padding: Spacing.sm },
   msgWho: { fontSize: FontSize.xs, fontWeight: '600', marginBottom: 2 },
+  imgThumbWrap: { marginTop: Spacing.sm, gap: 4 },
+  imgThumb: { width: '100%', height: 160, borderRadius: Radius.sm },
+  imgLabel: { fontSize: FontSize.xs },
+  imgFullOverlay: { flex: 1, backgroundColor: '#000D', justifyContent: 'center', alignItems: 'center' },
+  imgFull: { width: '100%', height: '80%' },
+  imgFullClose: { color: '#FFF', marginTop: 16, fontSize: FontSize.md, fontWeight: '700' },
 });
