@@ -54,3 +54,7 @@ android/app/build/
 android/build/
 *.apk
 *.aab
+
+# Android release upload keystore (do not commit)
+release-upload.keystore
+**/release-upload.keystore

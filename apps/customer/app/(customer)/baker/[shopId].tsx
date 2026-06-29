@@ -2,7 +2,7 @@
  * Müşteri → Pastacı Profil Sayfası
  * Keşfet ekranından bir pastacıya tıklanınca açılır.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, Image, RefreshControl, Linking,
@@ -14,14 +14,22 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal, openAddressInMaps } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
+
+function normalizeMapsUrl(url: string, name = ''): string {
+  const q = encodeURIComponent(name);
+  const oldFormat = url.match(/[?&]q=place_id:([^&]+)/);
+  if (oldFormat) return `https://www.google.com/maps/search/?api=1&query=${q}&query_place_id=${oldFormat[1]}`;
+  if (url.startsWith('place_id:')) return `https://www.google.com/maps/search/?api=1&query=${q}&query_place_id=${url.slice(9)}`;
+  return url;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
 
 type Shop = Database['public']['Tables']['pastry_shops']['Row'] & {
-  owner?: { avatar_url: string | null; full_name: string | null } | null;
+  owner?: { avatar_url: string | null; full_name: string | null; created_at: string | null; phone: string | null } | null;
 };
 
 type Review = {
@@ -46,6 +54,10 @@ export default function CustomerBakerProfileScreen() {
   // Müşterinin bu pastacıyla aktif siparişi var mı?
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [pendingOrderCount, setPendingOrderCount] = useState(0);
+  const [ownerCreatedAt, setOwnerCreatedAt] = useState<string | null>(null);
+  const [showReport, setShowReport] = useState(false);
+  // Pastacı bu müşteriye teklif verdiyse iletişim (telefon) gösterilir
+  const [canSeePhone, setCanSeePhone] = useState(false);
 
   const toggleReviews = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -59,7 +71,7 @@ export default function CustomerBakerProfileScreen() {
 
     // Dükkan bilgisi + sahip avatar + yorumlar paralel
     const [shopRes, revRes] = await Promise.all([
-      _db.from('pastry_shops').select('*, owner:users!user_id(avatar_url, full_name)').eq('id', shopId).single(),
+      _db.from('pastry_shops').select('*, owner:users!user_id(avatar_url, full_name, created_at, phone)').eq('id', shopId).single(),
       _db
         .from('reviews')
         .select('id, rating, comment, created_at, is_anonymous, customer:users!customer_id(full_name)')
@@ -68,7 +80,21 @@ export default function CustomerBakerProfileScreen() {
         .limit(20),
     ]);
 
-    if (shopRes.data) setShop(shopRes.data as Shop);
+    if (shopRes.data) {
+      setShop(shopRes.data as Shop);
+      // owner join'den created_at gelmezse doğrudan users tablosundan çek
+      const ownerCat = (shopRes.data as Shop).owner?.created_at;
+      if (ownerCat) {
+        setOwnerCreatedAt(ownerCat);
+      } else if ((shopRes.data as { user_id?: string }).user_id) {
+        const { data: userData } = await _db
+          .from('users')
+          .select('created_at')
+          .eq('id', (shopRes.data as { user_id: string }).user_id)
+          .single();
+        setOwnerCreatedAt(userData?.created_at ?? null);
+      }
+    }
     setReviews((revRes.data ?? []) as Review[]);
 
     if (refresh) setIsRefreshing(false);
@@ -94,6 +120,17 @@ export default function CustomerBakerProfileScreen() {
     );
     setActiveOrderId(activeOffer?.order?.id ?? null);
 
+    // Bu pastacı bu müşteriye teklif verdiyse (pending/accepted) iletişim (telefon) görünür
+    const { data: myOffers } = await _db
+      .from('offers')
+      .select('id, order:orders!order_id(customer_id)')
+      .eq('shop_id', shopId)
+      .in('status', ['pending', 'accepted']);
+    const engaged = (myOffers ?? []).some(
+      (o: { order: { customer_id: string } | null }) => o.order?.customer_id === user.id,
+    );
+    setCanSeePhone(engaged);
+
     // Bu pastacıdan teklif bekleyen sipariş sayısı
     const { count } = await _db
       .from('offers')
@@ -109,6 +146,13 @@ export default function CustomerBakerProfileScreen() {
     loadOrderState();
   }, [loadData, loadOrderState]));
 
+  // loadData kimliği useAuth dalgalanmasıyla değişebildiğinden realtime effect'ini
+  // YALNIZCA shopId'ye bağlıyoruz; loadData'yı ref ile güncel tutuyoruz. Aksi halde
+  // effect tekrar çalışıp aynı topic'li kanala subscribe sonrası .on() ekleniyor →
+  // "cannot add postgres_changes after subscribe()" crash'i.
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
+
   // Realtime: yorum eklenince veya puan değişince anında güncelle
   useEffect(() => {
     if (!shopId) return;
@@ -118,7 +162,7 @@ export default function CustomerBakerProfileScreen() {
       // Yeni yorum
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'reviews', filter: `shop_id=eq.${shopId}` },
-        () => { loadData(); }
+        () => { loadDataRef.current(); }
       )
       // Puan güncellendi (trigger)
       .on('postgres_changes',
@@ -131,7 +175,7 @@ export default function CustomerBakerProfileScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [shopId, loadData]);
+  }, [shopId]);
 
   if (isLoading) {
     return (
@@ -190,7 +234,14 @@ export default function CustomerBakerProfileScreen() {
         <Text style={[styles.headerTitle, { color: C.text }]} numberOfLines={1}>
           {shop.name}
         </Text>
-        <View style={{ width: 48 }} />
+        <TouchableOpacity
+          onPress={() => setShowReport(true)}
+          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          activeOpacity={0.6}
+          style={{ width: 48, alignItems: 'flex-end' }}
+        >
+          <Text style={{ fontSize: 18 }}>⚠️</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -244,10 +295,31 @@ export default function CustomerBakerProfileScreen() {
                 <Text style={[styles.statText, { color: C.primary }]}>🔥 {pendingOrderCount} aktif teklif</Text>
               </View>
             )}
+            {ownerCreatedAt && (
+              <View style={[styles.statChip, { backgroundColor: C.background }]}>
+                <Text style={[styles.statText, { color: C.textSecondary }]}>
+                  🗓️ {Math.floor((Date.now() - new Date(ownerCreatedAt).getTime()) / 86_400_000)}g üye
+                </Text>
+              </View>
+            )}
           </View>
           {shop.address && (
-            <Text style={[styles.address, { color: C.textSecondary }]}>📍 {shop.address}</Text>
+            <TouchableOpacity
+              onPress={() => openAddressInMaps(shop.address, shop.latitude, shop.longitude)}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.address, { color: C.primary, fontWeight: '700' }]}>📍 {shop.address} ›</Text>
+            </TouchableOpacity>
           )}
+
+          {/* İletişim — yalnız bu pastacı bu müşteriye teklif verdiyse görünür */}
+          {canSeePhone && shop.owner?.phone ? (
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${shop.owner!.phone}`)}>
+              <Text style={[styles.address, { color: C.primary, fontWeight: '700' }]}>
+                📞 {shop.owner.phone}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Google Bilgileri */}
           {(shop.google_rating != null || (shop.google_review_count ?? 0) > 0 || shop.google_maps_url) && (
@@ -265,7 +337,7 @@ export default function CustomerBakerProfileScreen() {
                 </Text>
               )}
               {shop.google_maps_url && (
-                <TouchableOpacity onPress={() => Linking.openURL(shop.google_maps_url!)}>
+                <TouchableOpacity onPress={() => Linking.openURL(normalizeMapsUrl(shop.google_maps_url!, shop.name))}>
                   <Text style={[styles.googleMapsLink, { color: C.primary }]}>Haritada Gör →</Text>
                 </TouchableOpacity>
               )}
@@ -367,6 +439,15 @@ export default function CustomerBakerProfileScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Şikayet Et */}
+      <ReportModal
+        visible={showReport}
+        onClose={() => setShowReport(false)}
+        targetType="shop"
+        targetId={shopId}
+        appName="customer"
+      />
     </SafeAreaView>
   );
 }

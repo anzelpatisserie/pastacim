@@ -69,6 +69,9 @@ export default function CustomerLayout() {
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="admin-feedbacks" options={{ href: null }} />
       <Tabs.Screen name="admin-dashboard" options={{ href: null }} />
+      <Tabs.Screen name="admin-notifications" options={{ href: null }} />
+      <Tabs.Screen name="admin-emails" options={{ href: null }} />
+      <Tabs.Screen name="admin-reports" options={{ href: null }} />
       <Tabs.Screen name="order/create" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="offers/[orderId]" options={{ href: null }} />

@@ -1,0 +1,15 @@
+name = "pastacim-legal"
+main = "src/index.js"
+compatibility_date = "2026-06-26"
+
+# Web app (Cloudflare Pages) pastacim.ipekciapp.com kökünü kullanacağı için
+# bu Worker artık TÜM subdomain'i (custom_domain) değil, yalnızca yasal/abonelik
+# yollarını tutar. Cloudflare'de Worker route'ları Pages'ten önceliklidir:
+# bu 3 path Worker'a, geri kalan her şey (/, app rotaları) Pages'e gider.
+# Korunan URL'ler (Apple/Play metadata + gönderilmiş maillerdeki linkler):
+#   /terms  /privacy  /unsubscribe  — DEĞİŞMEZ.
+routes = [
+  { pattern = "pastacim.ipekciapp.com/terms*", zone_name = "ipekciapp.com" },
+  { pattern = "pastacim.ipekciapp.com/privacy*", zone_name = "ipekciapp.com" },
+  { pattern = "pastacim.ipekciapp.com/unsubscribe*", zone_name = "ipekciapp.com" },
+]

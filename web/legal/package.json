@@ -1,0 +1,13 @@
+{
+  "name": "pastacim-legal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pastacım yasal dokümanları (Kullanım Koşulları + Gizlilik Politikası) — Cloudflare Worker",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

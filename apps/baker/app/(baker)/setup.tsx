@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert,
@@ -8,7 +8,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
+import { AppMapView as MapView, AppMarker as Marker } from '@pastacim/shared';
 import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { shopJustCreatedSignal } from './index';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function buildSocialUrl(handle: string, platform: 'instagram' | 'facebook' | 'tiktok' | 'youtube'): string | null {
@@ -62,7 +64,7 @@ async function fetchGooglePlaceByName(shopName: string): Promise<{
       const matchedName = (place.name ?? null) as string | null;
       const sim = matchedName ? similarity(shopName, matchedName) : 0;
       const mapsUrl = place.place_id
-        ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(matchedName ?? shopName)}&query_place_id=${place.place_id}`
         : null;
       return {
         rating: place.rating ?? null,
@@ -92,14 +94,15 @@ const DEFAULT_HOURS: WorkingHours = DAY_KEYS.reduce((acc, d) => {
 
 export default function BakerSetupScreen() {
   const C = useThemeColors();
-  const { refreshProfile } = useAuth();
-  const guardChecked = useRef(false);
-  const [guardLoading, setGuardLoading] = useState(true);
+  const { user, refreshProfile } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
+  // Yeni geocode/konum gelince haritayı yeniden merkezle (drag'de DEĞİŞMEZ).
+  const [mapKey, setMapKey] = useState(0);
   const [isLocating, setIsLocating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +146,7 @@ export default function BakerSetupScreen() {
       const { latitude: lat, longitude: lng } = results[0];
       setLatitude(lat);
       setLongitude(lng);
+      setMapKey((k) => k + 1);
       Alert.alert('✅ Konum Belirlendi', `"${address.trim()}" adresi koordinatlara çevrildi.`);
     } catch {
       Alert.alert('Hata', 'Adres çevrilemedi. Mevcut konumu kullanmayı deneyin.');
@@ -162,6 +166,7 @@ export default function BakerSetupScreen() {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setLatitude(loc.coords.latitude);
       setLongitude(loc.coords.longitude);
+      setMapKey((k) => k + 1);
       try {
         const results = await Location.reverseGeocodeAsync({
           latitude: loc.coords.latitude,
@@ -196,18 +201,17 @@ export default function BakerSetupScreen() {
       Alert.alert('Bulunamadı', `"${name.trim()}" için Google'da işletme bulunamadı. Dükkan adının Google Maps'teki adla aynı olduğundan emin olun.`);
       return;
     }
+    if (result.similarity < 0.5) {
+      Alert.alert(
+        '❌ Eşleşme Bulunamadı',
+        `"${name.trim()}" adına ait Google işletme profili bulunamadı.\n\nGoogle'da dönen en yakın sonuç: "${result.matchedName ?? '—'}"\n\nGoogle Haritalar'da işletmenizi kayıt etmeden bu bilgileri otomatik getiremezsiniz.`
+      );
+      return;
+    }
     if (result.rating != null) setGoogleRating(String(result.rating));
     if (result.reviewCount > 0) setGoogleReviewCount(String(result.reviewCount));
     if (result.mapsUrl) setGoogleMapsUrl(result.mapsUrl);
-
-    if (result.similarity < 0.5 && result.matchedName) {
-      Alert.alert(
-        '⚠️ Tam Eşleşme Bulunamadı',
-        `Google'dan dönen: "${result.matchedName}"\nSizin yazdığınız: "${name.trim()}"\n\nBilgiler dolduruldu ama yanlış işletme olabilir. Lütfen kontrol edin.`
-      );
-    } else {
-      Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum${result.matchedName ? `\n(${result.matchedName})` : ''}`);
-    }
+    Alert.alert('✅ Başarılı', `Puan: ${result.rating ?? '—'} · ${result.reviewCount} yorum${result.matchedName ? `\n(${result.matchedName})` : ''}`);
   };
 
   const handleCreate = async () => {
@@ -246,6 +250,8 @@ export default function BakerSetupScreen() {
       const rpcErrMsg = (data as { error?: string } | null)?.error;
       if (rpcErrMsg === 'mevcut_dukkan') {
         await refreshProfile();
+        // index'e: dükkan artık var, stale 'none' latch'ini sıfırla ve yeniden sorgula.
+        shopJustCreatedSignal.value = true;
         router.replace('/(baker)');
         return;
       }
@@ -254,7 +260,15 @@ export default function BakerSetupScreen() {
         return;
       }
 
+      // Cep telefonu (opsiyonel) → users.phone (müşteriler teklif sonrası görebilsin)
+      if (phone.trim() && user?.id) {
+        await supabase.from('users').update({ phone: phone.trim() }).eq('id', user.id);
+      }
+
       await refreshProfile();
+      // index'e: dükkan oluşturuldu, redirect latch'ini sıfırla ve 'exists'e geçecek
+      // taze sorgu yap (aksi halde stale 'none' setup'a geri yönlendirir).
+      shopJustCreatedSignal.value = true;
       Alert.alert('🎉 Dükkan Oluşturuldu', 'Artık taleplere teklif verebilirsiniz!', [
         { text: 'Tamam', onPress: () => router.replace('/(baker)') },
       ]);
@@ -266,50 +280,12 @@ export default function BakerSetupScreen() {
     }
   };
 
-  // ─── Defense-in-depth: kullanıcı zaten pastacı ise setup'ı atlat ─────────────
-  // _layout.tsx'in useAuth instance'ı bazen profil yüklenmeden navigation effect'i
-  // tetikleyebiliyor (Context değil, instance bazlı). Burada DB'den eager olarak
-  // kontrol edip pastacıyı doğrudan ana ekrana yönlendiriyoruz.
-  useEffect(() => {
-    if (guardChecked.current) return;
-    guardChecked.current = true;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { session: s } } = await supabase.auth.getSession();
-        if (!s?.user?.id) {
-          if (!cancelled) setGuardLoading(false);
-          return;
-        }
-        const { data, error } = await supabase
-          .from('users')
-          .select('is_baker')
-          .eq('id', s.user.id)
-          .maybeSingle();
-        if (cancelled) return;
-        if (!error && data?.is_baker === true) {
-          // Hesap zaten pastacı — useAuth profil state'ini tazele ve ana ekrana git
-          await refreshProfile();
-          router.replace('/(baker)');
-          return;
-        }
-        setGuardLoading(false);
-      } catch {
-        if (!cancelled) setGuardLoading(false);
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [refreshProfile]);
-
-  if (guardLoading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: C.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </SafeAreaView>
-    );
-  }
+  // NOT: Eskiden burada bir "guard" effect'i vardı (getSession + is_baker sorgusu)
+  // — _layout.tsx'in kırılgan redirect'ine karşı defans amaçlıydı. Artık setup'a
+  // yönlendirme kararını YALNIZCA (baker)/index veriyor (DB'deki pastry_shops
+  // sorgusuna dayalı, stabil latch). setup'a yalnızca dükkanı olmayan kullanıcı
+  // gelir; defansif kontrol gereksizdi ve sorgusu askıda kaldığında spinner'da
+  // takılarak yeni bir başarısızlık noktası yaratıyordu. Kaldırıldı.
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
@@ -347,6 +323,17 @@ export default function BakerSetupScreen() {
             multiline
             numberOfLines={3}
             textAlignVertical="top"
+          />
+
+          <Text style={[styles.label, { color: C.textSecondary }]}>Cep Telefonu (opsiyonel)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: C.card, borderColor: C.border, color: C.text }]}
+            placeholder="05XX XXX XX XX"
+            placeholderTextColor={C.placeholder}
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            maxLength={20}
           />
 
           <Text style={[styles.label, { color: C.textSecondary }]}>Adres *</Text>
@@ -388,6 +375,35 @@ export default function BakerSetupScreen() {
               <Text style={[styles.locationBtnText, { color: C.textSecondary }]}>📍 Mevcut Konum</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Harita — konum belirlenince pin'le ince ayar */}
+          {latitude != null && longitude != null && (
+            <View style={{ marginTop: Spacing.sm }}>
+              <Text style={{ fontSize: FontSize.xs, color: C.textSecondary, marginBottom: 4 }}>
+                Pin'i basılı tutup sürükleyerek veya haritaya dokunarak konumunuzu tam ayarlayın
+              </Text>
+              <MapView
+                key={mapKey}
+                style={{ height: 200, borderRadius: Radius.md }}
+                zoomControlEnabled
+                zoomEnabled
+                initialRegion={{ latitude, longitude, latitudeDelta: 0.008, longitudeDelta: 0.008 }}
+                onPress={(e) => {
+                  setLatitude(e.nativeEvent.coordinate.latitude);
+                  setLongitude(e.nativeEvent.coordinate.longitude);
+                }}
+              >
+                <Marker
+                  draggable
+                  coordinate={{ latitude, longitude }}
+                  onDragEnd={(e) => {
+                    setLatitude(e.nativeEvent.coordinate.latitude);
+                    setLongitude(e.nativeEvent.coordinate.longitude);
+                  }}
+                />
+              </MapView>
+            </View>
+          )}
 
           {/* Çalışma Saatleri (opsiyonel) */}
           <Text style={[styles.label, { color: C.textSecondary, marginTop: Spacing.sm }]}>Çalışma Saatleri (opsiyonel)</Text>

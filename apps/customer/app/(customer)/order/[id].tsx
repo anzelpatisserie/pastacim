@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps, safeAvatarUri } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -27,7 +27,7 @@ type AcceptedOffer = {
   id: string;
   baker_id: string;
   price: number;
-  shop: { name: string; rating: number } | null;
+  shop: { id: string; name: string; rating: number; avatar_url: string | null } | null;
 };
 
 export default function OrderDetailScreen() {
@@ -38,6 +38,7 @@ export default function OrderDetailScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [offerCount, setOfferCount] = useState(0);
   const [acceptedOffer, setAcceptedOffer] = useState<AcceptedOffer | null>(null);
+  const [hasReview, setHasReview] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -45,7 +46,7 @@ export default function OrderDetailScreen() {
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!id) return;
+    if (!id || !user?.id) return;
     setIsLoading(true);
 
     // Siparişi yükle
@@ -57,22 +58,40 @@ export default function OrderDetailScreen() {
       // Teklif sayısı
       const offerRes = await _db
         .from('offers')
-        .select('id, baker_id, price, shop:pastry_shops!shop_id(name, rating)')
+        .select('id, baker_id, price, shop:pastry_shops!shop_id(id, name, rating, avatar_url)')
         .eq('order_id', id)
         .neq('status', 'rejected');
 
       const rows = (offerRes.data ?? []) as (AcceptedOffer & { status: string })[];
       setOfferCount(rows.length);
 
-      // Kabul edilen teklif
-      if (ord.selected_offer_id) {
-        const accepted = rows.find((r) => r.id === ord.selected_offer_id) ?? null;
-        setAcceptedOffer(accepted);
+      // Kabul edilen teklif — selected_offer_id yoksa MUTLAKA null'a sıfırla
+      // (ekran aynı rota olduğu için başka siparişin teklifi state'te kalıyordu).
+      const accepted = ord.selected_offer_id
+        ? (rows.find((r) => r.id === ord.selected_offer_id) ?? null)
+        : null;
+      setAcceptedOffer(accepted);
+
+      // Sipariş tamamlandıysa müşteri yorum yaptı mı?
+      if (ord.status === 'completed') {
+        const { data: reviewData } = await _db
+          .from('reviews')
+          .select('id')
+          .eq('order_id', id)
+          .eq('customer_id', user.id)
+          .maybeSingle();
+        setHasReview(reviewData !== null);
+      } else {
+        setHasReview(false);
       }
+    } else {
+      setOrder(null);
+      setAcceptedOffer(null);
+      setHasReview(false);
     }
 
     setIsLoading(false);
-  }, [id]);
+  }, [id, user?.id]);
 
   useEffect(() => {
     if (user?.id) fetchData();
@@ -350,10 +369,14 @@ export default function OrderDetailScreen() {
               </Text>
             </View>
             {order.delivery_type === 'delivery' && order.delivery_address ? (
-              <View style={[styles.metaItem, { backgroundColor: C.background }]}>
+              <TouchableOpacity
+                style={[styles.metaItem, { backgroundColor: C.background }]}
+                onPress={() => openAddressInMaps(order.delivery_address, order.delivery_latitude ?? order.latitude, order.delivery_longitude ?? order.longitude)}
+                activeOpacity={0.6}
+              >
                 <Text style={styles.metaEmoji}>📍</Text>
-                <Text style={[styles.metaValue, { color: C.text }]}>{order.delivery_address}</Text>
-              </View>
+                <Text style={[styles.metaValue, { color: C.primary }]}>{order.delivery_address} ›</Text>
+              </TouchableOpacity>
             ) : null}
             {order.created_at ? (
               <View style={[styles.metaItem, { backgroundColor: C.background }]}>
@@ -370,13 +393,25 @@ export default function OrderDetailScreen() {
         {hasAcceptedBaker && acceptedOffer && (
           <View style={[styles.bakerCard, { backgroundColor: C.card, borderColor: C.success + '55' }]}>
             <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>Pastacı</Text>
-            <View style={styles.bakerRow}>
-              <View style={[styles.bakerAvatar, { backgroundColor: C.primary + '22' }]}>
-                <Text style={{ fontSize: 22 }}>🎂</Text>
-              </View>
+            <TouchableOpacity
+              style={styles.bakerRow}
+              activeOpacity={(!isDone && acceptedOffer.shop?.id) ? 0.6 : 1}
+              disabled={isDone || !acceptedOffer.shop?.id}
+              onPress={() => !isDone && acceptedOffer.shop?.id && router.push({
+                pathname: '/(customer)/baker/[shopId]',
+                params: { shopId: acceptedOffer.shop.id },
+              })}
+            >
+              {safeAvatarUri(acceptedOffer.shop?.avatar_url ?? null) ? (
+                <Image source={{ uri: safeAvatarUri(acceptedOffer.shop!.avatar_url)! }} style={styles.bakerAvatar} />
+              ) : (
+                <View style={[styles.bakerAvatar, { backgroundColor: C.primary + '22' }]}>
+                  <Text style={{ fontSize: 22 }}>🎂</Text>
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={[styles.bakerName, { color: C.text }]}>
-                  {acceptedOffer.shop?.name ?? 'Pastacı'}
+                  {acceptedOffer.shop?.name ?? 'Pastacı'}{!isDone ? ' ›' : ''}
                 </Text>
                 {(acceptedOffer.shop?.rating ?? 0) > 0 && (
                   <Text style={[styles.bakerRating, { color: C.textSecondary }]}>
@@ -385,7 +420,7 @@ export default function OrderDetailScreen() {
                 )}
               </View>
               <Text style={[styles.acceptedPrice, { color: C.primary }]}>₺{acceptedOffer.price}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -405,8 +440,8 @@ export default function OrderDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Pastacıya Mesaj */}
-          {hasAcceptedBaker && acceptedOffer && (
+          {/* Pastacıya Mesaj — yalnızca sohbet açıkken (aktif sipariş); tamamlanan/iptal'de gizli */}
+          {hasAcceptedBaker && acceptedOffer && ['accepted', 'in_progress', 'ready'].includes(order.status) && (
             <TouchableOpacity
               style={[styles.btnOutline, { borderColor: C.primary + '66', backgroundColor: C.primary + '12' }]}
               onPress={() => router.push({
@@ -448,6 +483,16 @@ export default function OrderDetailScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Puan Ver — sipariş tamamlandı & henüz yorum yapılmadı */}
+          {order.status === 'completed' && !hasReview && (
+            <TouchableOpacity
+              style={[styles.btnPrimary, { backgroundColor: '#F5A623' }]}
+              onPress={() => router.push({ pathname: '/(customer)/review/[orderId]', params: { orderId: order.id } })}
+            >
+              <Text style={styles.btnPrimaryText}>{'⭐ Puan Ver & Yorum Yap'}</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Teslim Almadım — pastacı completed yaptıysa geri al */}
           {order.status === 'completed' && (
             <TouchableOpacity
@@ -477,6 +522,7 @@ export default function OrderDetailScreen() {
           </TouchableOpacity>
         </Pressable>
       </Modal>
+
     </SafeAreaView>
   );
 }

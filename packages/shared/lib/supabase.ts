@@ -3,6 +3,7 @@
 import 'react-native-url-polyfill/auto';
 import * as SecureStore from 'expo-secure-store';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import type { Database } from '../types/database.types';
 
@@ -23,16 +24,24 @@ const ExpoSecureStoreAdapter = {
   removeItem: (key: string) => SecureStore.deleteItemAsync(key),
 };
 
+// ─── Web Oturum Depolama (localStorage) ──────────────────────────────────────
+const WebStorageAdapter = {
+  getItem: (key: string) => Promise.resolve(globalThis.localStorage?.getItem(key) ?? null),
+  setItem: (key: string, value: string) => { globalThis.localStorage?.setItem(key, value); return Promise.resolve(); },
+  removeItem: (key: string) => { globalThis.localStorage?.removeItem(key); return Promise.resolve(); },
+};
+const isWeb = Platform.OS === 'web';
+
 // ─── Supabase Client ──────────────────────────────────────────────────────────
 export const supabase = createClient<Database>(
   SUPABASE_URL,
   SUPABASE_PUBLISHABLE_KEY,
   {
     auth: {
-      storage: ExpoSecureStoreAdapter,
+      storage: isWeb ? WebStorageAdapter : ExpoSecureStoreAdapter,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      detectSessionInUrl: isWeb,
     },
   }
 );

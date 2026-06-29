@@ -5,6 +5,7 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "dependencies": {
+    "@react-google-maps/api": "^2.20.8",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-url-polyfill": "^2.0.0"
   }

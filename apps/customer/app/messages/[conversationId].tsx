@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcDeleteConversation, rpcDeleteMessageForMe, notifyNewMessage, useAuth, useThemeColors, Spacing, Radius, FontSize, ReportModal, safeAvatarUri } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,11 +38,15 @@ export default function MessagesScreen() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<MessageWithOrder[]>([]);
   const [otherUserName, setOtherUserName] = useState('');
+  const [otherUserAvatar, setOtherUserAvatar] = useState<string | null>(null);
+  const [shopId, setShopId] = useState<string | null>(null);
+  const [shopName, setShopName] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [sendOrderId, setSendOrderId] = useState<string | null>(initialOrderId ?? null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [showReport, setShowReport] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const mountedRef = useRef(true);
 
@@ -76,14 +80,29 @@ export default function MessagesScreen() {
   const isChatExpired = !hasActiveProcess;
   const expiredReason = 'Aktif bir sipariş veya teklif bulunmuyor.';
 
-  // Karşı kullanıcının adı
+  // Karşı kullanıcının adı ve avatarı
   useEffect(() => {
     if (!otherUserId) return;
-    _db.from('users').select('full_name').eq('id', otherUserId).single()
-      .then(({ data }: { data: { full_name: string | null } | null }) => {
+    _db.from('users').select('full_name, avatar_url').eq('id', otherUserId).single()
+      .then(({ data }: { data: { full_name: string | null; avatar_url: string | null } | null }) => {
         if (!mountedRef.current) return;
         if (data?.full_name) setOtherUserName(data.full_name);
+        if (data?.avatar_url) setOtherUserAvatar(data.avatar_url);
       });
+  }, [otherUserId]);
+
+  // Pastacının dükkan adı (header için)
+  useEffect(() => {
+    if (!otherUserId) return;
+    _db.from('pastry_shops').select('id, name').eq('user_id', otherUserId).maybeSingle()
+      .then(({ data }: { data: { id: string; name: string } | null }) => {
+        if (!mountedRef.current) return;
+        if (data) {
+          setShopId(data.id);
+          setShopName(data.name);
+        }
+      })
+      .catch(() => {});
   }, [otherUserId]);
 
   // Tüm mesajları yükle (kişi bazlı — tüm siparişler dahil)
@@ -217,13 +236,11 @@ export default function MessagesScreen() {
     setIsSending(false);
     if (error) { setInputText(text); return; }
 
-    notifyUser({
-      userId: otherUserId,
-      type:  'new_message',
-      inApp: false,
-      title: '💬 Yeni Mesaj',
-      body:  text.length > 60 ? text.slice(0, 57) + '…' : text,
-      data:  { senderId: user.id },
+    notifyNewMessage({
+      receiverId: otherUserId,
+      senderId:   user.id,
+      targetRole: 'baker',
+      preview:    text.length > 60 ? text.slice(0, 57) + '…' : text,
     }).catch(() => {});
   };
 
@@ -308,13 +325,11 @@ export default function MessagesScreen() {
 
       if (msgError) throw new Error(msgError.message);
 
-      notifyUser({
-        userId: otherUserId,
-        type:  'new_message',
-        inApp: false,
-        title: '📷 Yeni Görsel',
-        body:  'Bir resim gönderildi',
-        data:  { senderId: user.id },
+      notifyNewMessage({
+        receiverId: otherUserId,
+        senderId:   user.id,
+        targetRole: 'baker',
+        preview:    '📷 Fotoğraf',
       }).catch(() => {});
 
     } catch (err) {
@@ -390,28 +405,53 @@ export default function MessagesScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
 
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: C.border, backgroundColor: C.card }]}>
           <TouchableOpacity onPress={() => { Keyboard.dismiss(); router.back(); }}>
             <Text style={[styles.backText, { color: C.primary }]}>←</Text>
           </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
-              <Text style={styles.avatarEmoji}>👤</Text>
-            </View>
-            <Text style={[styles.headerName, { color: C.text }]}>
-              {otherUserName || 'Kullanıcı'}
-            </Text>
-          </View>
           <TouchableOpacity
-            style={styles.deleteConvBtn}
-            onPress={deleteConversation}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.headerCenter}
+            onPress={() => { if (shopId && !isChatExpired) router.push(`/(customer)/baker/${shopId}`); }}
+            disabled={!shopId || isChatExpired}
+            activeOpacity={(shopId && !isChatExpired) ? 0.7 : 1}
           >
-            <Text style={[styles.deleteConvIcon, { color: C.error }]}>🗑️</Text>
+            {safeAvatarUri(otherUserAvatar) ? (
+              <Image source={{ uri: safeAvatarUri(otherUserAvatar)! }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: C.primary + '22' }]}>
+                <Text style={styles.avatarEmoji}>🏪</Text>
+              </View>
+            )}
+            <Text style={[styles.headerName, { color: C.text, textDecorationLine: (shopId && !isChatExpired) ? 'underline' : 'none' }]}>
+              {(shopName ?? otherUserName) || 'Kullanıcı'}
+            </Text>
+            {(shopId && !isChatExpired) ? (
+              <Text style={{ color: C.primary, fontSize: 16, fontWeight: '600' }}>›</Text>
+            ) : null}
           </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.deleteConvBtn}
+              onPress={() => setShowReport(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.deleteConvIcon}>⚠️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteConvBtn}
+              onPress={deleteConversation}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[styles.deleteConvIcon, { color: C.error }]}>🗑️</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Mesajlar */}
@@ -588,6 +628,15 @@ export default function MessagesScreen() {
           </TouchableOpacity>
         </Pressable>
       </Modal>
+
+      {/* Şikayet Et */}
+      <ReportModal
+        visible={showReport}
+        onClose={() => setShowReport(false)}
+        targetType="user"
+        targetId={otherUserId}
+        appName="customer"
+      />
     </SafeAreaView>
   );
 }
@@ -612,6 +661,7 @@ const styles = StyleSheet.create({
   orderDividerText: { fontSize: 11, paddingHorizontal: Spacing.xs, fontWeight: '600' },
   msgRow: { flexDirection: 'row', marginBottom: Spacing.xs, alignItems: 'flex-end' },
   msgRowMe: { justifyContent: 'flex-end' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   deleteConvBtn: { padding: 4 },
   deleteConvIcon: { fontSize: 20 },
   deleteMsgBtn: { marginRight: 4, marginBottom: 2, opacity: 0.45 },

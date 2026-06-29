@@ -40,9 +40,19 @@ export {
   getUserPushToken,
   sendPushNotification,
   notifyUser,
+  notifyFromTemplate,
+  notifyNewMessage,
+  fileReport,
   sendAppEmail,
 } from './lib/notifications';
 export type { NotificationRole } from './lib/notifications';
+
+// Badge
+export { computeBadgeCount, setAppBadge, fetchUnreadBadgeCount } from './lib/badge';
+export { safeAvatarUri } from './lib/avatar';
+
+// Maps
+export { openAddressInMaps } from './lib/maps';
 
 // Auth hook
 export { useAuth } from './hooks/useAuth';
@@ -54,6 +64,19 @@ export { default as SplashAnimation } from './components/SplashAnimation';
 export { default as TabHeader } from './components/TabHeader';
 export { default as BackButton } from './components/BackButton';
 export { default as FeedbacksAdminScreen } from './components/FeedbacksAdminScreen';
+export { default as AdminNotificationsScreen } from './components/AdminNotificationsScreen';
+export { default as AdminEmailsScreen } from './components/AdminEmailsScreen';
+export { default as AdminReportsScreen } from './components/AdminReportsScreen';
+export { default as NameEntryModal } from './components/NameEntryModal';
+export { default as ReportModal } from './components/ReportModal';
+export type { ReportTargetType } from './components/ReportModal';
+
+// AppMap (platform-split: native = react-native-maps, web = Google Maps JS)
+export { AppMapView, AppMarker } from './components/AppMap';
+export type { Region } from './components/AppMap';
+
+// WebStoreBanner (web-only; native'de null döner)
+export { WebStoreBanner } from './components/WebStoreBanner';
 
 // Types
 export type { Database, Json } from './types/database.types';

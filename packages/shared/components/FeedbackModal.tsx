@@ -127,7 +127,7 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
     >
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={[styles.sheet, { backgroundColor: C.background }]}>
           {/* Header */}

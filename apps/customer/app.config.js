@@ -40,6 +40,11 @@ module.exports = {
     icon: './assets/images/icon.png',
     scheme: 'pastacim' + env.schemeSuffix,
     userInterfaceStyle: 'automatic',
+    web: {
+      bundler: 'metro',
+      output: 'single',
+      favicon: './assets/images/icon.png',
+    },
     ios: {
       supportsTablet: false,
       bundleIdentifier: 'com.pastacim.customer' + env.bundleSuffix,
@@ -134,6 +139,8 @@ module.exports = {
       },
       supabaseUrl: env.supabaseUrl,
       supabaseAnonKey: env.supabaseAnonKey,
+      googlePlacesApiKey: 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo',
+      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo',
       appEnv: ENV,
     },
     owner: 'anzelpatisserie',

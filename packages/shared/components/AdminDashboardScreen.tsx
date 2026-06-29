@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, RefreshControl, ActivityIndicator,
   Linking, Modal, TextInput, Alert, Switch, ScrollView,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -248,7 +249,10 @@ function EditUserModal({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
+      <KeyboardAvoidingView
+        style={styles.modalBackdrop}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={[styles.modalCard, { backgroundColor: C.card }]}>
           <ScrollView keyboardShouldPersistTaps="handled">
             <Text style={[styles.modalTitle, { color: C.text }]}>Kullanıcıyı Düzenle</Text>
@@ -279,7 +283,7 @@ function EditUserModal({
             </View>
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

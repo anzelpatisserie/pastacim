@@ -10,7 +10,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { useFocusEffect } from 'expo-router';
-import { supabase } from '@pastacim/shared';
+import { supabase, fetchUnreadBadgeCount, setAppBadge } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _db: any = supabase;
@@ -18,10 +18,14 @@ const _db: any = supabase;
 export function useNotifications(userId?: string) {
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Push token kaydı — sadece bir kez
+  // Push token kaydı — sadece bir kez.
+  // ÖNEMLİ: izin isteğini girişten 3 sn geciktir. New Architecture'da (bridgeless)
+  // Google OAuth tarayıcısından dönüşle bildirim izni dialogu ÜST ÜSTE gelince
+  // activity onResume'da context-not-ready NPE'si oluşup BEYAZ EKRANA düşüyordu.
   useEffect(() => {
     if (!userId) return;
-    registerForPush(userId);
+    const t = setTimeout(() => registerForPush(userId), 3000);
+    return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
@@ -31,7 +35,8 @@ export function useNotifications(userId?: string) {
       .from('notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', uid)
-      .eq('is_read', false);
+      .eq('is_read', false)
+      .or('target_role.is.null,target_role.eq.baker');
     setUnreadCount(count ?? 0);
   }, []);
 
@@ -52,22 +57,39 @@ export function useNotifications(userId?: string) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-        () => fetchUnread(userId),
+        () => {
+          fetchUnread(userId);
+          fetchUnreadBadgeCount(userId, 'baker').then(setAppBadge).catch(() => {});
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `receiver_id=eq.${userId}` },
+        () => {
+          fetchUnreadBadgeCount(userId, 'baker').then(setAppBadge).catch(() => {});
+        },
       )
       .subscribe();
 
     channelRef.current = channel;
 
+    // İlk yüklemede uygulama rozeti de ayarla
+    fetchUnreadBadgeCount(userId, 'baker').then(setAppBadge).catch(() => {});
+
     return () => {
       supabase.removeChannel(channel);
       channelRef.current = null;
+      setAppBadge(0);
     };
   }, [userId, fetchUnread]);
 
   // Sayfa odağa gelince badge'i tazele — realtime kaçırma durumlarına karşı garanti güncelleme
   useFocusEffect(
     useCallback(() => {
-      if (userId) fetchUnread(userId);
+      if (userId) {
+        fetchUnread(userId);
+        fetchUnreadBadgeCount(userId, 'baker').then(setAppBadge).catch(() => {});
+      }
     }, [userId, fetchUnread])
   );
 
@@ -117,8 +139,10 @@ async function registerForPush(uid: string) {
 
     const result = await Notifications.getExpoPushTokenAsync({ projectId });
     // SECURITY DEFINER RPC: aynı token başka kullanıcıda varsa önce temizler
-    await _db.rpc('register_push_token', { p_token: result.data });
+    await _db.rpc('register_push_token', { p_token: result.data, p_app: 'baker' });
     console.log('[Push] Token kaydedildi:', result.data);
+    // Token kaydından sonra uygulama rozeti güncelle
+    fetchUnreadBadgeCount(uid, 'baker').then(setAppBadge).catch(() => {});
   } catch (err) {
     console.warn('[Push] Token alınamadı:', err);
   }

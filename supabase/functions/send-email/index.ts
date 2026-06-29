@@ -14,31 +14,63 @@ const esc = (s: unknown) =>
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-function template(type: string, name: string, data: Record<string, unknown>) {
+// Şablonlar artık DB'de (email_templates) — admin panelden düzenlenebilir.
+// DB'de bulunmazsa aşağıdaki sabitlere düşülür (her zaman bir mail gider).
+const FALLBACK: Record<string, { subject: string; body: string }> = {
+  welcome:          { subject: "Pastacım'a Hoş Geldin! 🎉", body: `<p>Aramıza katıldığın için mutluyuz. Hayalindeki pastayı tarif et, yakındaki ustalardan teklif al!</p>` },
+  welcome_pro:      { subject: "Pastacım Pro'ya Hoş Geldin! 🎉", body: `<p>Pastacım Pro'ya hoş geldin! Yakınındaki sipariş taleplerini gör, teklif ver ve işini büyüt.</p>` },
+  order_ready:      { subject: "Siparişin Teslimata Hazır! 📦", body: `<p><b>"{{title}}"</b> siparişin pastacı tarafından hazırlandı ve teslim almaya hazır.</p>` },
+  offer_accepted:   { subject: "Teklifin Kabul Edildi! ✅", body: `<p><b>"{{title}}"</b> siparişi için verdiğin teklif müşteri tarafından kabul edildi. Hadi hazırlamaya başla!</p>` },
+  review_encourage: { subject: "Siparişin Nasıldı? ⭐", body: `<p><b>"{{title}}"</b> siparişin tamamlandı. Pastacıya bir yorum bırakarak diğer müşterilere yardımcı olur musun?</p>` },
+};
+
+// welcome maili gönderen app'e göre markalanır: baker app → welcome_pro + "Pastacım Pro".
+function templateKeyFor(type: string, isBaker: boolean): string {
+  return type === "welcome" && isBaker ? "welcome_pro" : type;
+}
+
+// deno-lint-ignore no-explicit-any
+async function buildEmail(admin: any, type: string, name: string, data: Record<string, unknown>, isBaker: boolean) {
   const title = esc(data.orderTitle ?? "siparişin");
   const safeName = esc(name || "değerli kullanıcı");
-  const wrap = (heading: string, body: string) => ({
-    subject: heading,
-    html: `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2D3748">
-      <div style="text-align:center;font-size:30px">🎂</div>
-      <h2 style="color:#8B1A3D">${heading}</h2>
-      <p>Merhaba ${safeName},</p>
-      ${body}
-      <p style="margin-top:24px;color:#718096;font-size:13px">Pastacım • Hayalindeki pastayı yakındaki ustalar yapsın</p>
-    </div>`,
-  });
-  switch (type) {
-    case "welcome":
-      return wrap("Pastacım'a Hoş Geldin! 🎉", `<p>Aramıza katıldığın için mutluyuz. Hayalindeki pastayı tarif et, yakındaki ustalardan teklif al!</p>`);
-    case "order_ready":
-      return wrap("Siparişin Teslimata Hazır! 📦", `<p><b>"${title}"</b> siparişin pastacı tarafından hazırlandı ve teslim almaya hazır.</p>`);
-    case "offer_accepted":
-      return wrap("Teklifin Kabul Edildi! ✅", `<p><b>"${title}"</b> siparişi için verdiğin teklif müşteri tarafından kabul edildi. Hadi hazırlamaya başla!</p>`);
-    case "review_encourage":
-      return wrap("Siparişin Nasıldı? ⭐", `<p><b>"${title}"</b> siparişin tamamlandı. Pastacıya bir yorum bırakarak diğer müşterilere yardımcı olur musun?</p>`);
-    default:
-      return null;
+  const tplKey = templateKeyFor(type, isBaker);
+  let subject: string | undefined;
+  let inner: string | undefined;
+  try {
+    const { data: row } = await admin.from("email_templates").select("subject, body").eq("key", tplKey).single();
+    if (row) { subject = row.subject; inner = row.body; }
+  } catch { /* DB hatası → fallback */ }
+  subject = subject ?? FALLBACK[tplKey]?.subject;
+  inner = inner ?? FALLBACK[tplKey]?.body;
+  if (!subject || !inner) return null;
+  // Yer tutucular: {{title}} (escape'li kullanıcı verisi), {{name}}
+  inner = inner.replace(/\{\{\s*title\s*\}\}/g, title).replace(/\{\{\s*name\s*\}\}/g, safeName);
+
+  // review_encourage: "⭐ Puan Ver" deep link butonu ekle.
+  // Deep link iOS Mail'de her zaman çalışmaz (güvenilir yol in-app bildirimi);
+  // yine de en iyi çaba olarak ekliyoruz. orderId yoksa App Store'a düşüyoruz.
+  if (type === "review_encourage") {
+    const reviewOrderId = data.orderId as string | undefined;
+    const reviewHref = reviewOrderId
+      ? `pastacim:///(customer)/review/${reviewOrderId}`
+      : "https://apps.apple.com/app/pastacim/id6746534083";
+    inner += `<div style="text-align:center;margin-top:24px">
+      <a href="${reviewHref}" style="display:inline-block;background:#8B1A3D;color:#FFF;text-decoration:none;font-weight:700;font-size:16px;padding:14px 32px;border-radius:50px">⭐ Puan Ver</a>
+    </div>
+    <p style="font-size:12px;color:#A0AEC0;text-align:center;margin-top:8px">Butona tıklayarak uygulamadaki puanlama ekranına ulaşabilirsin.</p>`;
   }
+
+  const slogan = isBaker
+    ? "Pastacım Pro • Yakınındaki siparişleri yönet, teklif ver"
+    : "Pastacım • Hayalindeki pastayı yakındaki ustalar yapsın";
+  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2D3748">
+      <div style="text-align:center;font-size:30px">🎂</div>
+      <h2 style="color:#8B1A3D">${esc(subject)}</h2>
+      <p>Merhaba ${safeName},</p>
+      ${inner}
+      <p style="margin-top:24px;color:#718096;font-size:13px">${slogan}</p>
+    </div>`;
+  return { subject, html };
 }
 
 function ok() { return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }); }
@@ -62,49 +94,70 @@ Deno.serve(async (req) => {
     if (!caller) { console.error("send-email: unauthenticated"); return ok(); }
 
     // 2) Tip-bazında yetki: çağıran ilgili siparişin tarafı mı?
+    // İki-adımlı yetki (embedded-filter `.eq("orders.customer_id",...)` runtime'da
+    // 0 satır döndürüp mailleri sessizce düşürüyordu — DB seviyesinde mantık doğru
+    // olmasına rağmen). Embedded filter'sız, kanıtlanmış sorgu:
     let authorized = false;
     if (type === "welcome") {
       authorized = caller.id === userId;
-    } else if (type === "order_ready" || type === "review_encourage") {
-      // caller = pastacı, userId = müşteri
-      const { data: rows } = await admin.from("offers")
-        .select("id, orders!inner(customer_id)")
-        .eq("baker_id", caller.id).eq("status", "accepted")
-        .eq("orders.customer_id", userId).limit(1);
-      authorized = !!rows?.length;
-    } else if (type === "offer_accepted") {
-      // caller = müşteri, userId = pastacı
-      const { data: rows } = await admin.from("offers")
-        .select("id, orders!inner(customer_id)")
-        .eq("baker_id", userId).eq("status", "accepted")
-        .eq("orders.customer_id", caller.id).limit(1);
-      authorized = !!rows?.length;
+    } else {
+      // order_ready/review_encourage: baker=caller, müşteri=userId
+      // offer_accepted:                baker=userId, müşteri=caller
+      const bakerId = type === "offer_accepted" ? userId : caller.id;
+      const customerId = type === "offer_accepted" ? caller.id : userId;
+      const { data: offs } = await admin.from("offers")
+        .select("order_id").eq("baker_id", bakerId).eq("status", "accepted");
+      // deno-lint-ignore no-explicit-any
+      const orderIds = (offs ?? []).map((o: any) => o.order_id);
+      if (orderIds.length) {
+        const { data: ords } = await admin.from("orders")
+          .select("id").in("id", orderIds).eq("customer_id", customerId).limit(1);
+        authorized = !!ords?.length;
+      }
     }
     if (!authorized) { console.error("send-email: unauthorized", type, caller.id); return ok(); }
 
-    // 3) Idempotency / loop guard: aynı (alıcı,tip,sipariş) ikinci kez gönderilmez
+    // 3) Idempotency / loop guard: dedup satırını LOCK olarak ekle (eşzamanlı
+    //    çift gönderimi engeller). ÖNEMLİ: gönderim başarısız olursa bu satırı
+    //    GERİ AL (release) — aksi halde başarısız mail bir daha hiç denenmez.
+    // welcome maili app'e göre ayrı dedup'lanır (welcome vs welcome_pro) — müşteri ve
+    // pastacı app'leri kendi markalı hoş geldin mailini birer kez alır.
+    const isBaker = data.app === "baker";
+    const dedupType = templateKeyFor(type, isBaker);
     const { error: dupErr } = await admin.from("sent_emails")
-      .insert({ recipient_id: userId, type, order_id: orderId });
+      .insert({ recipient_id: userId, type: dedupType, order_id: orderId });
     if (dupErr) { console.error("send-email: dedup/skip", dupErr.code); return ok(); }
 
-    if (!apiKey) { console.error("send-email: BREVO_API_KEY yok"); return ok(); }
-    const { data: user } = await admin.from("users").select("email, full_name").eq("id", userId).single();
-    if (!user?.email) { console.error("send-email: email yok"); return ok(); }
+    const release = async () => {
+      let q = admin.from("sent_emails").delete().eq("recipient_id", userId).eq("type", dedupType);
+      q = orderId ? q.eq("order_id", orderId) : q.is("order_id", null);
+      await q;
+    };
 
-    const tpl = template(type, user.full_name ?? "", data);
-    if (!tpl) return ok();
+    if (!apiKey) { console.error("send-email: BREVO_API_KEY yok"); await release(); return ok(); }
+    const { data: user } = await admin.from("users").select("email, full_name").eq("id", userId).single();
+    if (!user?.email) { console.error("send-email: email yok"); await release(); return ok(); }
+
+    const tpl = await buildEmail(admin, type, user.full_name ?? "", data, isBaker);
+    if (!tpl) { await release(); return ok(); }
 
     const res = await fetch(BREVO_URL, {
       method: "POST",
       headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
-        sender: { name: "Pastacım", email: "noreply@ipekciapp.com" },
+        sender: { name: isBaker ? "Pastacım Pro" : "Pastacım", email: "noreply@ipekciapp.com" },
         to: [{ email: user.email }],
         subject: tpl.subject,
         htmlContent: tpl.html,
       }),
     });
-    if (!res.ok) console.error("send-email: brevo", res.status, await res.text());
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error("send-email: brevo FAIL", res.status, errBody);
+      await release();  // başarısız → kilidi bırak, sonra tekrar denensin
+      return ok();
+    }
+    console.log("send-email: sent OK", type, userId);
     return ok();
   } catch (e) {
     console.error("send-email: exception", String(e));
