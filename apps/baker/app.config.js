@@ -73,7 +73,8 @@ module.exports = {
       versionCode: 1,
       googleServicesFile: './google-services.json',
       adaptiveIcon: {
-        backgroundColor: '#000000',
+        // Foreground daire şeffaf köşeli; bg marka maroon olmalı (siyah köşe bug'ı).
+        backgroundColor: '#8B1A3D',
         foregroundImage: './assets/images/android-icon-foreground.png',
       },
       permissions: [

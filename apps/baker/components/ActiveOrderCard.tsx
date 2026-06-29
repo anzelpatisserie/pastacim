@@ -32,7 +32,7 @@ export function isActiveOffer(offer: ActiveOffer): boolean {
 }
 
 /**
- * Kabul edilmiş bir siparişin kartı. Durum-geçiş butonu (Hazırlamaya Başla →
+ * Kabul edilmiş bir siparişin kompakt kartı. Durum-geçiş butonu (Hazırlamaya Başla →
  * Teslimata Hazır → Teslim Ettim) ile bildirim/e-posta tetiklemesini içerir.
  * Mutasyon sonrası `onChanged` ile üst ekran listeyi tazeleyebilir.
  */
@@ -145,6 +145,8 @@ export function ActiveOrderCard({
     return null;
   })();
 
+  const avatarUri = safeAvatarUri(offer.order?.customer?.avatar_url);
+
   return (
     <TouchableOpacity
       style={[
@@ -161,10 +163,12 @@ export function ActiveOrderCard({
         router.push({ pathname: '/(baker)/offer/[orderId]', params: { orderId: offer.order.id } })
       }
     >
-      <View style={styles.cardTop}>
+      {/* Satır 1: Başlık · Fiyat · Durum */}
+      <View style={styles.topRow}>
         <Text style={[styles.orderTitle, { color: C.text }]} numberOfLines={1}>
           {offer.order?.title ?? 'Sipariş'}
         </Text>
+        <Text style={[styles.price, { color: C.primary }]}>₺{offer.price}</Text>
         {singleBadge && (
           <View style={[styles.statusBadge, { backgroundColor: singleBadge.color + '22' }]}>
             <Text style={[styles.statusText, { color: singleBadge.color }]}>
@@ -174,44 +178,45 @@ export function ActiveOrderCard({
         )}
       </View>
 
-      <Text style={[styles.price, { color: C.primary }]}>₺{offer.price}</Text>
-
+      {/* Satır 2: Avatar · Müşteri · Meta (kişi sayısı, tarih) */}
       {offer.order?.customer?.full_name && (
-        <View style={styles.customerRow}>
-          {safeAvatarUri(offer.order.customer.avatar_url) ? (
-            <Image
-              source={{ uri: safeAvatarUri(offer.order.customer.avatar_url)! }}
-              style={styles.customerAvatar}
-            />
+        <View style={styles.infoRow}>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.avatar} />
           ) : (
-            <Text style={styles.customerAvatarEmoji}>👤</Text>
+            <Text style={styles.avatarEmoji}>👤</Text>
           )}
-          <Text style={[styles.customer, { color: C.textSecondary }]}>
+          <Text style={[styles.customerName, { color: C.textSecondary }]} numberOfLines={1}>
             {offer.order.customer.full_name}
           </Text>
+          {offer.order.serving_size ? (
+            <Text style={[styles.metaText, { color: C.placeholder }]}>
+              {' '}· 👥 {offer.order.serving_size}
+            </Text>
+          ) : null}
+          {offer.order.delivery_date ? (
+            <Text style={[styles.metaText, { color: C.placeholder }]}>
+              {' '}· 📅 {new Date(offer.order.delivery_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+            </Text>
+          ) : null}
         </View>
       )}
+
+      {/* Telefon (yalnızca aktif sipariş) */}
       {active && offer.order?.customer?.phone ? (
-        <TouchableOpacity onPress={() => Linking.openURL(`tel:${offer.order!.customer!.phone}`)} activeOpacity={0.6}>
-          <Text style={[styles.customer, { color: C.primary, fontWeight: '700' }]}>
+        <TouchableOpacity
+          onPress={() => Linking.openURL(`tel:${offer.order!.customer!.phone}`)}
+          activeOpacity={0.6}
+        >
+          <Text style={[styles.phone, { color: C.primary }]}>
             📞 {offer.order.customer.phone}
           </Text>
         </TouchableOpacity>
       ) : null}
 
-      <View style={styles.metaRow}>
-        {offer.order?.serving_size && (
-          <Text style={[styles.metaText, { color: C.textSecondary }]}>👥 {offer.order.serving_size} kişilik</Text>
-        )}
-        {offer.order?.delivery_date && (
-          <Text style={[styles.metaText, { color: C.textSecondary }]}>
-            📅 {new Date(offer.order.delivery_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })}
-          </Text>
-        )}
-      </View>
-
+      {/* Aksiyon satırı: ilerleme butonu + mesaj / kaldır */}
       {offer.order && (
-        <View style={styles.btnCol}>
+        <View style={styles.actionRow}>
           {nextAction && (
             <TouchableOpacity
               style={[styles.progressBtn, { backgroundColor: nextAction.color }]}
@@ -220,35 +225,29 @@ export function ActiveOrderCard({
             >
               {isProgressing
                 ? <ActivityIndicator size="small" color="#FFF" />
-                : <Text style={styles.progressBtnText}>{nextAction.label}</Text>
+                : <Text style={styles.actionBtnText}>{nextAction.label}</Text>
               }
             </TouchableOpacity>
           )}
-
-          <View style={styles.btnRow}>
-            {/* Mesaj butonu yalnızca mesajlaşma açıkken (aktif sipariş) görünür;
-                kapalı/tamamlanan siparişte sohbet kilitli olduğundan gizlenir. */}
-            {active && (
-              <TouchableOpacity
-                style={[styles.msgBtn, { backgroundColor: C.primary, flex: 1 }]}
-                onPress={() => router.push({
-                  pathname: '/messages/[conversationId]',
-                  params: { conversationId: offer.order!.customer_id, orderId: offer.order!.id },
-                })}
-              >
-                <Text style={styles.msgBtnText}>💬 Müşteriye Mesaj</Text>
-              </TouchableOpacity>
-            )}
-
-            {!active && (
-              <TouchableOpacity
-                style={[styles.iconBtn, { borderColor: C.border }]}
-                onPress={handleHide}
-              >
-                <Text style={[styles.iconBtnText, { color: C.textSecondary }]}>🗑️</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {active && (
+            <TouchableOpacity
+              style={[styles.msgBtn, { backgroundColor: C.primary }]}
+              onPress={() => router.push({
+                pathname: '/messages/[conversationId]',
+                params: { conversationId: offer.order!.customer_id, orderId: offer.order!.id },
+              })}
+            >
+              <Text style={styles.actionBtnText}>💬 Mesaj</Text>
+            </TouchableOpacity>
+          )}
+          {!active && (
+            <TouchableOpacity
+              style={[styles.iconBtn, { borderColor: C.border }]}
+              onPress={handleHide}
+            >
+              <Text style={[styles.iconBtnText, { color: C.textSecondary }]}>🗑️</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </TouchableOpacity>
@@ -256,24 +255,56 @@ export function ActiveOrderCard({
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.sm, marginTop: 8 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  orderTitle: { fontSize: FontSize.md, fontWeight: '700', flex: 1 },
-  statusBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.full },
-  statusText: { fontSize: FontSize.xs, fontWeight: '700' },
-  price: { fontSize: FontSize.xxl, fontWeight: '800' },
-  customer: { fontSize: FontSize.sm, flexShrink: 1 },
-  customerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  customerAvatar: { width: 22, height: 22, borderRadius: 11, flexShrink: 0 },
-  customerAvatarEmoji: { fontSize: 16 },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  card: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.sm,
+    gap: 6,
+    marginTop: 6,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  orderTitle: { fontSize: FontSize.sm, fontWeight: '700', flex: 1 },
+  price: { fontSize: FontSize.md, fontWeight: '800', flexShrink: 0 },
+  statusBadge: { paddingHorizontal: Spacing.xs, paddingVertical: 2, borderRadius: Radius.full },
+  statusText: { fontSize: 10, fontWeight: '700' },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexWrap: 'wrap',
+  },
+  avatar: { width: 18, height: 18, borderRadius: 9, flexShrink: 0 },
+  avatarEmoji: { fontSize: 14 },
+  customerName: { fontSize: FontSize.xs, flexShrink: 1 },
   metaText: { fontSize: FontSize.xs },
-  btnCol: { gap: Spacing.sm },
-  btnRow: { flexDirection: 'row', gap: Spacing.sm },
-  progressBtn: { paddingVertical: 11, borderRadius: Radius.full, alignItems: 'center' },
-  progressBtnText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
-  msgBtn: { paddingVertical: 10, borderRadius: Radius.full, alignItems: 'center' },
-  msgBtnText: { color: '#FFF', fontSize: FontSize.sm, fontWeight: '700' },
-  iconBtn: { paddingHorizontal: Spacing.md, paddingVertical: 10, borderRadius: Radius.full, borderWidth: 1.5, alignItems: 'center' },
+  phone: { fontSize: FontSize.xs, fontWeight: '700' },
+  actionRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  progressBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+  },
+  msgBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+  },
+  actionBtnText: { color: '#FFF', fontSize: FontSize.xs, fontWeight: '700' },
+  iconBtn: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    alignItems: 'center',
+  },
   iconBtnText: { fontSize: FontSize.sm, fontWeight: '700' },
 });
