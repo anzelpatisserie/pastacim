@@ -436,28 +436,60 @@ export default function BakerHomeScreen() {
           />
         }
       >
-        {/* 🔵 Aktif Siparişler (Collapse — varsayılan açık) */}
-          {aktifSiparisler.length > 0 && (
-            <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
-              <TouchableOpacity
-                style={styles.sectionHeaderRow}
-                onPress={() => setAktifExpanded((v) => !v)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.sectionTitle, { color: C.text }]}>
-                  🔵 Aktif Siparişler ({aktifSiparisler.length})
-                </Text>
-                <Text style={[styles.chevron, { color: C.textSecondary }]}>
-                  {aktifExpanded ? '▾' : '▸'}
-                </Text>
-              </TouchableOpacity>
-              {aktifExpanded && aktifSiparisler.map((o) => (
-                <ActiveOrderCard key={o.id} offer={o} onChanged={fetchAcceptedOffers} />
-              ))}
+        {/* 1️⃣ Açık Talepler — yalnızca bu bölüm loading/error/empty durumuna tabi */}
+          {(isLoading || !shopLocation) ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color={C.primary} />
+              <Text style={[styles.loadingText, { color: C.textSecondary }]}>Talepler aranıyor…</Text>
             </View>
-          )}
+          ) : error ? (
+            <View style={styles.centered}>
+              <Text style={styles.errorEmoji}>😢</Text>
+              <Text style={[styles.errorText, { color: C.text }]}>{error}</Text>
+              <TouchableOpacity
+                style={[styles.retryBtn, { backgroundColor: C.primary }]}
+                onPress={() => fetchOrders()}
+              >
+                <Text style={styles.retryBtnText}>Tekrar Dene</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (() => {
+            const visibleOrders = orders.filter((o) => {
+              const myOffer = myOfferMap.get(o.id);
+              return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
+            });
+            if (visibleOrders.length === 0) {
+              return (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyEmoji}>🔔</Text>
+                  <Text style={[styles.emptyTitle, { color: C.text }]}>
+                    Yeni talepler burada görünecek — hazır ol!
+                  </Text>
+                  <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
+                    Daha fazla talep için mesafeyi artırabilirsin
+                  </Text>
+                </View>
+              );
+            }
+            return (
+              <View>
+                <Text style={[styles.listHeader, { color: C.textSecondary }]}>
+                  {visibleOrders.length} açık talep
+                </Text>
+                {visibleOrders.map((item) => (
+                  <RequestCard
+                    key={item.id}
+                    order={item}
+                    colors={C}
+                    myOffer={myOfferMap.get(item.id)}
+                    offerStats={offerStatsMap.get(item.id)}
+                  />
+                ))}
+              </View>
+            );
+          })()}
 
-          {/* Bekleyen Tekliflerim */}
+          {/* 2️⃣ Bekleyen Tekliflerim */}
           {pendingOffers.length > 0 && (
             <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.sectionTitle, { color: C.text }]}>
@@ -522,59 +554,28 @@ export default function BakerHomeScreen() {
             </View>
           )}
 
-
-          {/* Açık Talepler — yalnızca bu bölüm loading/error/empty durumuna tabi */}
-          {(isLoading || !shopLocation) ? (
-            <View style={styles.centered}>
-              <ActivityIndicator size="large" color={C.primary} />
-              <Text style={[styles.loadingText, { color: C.textSecondary }]}>Talepler aranıyor…</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.centered}>
-              <Text style={styles.errorEmoji}>😢</Text>
-              <Text style={[styles.errorText, { color: C.text }]}>{error}</Text>
+          {/* 3️⃣ Aktif Siparişler (Collapse — varsayılan açık) */}
+          {aktifSiparisler.length > 0 && (
+            <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
               <TouchableOpacity
-                style={[styles.retryBtn, { backgroundColor: C.primary }]}
-                onPress={() => fetchOrders()}
+                style={styles.sectionHeaderRow}
+                onPress={() => setAktifExpanded((v) => !v)}
+                activeOpacity={0.7}
               >
-                <Text style={styles.retryBtnText}>Tekrar Dene</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (() => {
-            const visibleOrders = orders.filter((o) => {
-              const myOffer = myOfferMap.get(o.id);
-              return !myOffer || myOffer.status === 'rejected' || myOffer.status === 'withdrawn';
-            });
-            if (visibleOrders.length === 0) {
-              return (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyEmoji}>🗺️</Text>
-                  <Text style={[styles.emptyTitle, { color: C.text }]}>Bu bölgede talep yok</Text>
-                  <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-                    Mesafe aralığını artırabilirsin
-                  </Text>
-                </View>
-              );
-            }
-            return (
-              <View>
-                <Text style={[styles.listHeader, { color: C.textSecondary }]}>
-                  {visibleOrders.length} açık talep
+                <Text style={[styles.sectionTitle, { color: C.text }]}>
+                  🔵 Aktif Siparişler ({aktifSiparisler.length})
                 </Text>
-                {visibleOrders.map((item) => (
-                  <RequestCard
-                    key={item.id}
-                    order={item}
-                    colors={C}
-                    myOffer={myOfferMap.get(item.id)}
-                    offerStats={offerStatsMap.get(item.id)}
-                  />
-                ))}
-              </View>
-            );
-          })()}
+                <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                  {aktifExpanded ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {aktifExpanded && aktifSiparisler.map((o) => (
+                <ActiveOrderCard key={o.id} offer={o} onChanged={fetchAcceptedOffers} />
+              ))}
+            </View>
+          )}
 
-          {/* ✅ Tamamlanan Siparişler (Collapse — varsayılan kapalı) */}
+          {/* 4️⃣ Tamamlanan Siparişler (Collapse — varsayılan kapalı) — kompakt mini-kartlar */}
           {tamamlananSiparisler.length > 0 && (
             <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
               <TouchableOpacity
@@ -589,13 +590,58 @@ export default function BakerHomeScreen() {
                   {tamamlananExpanded ? '▾' : '▸'}
                 </Text>
               </TouchableOpacity>
-              {tamamlananExpanded && tamamlananSiparisler.map((o) => (
-                <ActiveOrderCard key={o.id} offer={o} onChanged={fetchAcceptedOffers} />
-              ))}
+              {tamamlananExpanded && tamamlananSiparisler.map((o) => {
+                const deliveryDate = o.order?.delivery_date
+                  ? new Date(o.order.delivery_date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
+                  : null;
+                const servingSize = o.order?.serving_size;
+                return (
+                  <View key={o.id} style={[styles.miniCard, { borderTopColor: C.border }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.miniTitle, { color: C.text }]} numberOfLines={1}>
+                        {o.order?.title ?? 'Sipariş'}
+                      </Text>
+                      <Text style={[styles.miniMeta, { color: C.textSecondary }]} numberOfLines={1}>
+                        🎂 Tamamlandı
+                      </Text>
+                      {(servingSize || deliveryDate) && (
+                        <Text style={[styles.miniMeta, { color: C.placeholder }]} numberOfLines={1}>
+                          {[servingSize ? `👥 ${servingSize} kişi` : null, deliveryDate ? `📅 ${deliveryDate}` : null].filter(Boolean).join('  ')}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Text style={[styles.miniPriceMuted, { color: C.placeholder }]}>₺{o.price}</Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert(
+                            '🗑️ Listeden Kaldır',
+                            'Bu sipariş listesinden kaldırılsın mı? Yalnızca sizin görünümünüzden silinir.',
+                            [
+                              { text: 'Vazgeç', style: 'cancel' },
+                              {
+                                text: 'Kaldır', style: 'destructive',
+                                onPress: async () => {
+                                  const { error: hideErr } = await _db.rpc('hide_order_for_me', { p_order_id: o.order?.id });
+                                  if (hideErr) { Alert.alert('Hata', 'Kaldırılamadı.'); return; }
+                                  fetchAcceptedOffers();
+                                },
+                              },
+                            ],
+                          );
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={{ fontSize: 11, color: C.placeholder }}>Kaldır 🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           )}
 
-          {/* Siparişe Dönmeyen Tekliflerim (Collapse) */}
+          {/* 5️⃣ Siparişe Dönmeyen Tekliflerim (Collapse) */}
           {inactiveOffers.length > 0 && (
             <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
               <TouchableOpacity
@@ -889,10 +935,10 @@ const styles = StyleSheet.create({
   errorText: { fontSize: FontSize.md, textAlign: 'center' },
   retryBtn: { paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: Radius.full },
   retryBtnText: { color: '#FFF', fontWeight: '700' },
-  emptyState: { alignItems: 'center', paddingVertical: 60, gap: Spacing.md },
-  emptyEmoji: { fontSize: 56 },
-  emptyTitle: { fontSize: FontSize.lg, fontWeight: '700', textAlign: 'center' },
-  emptySubtitle: { fontSize: FontSize.md, textAlign: 'center' },
+  emptyState: { alignItems: 'center', paddingVertical: 24, gap: 6 },
+  emptyEmoji: { fontSize: 28 },
+  emptyTitle: { fontSize: FontSize.md, fontWeight: '700', textAlign: 'center' },
+  emptySubtitle: { fontSize: FontSize.xs, textAlign: 'center' },
   list: { padding: Spacing.md, gap: Spacing.sm, paddingBottom: 80, flexGrow: 1 },
   listHeader: { fontSize: FontSize.sm, marginBottom: Spacing.xs },
   sectionBox: {
