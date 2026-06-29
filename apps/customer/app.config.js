@@ -140,7 +140,7 @@ module.exports = {
       supabaseUrl: env.supabaseUrl,
       supabaseAnonKey: env.supabaseAnonKey,
       googlePlacesApiKey: 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo',
-      googleMapsApiKey: 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo',
+      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo',
       appEnv: ENV,
     },
     owner: 'anzelpatisserie',
