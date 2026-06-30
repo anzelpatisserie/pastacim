@@ -80,6 +80,7 @@ export { WebStoreBanner, WEB_BANNER_HEIGHT } from './components/WebStoreBanner';
 export { authRedirectUrl } from './lib/authRedirect';
 export { installWebAlert } from './lib/webAlert';
 export { shareApp } from './lib/shareApp';
+export { useViewportHeight } from './hooks/useViewportHeight';
 
 // Types
 export type { Database, Json } from './types/database.types';

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Linking, View, Platform, useWindowDimensions } from 'react-native';
+import { Linking, View, Platform } from 'react-native';
 import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -8,7 +8,7 @@ import * as Updates from 'expo-updates';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal, WebStoreBanner, WEB_BANNER_HEIGHT, installWebAlert } from '@pastacim/shared';
+import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal, WebStoreBanner, WEB_BANNER_HEIGHT, installWebAlert, useViewportHeight } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
 
 export { ErrorBoundary } from 'expo-router';
@@ -111,7 +111,7 @@ async function handleAuthUrl(url: string) {
 function RootLayoutNav() {
   const { isLoading, isAuthenticated, profile, refreshProfile } = useAuth();
   const notificationListener = useRef<Notifications.Subscription | null>(null);
-  const { height: winH } = useWindowDimensions();
+  const winH = useViewportHeight();
 
   // İsim kapısı: Apple "E-postamı Gizle" ile giriş yapan kullanıcılarda full_name
   // boş kalabilir. Bu durumda isim girilene kadar NameEntryModal'i göster.
