@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, ActivityIndicator, Share, Image,
+  ScrollView, Alert, ActivityIndicator, Image,
   LayoutAnimation, Platform, UIManager, Modal, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, FeedbackModal, TabHeader } from '@pastacim/shared';
+import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, FeedbackModal, TabHeader, shareApp } from '@pastacim/shared';
 import { useNotifications } from '@/hooks/useNotifications';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -415,7 +415,7 @@ export default function CustomerProfileScreen() {
         {/* Uygulamayı Tavsiye Et */}
         <TouchableOpacity
           style={[styles.shareCard, { backgroundColor: C.card, borderColor: C.border }]}
-          onPress={() => Share.share({
+          onPress={() => shareApp({
             message: 'Pastacım ile pastacılardan kolayca teklif al! 🎂\nhttps://apps.apple.com/tr/app/pastac%C4%B1m/id6778031428?l=tr',
             title: 'Pastacım\'ı Arkadaşlarına Öner',
           })}

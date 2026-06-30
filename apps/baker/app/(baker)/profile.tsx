@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image, Switch, Share, Linking,
+  KeyboardAvoidingView, Platform, Image, Switch, Linking,
   Modal, LayoutAnimation, UIManager,
 } from 'react-native';
 
@@ -13,7 +13,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import Constants from 'expo-constants';
-import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, FeedbackModal, TabHeader, openAddressInMaps } from '@pastacim/shared';
+import { supabase, useAuth, useThemeColors, Spacing, Radius, FontSize, DEFAULT_LOCATION, FeedbackModal, TabHeader, openAddressInMaps, shareApp } from '@pastacim/shared';
 import { useNotifications } from '../../hooks/useNotifications';
 import type { Database } from '@pastacim/shared';
 
@@ -1187,7 +1187,7 @@ export default function BakerProfileScreen() {
           {!editMode && (
             <TouchableOpacity
               style={[styles.shareCard, { backgroundColor: C.card, borderColor: C.border }]}
-              onPress={() => Share.share({
+              onPress={() => shareApp({
                 message: 'Pastacım Pro ile sipariş al, kolay yönet! 🎂\nhttps://apps.apple.com/tr/app/pastac%C4%B1m-pro/id6778462169?l=tr',
                 title: 'Pastacım Pro\'yu Arkadaşlarına Öner',
               })}

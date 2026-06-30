@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Linking, View, Platform } from 'react-native';
+import { Linking, View, Platform, useWindowDimensions } from 'react-native';
 import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -8,12 +8,15 @@ import * as Updates from 'expo-updates';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal, WebStoreBanner, WEB_BANNER_HEIGHT } from '@pastacim/shared';
+import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal, WebStoreBanner, WEB_BANNER_HEIGHT, installWebAlert } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
 
 export { ErrorBoundary } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
+
+// Web'de Alert.alert NO-OP → window.confirm/alert ile çalışır hale getir.
+installWebAlert();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -109,6 +112,7 @@ async function handleAuthUrl(url: string) {
 function RootLayoutNav() {
   const { isLoading, isAuthenticated, profile, refreshProfile } = useAuth();
   const notificationListener = useRef<Notifications.Subscription | null>(null);
+  const { height: winH } = useWindowDimensions();
 
   // İsim kapısı: Apple "E-postamı Gizle" ile giriş yapan kullanıcılarda full_name
   // boş kalabilir. Bu durumda isim girilene kadar NameEntryModal'i göster.
@@ -161,13 +165,13 @@ function RootLayoutNav() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <WebStoreBanner
         appName="Pastacım"
-        iosUrl="https://apps.apple.com/app/idPLACEHOLDER"
+        iosUrl="https://apps.apple.com/tr/app/pastac%C4%B1m/id6778031428"
         androidUrl="https://play.google.com/store/apps/details?id=com.pastacim.customer"
       />
       <StatusBar style="auto" />
       {/* Web'de üstteki WebStoreBanner yükseklik ekler; navigator'ı flex:1 ile
           sararak kalan alana yayıyoruz, aksi halde tab bar viewport dışına taşar. */}
-      <View style={{ flex: 1, minHeight: 0, paddingTop: Platform.OS === 'web' ? WEB_BANNER_HEIGHT : 0 }}>
+      <View style={Platform.OS === 'web' ? { height: winH - WEB_BANNER_HEIGHT } : { flex: 1, minHeight: 0 }}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(customer)" />
