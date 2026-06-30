@@ -8,7 +8,7 @@ import * as Updates from 'expo-updates';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal, WebStoreBanner, WEB_BANNER_HEIGHT, installWebAlert, useViewportHeight } from '@pastacim/shared';
+import { useAuth, navigateFromNotification, supabase, SplashAnimation, NameEntryModal, WebStoreBanner, installWebAlert, installWebRootStyle } from '@pastacim/shared';
 import type { NotificationRole } from '@pastacim/shared';
 
 export { ErrorBoundary } from 'expo-router';
@@ -17,6 +17,8 @@ SplashScreen.preventAutoHideAsync();
 
 // Web'de Alert.alert NO-OP → window.confirm/alert ile çalışır hale getir.
 installWebAlert();
+// Web'de #root'u dinamik viewport'a (100dvh) sabitle (mobil araç çubuğu fix).
+installWebRootStyle();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -112,7 +114,6 @@ async function handleAuthUrl(url: string) {
 function RootLayoutNav() {
   const { isLoading, isAuthenticated, profile, refreshProfile } = useAuth();
   const notificationListener = useRef<Notifications.Subscription | null>(null);
-  const winH = useViewportHeight();
 
   // İsim kapısı: Apple "E-postamı Gizle" ile giriş yapan kullanıcılarda full_name
   // boş kalabilir. Bu durumda isim girilene kadar NameEntryModal'i göster.
@@ -171,7 +172,7 @@ function RootLayoutNav() {
       <StatusBar style="auto" />
       {/* Web'de üstteki WebStoreBanner yükseklik ekler; navigator'ı flex:1 ile
           sararak kalan alana yayıyoruz, aksi halde tab bar viewport dışına taşar. */}
-      <View style={Platform.OS === 'web' ? { height: winH - WEB_BANNER_HEIGHT } : { flex: 1, minHeight: 0 }}>
+      <View nativeID="pastacim-nav" style={{ flex: 1, minHeight: 0 }}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(customer)" />
