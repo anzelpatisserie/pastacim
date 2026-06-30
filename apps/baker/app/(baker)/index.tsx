@@ -76,6 +76,7 @@ export default function BakerHomeScreen() {
   const [inactiveExpanded, setInactiveExpanded] = useState(false);
   // Kabul edilmiş siparişler (eski "Siparişler" sekmesi içeriği) — collapse bölümler
   const [acceptedOffers, setAcceptedOffers] = useState<ActiveOffer[]>([]);
+  const [acikExpanded, setAcikExpanded] = useState(true);        // açık talepler — varsayılan açık
   const [aktifExpanded, setAktifExpanded] = useState(true);      // otomatik açık
   const [tamamlananExpanded, setTamamlananExpanded] = useState(false); // varsayılan kapalı
   const [isLoading, setIsLoading] = useState(true);
@@ -489,10 +490,19 @@ export default function BakerHomeScreen() {
             }
             return (
               <View>
-                <Text style={[styles.listHeader, { color: C.textSecondary }]}>
-                  {visibleOrders.length} açık talep
-                </Text>
-                {visibleOrders.map((item) => (
+                <TouchableOpacity
+                  style={[styles.sectionHeaderRow, { marginBottom: Spacing.xs }]}
+                  onPress={() => setAcikExpanded((v) => !v)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.listHeader, { color: C.textSecondary, marginBottom: 0 }]}>
+                    {visibleOrders.length} açık talep
+                  </Text>
+                  <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                    {acikExpanded ? '▾' : '▸'}
+                  </Text>
+                </TouchableOpacity>
+                {acikExpanded && visibleOrders.map((item) => (
                   <RequestCard
                     key={item.id}
                     order={item}
