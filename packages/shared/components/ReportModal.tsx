@@ -45,12 +45,14 @@ export default function ReportModal({
   const [reason, setReason] = useState<string | null>(null);
   const [details, setDetails] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const reset = () => {
     setReason(null);
     setDetails('');
     setImageUri(null);
+    setImageBase64(null);
   };
 
   const handlePickImage = async () => {
@@ -62,9 +64,11 @@ export default function ReportModal({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       quality: 0.6,
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
+      setImageBase64(result.assets[0].base64 ?? null);
     }
   };
 
@@ -87,16 +91,20 @@ export default function ReportModal({
     let imageUrl: string | undefined;
 
     try {
-      // Resim varsa yükle
-      if (imageUri && user?.id) {
-        const response = await fetch(imageUri);
-        const arrayBuffer = await response.arrayBuffer();
+      // Resim varsa yükle — RN'de fetch(file://).arrayBuffer() güvenilmez,
+      // bu yüzden ImagePicker'ın base64 çıktısını byte dizisine çeviriyoruz.
+      if (imageBase64 && user?.id) {
+        const bin = atob(imageBase64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         // İlk klasör uid olmalı (feedbacks bucket RLS: foldername[1]=auth.uid)
         const path = `${user.id}/reports/${Date.now()}.jpg`;
         const { error: uploadError } = await supabase.storage
           .from('feedbacks')
-          .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
-        if (!uploadError) {
+          .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+        if (uploadError) {
+          Alert.alert('Resim Yüklenemedi', 'Şikayetiniz resim olmadan gönderilecek.');
+        } else {
           const { data: urlData } = supabase.storage.from('feedbacks').getPublicUrl(path);
           imageUrl = urlData.publicUrl;
         }
@@ -204,7 +212,7 @@ export default function ReportModal({
                 <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
                 <TouchableOpacity
                   style={[styles.removeImageBtn, { backgroundColor: C.error }]}
-                  onPress={() => setImageUri(null)}
+                  onPress={() => { setImageUri(null); setImageBase64(null); }}
                 >
                   <Text style={styles.removeImageText}>✕ Kaldır</Text>
                 </TouchableOpacity>
