@@ -330,7 +330,7 @@ export default function MakeOfferScreen() {
                 <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.textSecondary }]}>
                   {order.delivery_type === 'delivery' ? '🚚 Teslimat' : '🏪 Gel-Al'}
                 </Text>
-                {order.delivery_type === 'delivery' && order.delivery_address ? (
+                {order.delivery_address ? (
                   <TouchableOpacity onPress={() => openAddressInMaps(order.delivery_address)} activeOpacity={0.6}>
                     <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.primary }]}>
                       📍 {order.delivery_address} ›
@@ -577,7 +577,7 @@ export default function MakeOfferScreen() {
                 <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.textSecondary }]}>
                   {order.delivery_type === 'delivery' ? '🚚 Teslimat' : '🏪 Gel-Al'}
                 </Text>
-                {order.delivery_type === 'delivery' && order.delivery_address ? (
+                {order.delivery_address ? (
                   <TouchableOpacity onPress={() => openAddressInMaps(order.delivery_address)} activeOpacity={0.6}>
                     <Text style={[styles.metaChip, { backgroundColor: C.background, color: C.primary }]}>
                       📍 {order.delivery_address} ›
