@@ -489,14 +489,14 @@ export default function BakerHomeScreen() {
               );
             }
             return (
-              <View>
+              <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border, gap: Spacing.sm }]}>
                 <TouchableOpacity
-                  style={[styles.sectionHeaderRow, { marginBottom: Spacing.xs }]}
+                  style={styles.sectionHeaderRow}
                   onPress={() => setAcikExpanded((v) => !v)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.listHeader, { color: C.textSecondary, marginBottom: 0 }]}>
-                    {visibleOrders.length} açık talep
+                  <Text style={[styles.sectionTitle, { color: C.text }]}>
+                    📋 Açık Talepler ({visibleOrders.length})
                   </Text>
                   <Text style={[styles.chevron, { color: C.textSecondary }]}>
                     {acikExpanded ? '▾' : '▸'}
