@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors, useAuth } from '@pastacim/shared';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -40,8 +40,12 @@ export default function CustomerLayout() {
         tabBarItemStyle: { paddingVertical: 4 },
         tabBarStyle: {
           backgroundColor: C.tabBar, borderTopColor: C.tabBarBorder,
-          borderTopWidth: 1, paddingBottom: insets.bottom + 4, paddingTop: 6,
-          height: 64 + insets.bottom,
+          borderTopWidth: 1,
+          paddingBottom: Platform.OS === 'web' ? 12 : insets.bottom + 4,
+          paddingTop: Platform.OS === 'web' ? 8 : 6,
+          // Web'de emoji ikon native'den daha uzun render olur → tab bar'ı
+          // yükseltmezsek etiketin altı kırpılır.
+          height: (Platform.OS === 'web' ? 80 : 64) + insets.bottom,
         },
       }}
     >
@@ -83,7 +87,7 @@ export default function CustomerLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabEmoji: { fontSize: 22 },
+  tabEmoji: { fontSize: 22, lineHeight: 26 },
   badge: {
     position: 'absolute', top: -4, right: -8,
     minWidth: 16, height: 16, borderRadius: 8,

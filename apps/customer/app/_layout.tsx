@@ -170,8 +170,6 @@ function RootLayoutNav() {
         androidUrl="https://play.google.com/store/apps/details?id=com.pastacim.customer"
       />
       <StatusBar style="auto" />
-      {/* Web'de üstteki WebStoreBanner yükseklik ekler; navigator'ı flex:1 ile
-          sararak kalan alana yayıyoruz, aksi halde tab bar viewport dışına taşar. */}
       <View nativeID="pastacim-nav" style={{ flex: 1, minHeight: 0 }}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
