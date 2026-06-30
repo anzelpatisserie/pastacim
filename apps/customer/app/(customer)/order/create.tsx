@@ -10,7 +10,7 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import { AppMapView as MapView, AppMarker as Marker } from '@pastacim/shared';
-import { rpcPlaceOrder, rpcNearbyBakers, supabase, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { rpcPlaceOrder, supabase, useAuth, useThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 
 const SEARCH_RADIUS = 20;
 
@@ -272,10 +272,30 @@ export default function CreateOrderScreen() {
   };
 
   // Modal'da kullanıcı pin'i onayladığında çağrılır
-  const handleConfirmLocation = (point: LatLng) => {
+  const handleConfirmLocation = async (point: LatLng) => {
     setUserLocation(point);
     setLocationLabel(`${pendingLabel} · konum onaylandı`);
     setConfirmVisible(false);
+
+    // Adres alanı boşsa, onaylanan konumu adres olarak yaz — böylece
+    // gel-al siparişlerinde de pastacı kartında müşteri konumu görünür.
+    if (!deliveryAddress.trim()) {
+      let filled = '';
+      try {
+        const results = await Location.reverseGeocodeAsync({ latitude: point.lat, longitude: point.lng });
+        const place = results[0];
+        if (place) {
+          filled = [
+            place.streetNumber,
+            place.street,
+            place.district ?? place.subregion ?? place.name,
+            place.city ?? place.region,
+          ].filter((p): p is string => !!p && p.trim().length > 0).join(' ').trim();
+        }
+      } catch { /* reverse geocode opsiyonel */ }
+      if (!filled) filled = `Konum: ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}`;
+      setDeliveryAddress(filled);
+    }
   };
 
   // Date → "YYYY-MM-DD" (Supabase için)
@@ -330,7 +350,7 @@ export default function CreateOrderScreen() {
         p_description: description.trim() || undefined,
         p_serving_size: servingSize ? parseInt(servingSize) : undefined,
         p_delivery_type: deliveryType,
-        p_delivery_address: deliveryType === 'delivery' ? (deliveryAddress.trim() || undefined) : undefined,
+        p_delivery_address: deliveryAddress.trim() || undefined,
         p_delivery_date: deliveryDate ? toISODate(deliveryDate) : undefined,
         p_delivery_time: deliveryTime ? toTimeString(deliveryTime) : undefined,
         p_is_urgent: false,
@@ -378,30 +398,8 @@ export default function CreateOrderScreen() {
 
       await refreshProfile();
 
-      // Yakındaki pastacılara bildirim gönder (arka planda, sessizce)
-      if (orderId) {
-        const lat = userLocation.lat;
-        const lng = userLocation.lng;
-        rpcNearbyBakers({ lat, lng, radius_km: SEARCH_RADIUS }).then(({ data: bakers }) => {
-          if (!bakers || bakers.length === 0) return;
-          const body = [
-            title.trim(),
-            servingSize ? `${servingSize} kişilik` : null,
-          ].filter(Boolean).join(' · ');
-          bakers.forEach((baker) => {
-            // Sipariş sahibi aynı zamanda pastacıysa kendi siparişine bildirim gitmesin.
-            if (baker.user_id === user?.id) return;
-            notifyUser({
-              userId: baker.user_id,
-              type:   'new_order',
-              title:  '📋 Yeni Sipariş Talebi',
-              body,
-              data:   { orderId },
-              targetRole: 'baker',
-            }).catch(() => {});
-          });
-        }).catch(() => {});
-      }
+      // NOT: Yakındaki pastacılara bildirim + push artık place_order RPC içinde
+      // server-side yapılıyor — böylece web dahil tüm platformlarda çalışır.
 
       // Formu sıfırla
       setTitle('');

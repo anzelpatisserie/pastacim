@@ -21,6 +21,7 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
 
   const [message, setMessage] = useState('');
   const [screenshotUri, setScreenshotUri] = useState<string | null>(null);
+  const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,9 +32,11 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: 'images',
         quality: 0.6,
+        base64: true,
       });
       if (!result.canceled && result.assets[0]) {
         setScreenshotUri(result.assets[0].uri);
+        setScreenshotBase64(result.assets[0].base64 ?? null);
       }
       return;
     }
@@ -51,9 +54,11 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
             mediaTypes: 'images',
             quality: 0.6,
             allowsEditing: false,
+            base64: true,
           });
           if (!result.canceled && result.assets[0]) {
             setScreenshotUri(result.assets[0].uri);
+            setScreenshotBase64(result.assets[0].base64 ?? null);
           }
         },
       },
@@ -68,9 +73,11 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
           const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: 'images',
             quality: 0.6,
+            base64: true,
           });
           if (!result.canceled && result.assets[0]) {
             setScreenshotUri(result.assets[0].uri);
+            setScreenshotBase64(result.assets[0].base64 ?? null);
           }
         },
       },
@@ -88,14 +95,16 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
     let screenshotUrl: string | null = null;
 
     try {
-      // Screenshot yükle
-      if (screenshotUri && user?.id) {
-        const response = await fetch(screenshotUri);
-        const arrayBuffer = await response.arrayBuffer();
+      // Screenshot yükle — RN'de fetch(file://).arrayBuffer() güvenilmez,
+      // ImagePicker'ın base64 çıktısını byte dizisine çeviriyoruz.
+      if (screenshotBase64 && user?.id) {
+        const bin = atob(screenshotBase64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const path = `${user.id}/${Date.now()}.jpg`;
         const { error: uploadError } = await supabase.storage
           .from('feedbacks')
-          .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+          .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
         if (!uploadError) {
           const { data: urlData } = supabase.storage.from('feedbacks').getPublicUrl(path);
           screenshotUrl = urlData.publicUrl;
