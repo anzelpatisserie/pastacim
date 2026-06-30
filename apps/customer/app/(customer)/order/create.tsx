@@ -93,6 +93,19 @@ export default function CreateOrderScreen() {
       return;
     }
 
+    if (Platform.OS === 'web') {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        quality: 0.7,
+        allowsMultipleSelection: true,
+        selectionLimit: 5 - photos.length,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        setPhotos((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
+      }
+      return;
+    }
+
     Alert.alert(
       'Görsel Ekle',
       'Görseli nereden eklemek istersiniz?',

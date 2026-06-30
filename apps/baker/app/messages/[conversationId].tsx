@@ -235,6 +235,17 @@ export default function MessagesScreen() {
   const sendImage = async () => {
     if (!user?.id || !otherUserId || !sendOrderId) return;
 
+    if (Platform.OS === 'web') {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]) {
+        await uploadAndSendImage(result.assets[0].uri);
+      }
+      return;
+    }
+
     Alert.alert('Resim Ekle', 'Nereden eklemek istersiniz?', [
       {
         text: '📷 Kamera',

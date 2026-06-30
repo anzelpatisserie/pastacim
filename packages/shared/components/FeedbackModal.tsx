@@ -26,7 +26,18 @@ export default function FeedbackModal({ visible, onClose, appName }: FeedbackMod
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const _db: any = supabase;
 
-  const handlePickScreenshot = () => {
+  const handlePickScreenshot = async () => {
+    if (Platform.OS === 'web') {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        quality: 0.6,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setScreenshotUri(result.assets[0].uri);
+      }
+      return;
+    }
+
     Alert.alert('Ekran Görüntüsü', 'Nereden eklemek istersiniz?', [
       {
         text: '📷 Kamera',
