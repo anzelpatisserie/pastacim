@@ -429,7 +429,7 @@ export default function MessagesScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerCenter}
-            onPress={() => { if (shopId && !isChatExpired) router.push(`/(customer)/baker/${shopId}`); }}
+            onPress={() => { if (shopId && !isChatExpired) router.push({ pathname: '/(customer)/baker/[shopId]', params: { shopId } }); }}
             disabled={!shopId || isChatExpired}
             activeOpacity={(shopId && !isChatExpired) ? 0.7 : 1}
           >
