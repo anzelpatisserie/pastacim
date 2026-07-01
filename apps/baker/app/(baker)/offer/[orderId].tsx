@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyFromTemplate, notifyNewMessage, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps } from '@pastacim/shared';
+import { supabase, rpcSubmitOffer, rpcGetOrderOfferSummary, rpcGetCustomerSummaryForBaker, notifyNewMessage, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps } from '@pastacim/shared';
 import type { Database, OrderOfferSummaryRow, CustomerSummary } from '@pastacim/shared';
 
 type Order = Database['public']['Tables']['orders']['Row'];
@@ -179,20 +179,9 @@ export default function MakeOfferScreen() {
       }
     }
 
-    // Müşteriye bildirim gönder (admin-düzenlenebilir şablon)
-    if (order?.customer_id) {
-      notifyFromTemplate({
-        userId: order.customer_id,
-        key: 'new_offer',
-        vars: { shop: shop.name, price: parseFloat(price) },
-        fallback: {
-          title: '🎉 Yeni Teklif Aldınız!',
-          body: `${shop.name} siparişinize ₺${parseFloat(price)} teklif verdi.`,
-        },
-        data: { orderId: orderId as string },
-        targetRole: 'customer',
-      }).catch(() => {});
-    }
+    // NOT: Müşteriye "Yeni Teklif" bildirimi artık submit_offer RPC içinde
+    // (server-side, web dahil) gönderiliyor. Buradaki client-side gönderim
+    // çift bildirime yol açtığı için kaldırıldı (migration 0021).
 
     router.back();
   };
