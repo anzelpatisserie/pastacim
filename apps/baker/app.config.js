@@ -139,6 +139,9 @@ module.exports = {
       supabaseAnonKey: env.supabaseAnonKey,
       googlePlacesApiKey: 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo',
       googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? 'AIzaSyCunYQzVUP2Ue8HraYn-PIpx6jvpSSC4Zo',
+      // RevenueCat public SDK anahtarları (public — client'a gömülür, gizli değil)
+      revenueCatIosKey: process.env.RC_IOS_KEY ?? 'appl_jIZkVRHozIGiKLpSbzFqQQzIpRB',
+      revenueCatAndroidKey: process.env.RC_ANDROID_KEY ?? 'goog_aGWWhLDlPulvomEjohkmXFtgBuM',
       appEnv: ENV,
     },
     owner: 'anzelpatisserie',
