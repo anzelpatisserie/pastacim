@@ -4,7 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { router } from 'expo-router';
-import { supabase, notifyFromTemplate, sendAppEmail, useThemeColors, Spacing, Radius, FontSize, safeAvatarUri } from '@pastacim/shared';
+import { supabase, sendAppEmail, useThemeColors, Spacing, Radius, FontSize, safeAvatarUri } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 export type ActiveOffer = Database['public']['Tables']['offers']['Row'] & {
@@ -67,42 +67,19 @@ export function ActiveOrderCard({
     const customerId = offer.order.customer_id;
     const orderTitle = offer.order.title;
     const orderId = offer.order.id;
-    if (newStatus === 'in_progress') {
-      notifyFromTemplate({
-        userId: customerId,
-        key: 'order_in_progress',
-        vars: { title: orderTitle },
-        fallback: { title: '🍳 Siparişin Hazırlanıyor!', body: `"${orderTitle}" siparişin hazırlanmaya başlandı.` },
-        data: { orderId },
-        targetRole: 'customer',
-      }).catch(() => {});
-    } else if (newStatus === 'ready') {
-      notifyFromTemplate({
-        userId: customerId,
-        key: 'order_ready',
-        vars: { title: orderTitle },
-        fallback: { title: '📦 Siparişin Teslimata Hazır!', body: `"${orderTitle}" siparişin teslim almaya hazır.` },
-        data: { orderId },
-        targetRole: 'customer',
-      }).catch(() => {});
+    // Durum bildirimleri (in_progress/ready/delivered) artık orders status
+    // trigger'ı ile server-side gönderiliyor (web dahil güvenilir push;
+    // migration 0022). Burada yalnızca e-posta gönderilir.
+    if (newStatus === 'ready') {
       sendAppEmail(customerId, 'order_ready', { orderTitle, orderId });
     } else if (newStatus === 'completed') {
-      // #13: Müşteri zaten yorum yaptıysa "teslim edildi" bildirimini ve yorum
-      // teşvik e-postasını GÖNDERME (yorum yapmış müşteriyi rahatsız etmeyelim).
+      // #13: Müşteri zaten yorum yaptıysa yorum teşvik e-postasını GÖNDERME.
       const { data: existingReview } = await supabase
         .from('reviews')
         .select('id')
         .eq('order_id', orderId)
         .maybeSingle();
       if (!existingReview) {
-        notifyFromTemplate({
-          userId: customerId,
-          key: 'order_delivered',
-          vars: { title: orderTitle },
-          fallback: { title: '🎂 Siparişin Teslim Edildi', body: `"${orderTitle}" siparişin teslim edildi olarak işaretlendi. Teslim almadıysan sipariş kartından geri alabilirsin.` },
-          data: { orderId },
-          targetRole: 'customer',
-        }).catch(() => {});
         sendAppEmail(customerId, 'review_encourage', { orderTitle, orderId });
       }
     }

@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps, safeAvatarUri } from '@pastacim/shared';
+import { supabase, rpcCancelOrder, useAuth, useThemeColors, Spacing, Radius, FontSize, openAddressInMaps, safeAvatarUri } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -172,25 +172,8 @@ export default function OrderDetailScreen() {
               return;
             }
 
-            // Pastacıya bildirim
-            if (order.selected_offer_id) {
-              _db.from('offers')
-                .select('baker_id')
-                .eq('id', order.selected_offer_id)
-                .single()
-                .then(({ data: od }: { data: { baker_id: string } | null }) => {
-                  if (od?.baker_id) {
-                    notifyUser({
-                      userId: od.baker_id,
-                      type: 'order_completed',
-                      title: '🎂 Sipariş Tamamlandı!',
-                      body: `"${order.title}" siparişi müşteri tarafından teslim alındı.`,
-                      data: { orderId: order.id },
-                    }).catch(() => {});
-                  }
-                })
-                .catch(() => {});
-            }
+            // Pastacıya bildirim artık orders status trigger'ı ile server-side
+            // gönderiliyor (web dahil güvenilir push) → migration 0022.
 
             router.replace({ pathname: '/(customer)/review/[orderId]', params: { orderId: order.id } });
           },
@@ -222,24 +205,8 @@ export default function OrderDetailScreen() {
               return;
             }
             setOrder((prev) => prev ? { ...prev, status: 'ready' } : prev);
-            if (order.selected_offer_id) {
-              _db.from('offers')
-                .select('baker_id')
-                .eq('id', order.selected_offer_id)
-                .single()
-                .then(({ data: od }: { data: { baker_id: string } | null }) => {
-                  if (od?.baker_id) {
-                    notifyUser({
-                      userId: od.baker_id,
-                      type: 'order_reverted',
-                      title: '↩️ Sipariş Teslim Alınmadı',
-                      body: `"${order.title}" siparişini müşteri henüz teslim almadığını bildirdi.`,
-                      data: { orderId: order.id },
-                    }).catch(() => {});
-                  }
-                })
-                .catch(() => {});
-            }
+            // Pastacıya "teslim alınmadı" bildirimi artık orders status trigger'ı
+            // ile server-side gönderiliyor (migration 0022).
           },
         },
       ]
