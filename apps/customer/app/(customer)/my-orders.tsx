@@ -4,7 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { supabase, rpcCancelOrder, notifyUser, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
+import { supabase, rpcCancelOrder, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize, TabHeader } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 import { useNotifications } from '@/hooks/useNotifications';
 
@@ -156,25 +156,8 @@ export default function CustomerMyOrdersScreen() {
               o.id === order.id ? { ...o, status: 'completed' } : o
             ));
 
-            // Kabul edilen teklif sahibi pastacıya bildirim gönder
-            if (order.selected_offer_id) {
-              _db.from('offers')
-                .select('baker_id, shop:pastry_shops!shop_id(name)')
-                .eq('id', order.selected_offer_id)
-                .single()
-                .then(({ data: offerData }: { data: { baker_id: string; shop: { name: string } | null } | null }) => {
-                  if (offerData?.baker_id) {
-                    notifyUser({
-                      userId: offerData.baker_id,
-                      type: 'order_completed',
-                      title: '🎂 Sipariş Tamamlandı!',
-                      body: `"${order.title}" siparişi müşteri tarafından teslim alındı.`,
-                      data: { orderId: order.id },
-                    }).catch(() => {});
-                  }
-                })
-                .catch(() => {});
-            }
+            // Pastacıya "sipariş tamamlandı" bildirimi artık orders status
+            // trigger'ı ile server-side gönderiliyor (migration 0022).
 
             // Yorum ekranına yönlendir
             router.push({ pathname: '/(customer)/review/[orderId]', params: { orderId: order.id } });

@@ -77,6 +77,7 @@ export default function BakerHomeScreen() {
   // Kabul edilmiş siparişler (eski "Siparişler" sekmesi içeriği) — collapse bölümler
   const [acceptedOffers, setAcceptedOffers] = useState<ActiveOffer[]>([]);
   const [acikExpanded, setAcikExpanded] = useState(true);        // açık talepler — varsayılan açık
+  const [pendingExpanded, setPendingExpanded] = useState(true);  // bekleyen tekliflerim — varsayılan açık
   const [aktifExpanded, setAktifExpanded] = useState(true);      // otomatik açık
   const [tamamlananExpanded, setTamamlananExpanded] = useState(false); // varsayılan kapalı
   const [isLoading, setIsLoading] = useState(true);
@@ -518,13 +519,24 @@ export default function BakerHomeScreen() {
           {/* 2️⃣ Bekleyen Tekliflerim */}
           {pendingOffers.length > 0 && (
             <View style={[styles.sectionBox, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Text style={[styles.sectionTitle, { color: C.text }]}>
-                📤 Bekleyen Tekliflerim ({pendingOffers.length})
-              </Text>
-              <Text style={[styles.sectionHint, { color: C.placeholder }]}>
-                Müşteri kararını bekliyor
-              </Text>
-              {pendingOffers.map((p) => {
+              <TouchableOpacity
+                style={styles.sectionHeaderRow}
+                onPress={() => setPendingExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sectionTitle, { color: C.text }]}>
+                  📤 Bekleyen Tekliflerim ({pendingOffers.length})
+                </Text>
+                <Text style={[styles.chevron, { color: C.textSecondary }]}>
+                  {pendingExpanded ? '▾' : '▸'}
+                </Text>
+              </TouchableOpacity>
+              {pendingExpanded && (
+                <Text style={[styles.sectionHint, { color: C.placeholder }]}>
+                  Müşteri kararını bekliyor
+                </Text>
+              )}
+              {pendingExpanded && pendingOffers.map((p) => {
                 const memberDays = p.order?.customer?.created_at
                   ? Math.max(0, Math.floor((Date.now() - new Date(p.order.customer.created_at).getTime()) / (1000 * 60 * 60 * 24)))
                   : null;

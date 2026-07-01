@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { supabase, rpcAcceptOffer, rpcRejectOffer, notifyFromTemplate, sendAppEmail, getUserPushToken, sendPushNotification, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
+import { supabase, rpcAcceptOffer, rpcRejectOffer, sendAppEmail, useAuth, useThemeColors, ThemeColors, Spacing, Radius, FontSize } from '@pastacim/shared';
 import type { Database } from '@pastacim/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,39 +93,10 @@ export default function OffersScreen() {
               return;
             }
 
-            // Pastacıya bildirim gönder (düzenlenebilir şablon)
-            notifyFromTemplate({
-              userId: offer.baker_id,
-              key: 'offer_accepted',
-              vars: { title: order?.title ?? 'Siparişiniz' },
-              fallback: {
-                title: '✅ Teklifiniz Kabul Edildi!',
-                body: `${order?.title ?? 'Siparişiniz'} için teklifiniz kabul edildi.`,
-              },
-              data: { orderId: orderId as string },
-              targetRole: 'baker',
-            }).catch(() => {});
+            // Kabul edilen ve reddedilen pastacılara bildirim (in-app + push)
+            // artık accept_offer RPC içinde server-side gönderiliyor (web dahil
+            // güvenilir; migration 0018/0022). E-posta client'ta kalıyor.
             sendAppEmail(offer.baker_id, 'offer_accepted', { orderTitle: order?.title, orderId: orderId as string });
-
-            // accept_offer RPC diğer teklifleri DB tarafında otomatik 'rejected'
-            // yapıp in-app bildirimi (notifications tablosu) ekledi. Burada da
-            // reddedilen baker'lara PUSH bildirimi yollayalım — in-app duplicate
-            // olmaması için notifyUser yerine doğrudan sendPushNotification kullan.
-            offers
-              .filter((o) => o.id !== offer.id && o.baker_id !== offer.baker_id && o.status === 'pending')
-              .forEach(async (rejected) => {
-                try {
-                  const token = await getUserPushToken(rejected.baker_id, 'baker');
-                  if (token) {
-                    await sendPushNotification({
-                      token,
-                      title: '❌ Teklifin Reddedildi',
-                      body: 'Müşteri başka bir pastacının teklifini kabul etti.',
-                      data: { type: 'offer_rejected', orderId: orderId as string },
-                    });
-                  }
-                } catch { /* push hatası akışı engellemesin */ }
-              });
 
             Alert.alert(
               '🎉 Teklif Kabul Edildi!',
@@ -175,18 +146,8 @@ export default function OffersScreen() {
               return;
             }
 
-            // Pastacıya ret bildirimi (düzenlenebilir şablon)
-            notifyFromTemplate({
-              userId: offer.baker_id,
-              key: 'offer_rejected',
-              vars: { title: order?.title ?? 'Siparişiniz' },
-              fallback: {
-                title: '❌ Teklifiniz Reddedildi',
-                body: `${order?.title ?? 'Siparişiniz'} için teklifiniz reddedildi.`,
-              },
-              data: { orderId: orderId as string },
-              targetRole: 'baker',
-            }).catch(() => {});
+            // Pastacıya ret bildirimi artık reject_offer RPC içinde server-side
+            // gönderiliyor (web dahil güvenilir push; migration 0022).
 
             // Listeyi güncelle
             setOffers((prev) =>
